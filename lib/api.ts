@@ -105,6 +105,19 @@ export async function addTagApi(
   );
 }
 
+export async function deleteTagApi(
+  contactId: string,
+  name: string,
+): Promise<ContactProfile> {
+  return parseJson<ContactProfile>(
+    await fetch("/api/tags", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId: Number(contactId), name }),
+    }),
+  );
+}
+
 export async function createMessageApi(
   contactId: string,
   text: string,

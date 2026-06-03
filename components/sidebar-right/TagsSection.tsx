@@ -4,11 +4,12 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { AddTagForm } from "@/components/forms/AddTagForm";
 import type { ContactProfile } from "@/types";
-import { Plus, Tag } from "lucide-react";
+import { Plus, Tag, X } from "lucide-react";
 
 interface TagsSectionProps {
   profile: ContactProfile;
   onAddTag: (name: string) => Promise<void>;
+  onDeleteTag: (name: string) => Promise<void>;
 }
 
 function tagVariant(
@@ -20,7 +21,7 @@ function tagVariant(
   return "default";
 }
 
-export function TagsSection({ profile, onAddTag }: TagsSectionProps) {
+export function TagsSection({ profile, onAddTag, onDeleteTag }: TagsSectionProps) {
   const [showForm, setShowForm] = useState(false);
 
   return (
@@ -45,8 +46,16 @@ export function TagsSection({ profile, onAddTag }: TagsSectionProps) {
       </div>
       <div className="flex flex-wrap gap-2">
         {profile.tags.map((tag) => (
-          <Badge key={tag} variant={tagVariant(tag)}>
+          <Badge key={tag} variant={tagVariant(tag)} className="group relative pr-6">
             {tag}
+            <button
+              type="button"
+              onClick={() => void onDeleteTag(tag)}
+              className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100"
+              aria-label={`Remove ${tag} tag`}
+            >
+              <X className="h-3 w-3" />
+            </button>
           </Badge>
         ))}
       </div>

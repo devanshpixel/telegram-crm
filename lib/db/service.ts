@@ -307,6 +307,14 @@ export function addTag(contactId: number, name: string) {
   }
 }
 
+export function deleteTag(contactId: number, name: string): boolean {
+  const db = getDb();
+  const result = db
+    .prepare("DELETE FROM tags WHERE contact_id = ? AND name = ?")
+    .run(contactId, name.trim());
+  return result.changes > 0;
+}
+
 export function createMessage(
   contactId: number,
   text: string,

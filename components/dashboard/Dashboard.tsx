@@ -6,6 +6,7 @@ import {
   addTagApi,
   createMessageApi,
   deleteContactApi,
+  deleteTagApi,
   fetchChats,
   fetchContact,
   fetchMessages,
@@ -138,6 +139,16 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
     [activeChatId, refreshAll],
   );
 
+  const handleDeleteTag = useCallback(
+    async (name: string) => {
+      if (!activeChatId) return;
+      const profile = await deleteTagApi(activeChatId, name);
+      setProfiles((prev) => ({ ...prev, [activeChatId]: profile }));
+      await refreshAll();
+    },
+    [activeChatId, refreshAll],
+  );
+
   const handleDeleteContact = useCallback(async () => {
     if (!activeChatId) return;
     if (!confirm("Delete this contact and all related data?")) return;
@@ -249,6 +260,7 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
               onClose={handleCloseCrm}
               onAddNote={handleAddNote}
               onAddTag={handleAddTag}
+              onDeleteTag={handleDeleteTag}
               onDeleteContact={handleDeleteContact}
             />
           ) : (

@@ -12,6 +12,7 @@ interface SidebarRightProps {
   onClose?: () => void;
   onAddNote: (content: string) => Promise<void>;
   onAddTag: (name: string) => Promise<void>;
+  onDeleteTag: (name: string) => Promise<void>;
   onDeleteContact: () => Promise<void>;
 }
 
@@ -20,6 +21,7 @@ export function SidebarRight({
   onClose,
   onAddNote,
   onAddTag,
+  onDeleteTag,
   onDeleteContact,
 }: SidebarRightProps) {
   return (
@@ -45,7 +47,7 @@ export function SidebarRight({
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         <ProfileSection profile={profile} />
         <RevenueSection profile={profile} />
-        <TagsSection profile={profile} onAddTag={onAddTag} />
+        <TagsSection profile={profile} onAddTag={onAddTag} onDeleteTag={onDeleteTag} />
         <NotesSection profile={profile} onSaveNote={onAddNote} />
         <LeadScoreSection profile={profile} />
       </div>
