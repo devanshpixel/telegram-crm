@@ -133,6 +133,8 @@ export interface CreateContactInput {
   location?: string;
   revenue?: number;
   isOnline?: boolean;
+  telegramId?: string | null;
+  telegramAccessHash?: string | null;
 }
 
 export function createContact(input: CreateContactInput): ContactProfile {
@@ -152,8 +154,8 @@ export function createContact(input: CreateContactInput): ContactProfile {
       `INSERT INTO contacts (
         name, username, avatar, avatar_color, phone, email, company, location,
         joined_at, revenue, revenue_trend, lead_score, lead_status, is_online,
-        ppv_count, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?)`,
+        ppv_count, telegram_id, telegram_access_hash, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
@@ -171,6 +173,8 @@ export function createContact(input: CreateContactInput): ContactProfile {
       }),
       input.revenue ?? 0,
       input.isOnline ? 1 : 0,
+      input.telegramId ?? null,
+      input.telegramAccessHash ?? null,
       ts,
       ts,
     );
@@ -202,6 +206,8 @@ export interface UpdateContactInput {
   leadStatus?: string;
   isOnline?: boolean;
   ppvCount?: number;
+  telegramId?: string | null;
+  telegramAccessHash?: string | null;
 }
 
 export function updateContact(
@@ -228,6 +234,8 @@ export function updateContact(
       lead_status = COALESCE(?, lead_status),
       is_online = COALESCE(?, is_online),
       ppv_count = COALESCE(?, ppv_count),
+      telegram_id = COALESCE(?, telegram_id),
+      telegram_access_hash = COALESCE(?, telegram_access_hash),
       updated_at = ?
     WHERE id = ?`,
   ).run(
@@ -247,6 +255,8 @@ export function updateContact(
     input.leadStatus ?? null,
     input.isOnline !== undefined ? (input.isOnline ? 1 : 0) : null,
     input.ppvCount ?? null,
+    input.telegramId ?? null,
+    input.telegramAccessHash ?? null,
     ts,
     contactId,
   );
@@ -319,6 +329,7 @@ export function createMessage(
   contactId: number,
   text: string,
   direction: MessageDirection = "outgoing",
+  telegramMessageId?: number | null,
 ): Message | null {
   const conversationId = getConversationIdByContactId(contactId);
   if (!conversationId) return null;
@@ -329,10 +340,17 @@ export function createMessage(
 
   const result = db
     .prepare(
-      `INSERT INTO messages (conversation_id, text, direction, is_read, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO messages (conversation_id, text, direction, is_read, telegram_message_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(conversationId, text.trim(), direction, isRead, ts);
+    .run(
+      conversationId,
+      text.trim(),
+      direction,
+      isRead,
+      telegramMessageId ?? null,
+      ts,
+    );
 
   db.prepare(
     `UPDATE conversations SET

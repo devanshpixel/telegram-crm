@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS contacts (
   lead_status TEXT NOT NULL DEFAULT 'warm',
   is_online INTEGER NOT NULL DEFAULT 0,
   ppv_count INTEGER NOT NULL DEFAULT 0,
+  telegram_id TEXT UNIQUE,
+  telegram_access_hash TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -27,6 +29,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   last_message_time TEXT NOT NULL,
   unread_count INTEGER NOT NULL DEFAULT 0,
   is_pinned INTEGER NOT NULL DEFAULT 0,
+  last_synced_message_id INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
@@ -38,6 +41,7 @@ CREATE TABLE IF NOT EXISTS messages (
   text TEXT NOT NULL,
   direction TEXT NOT NULL CHECK (direction IN ('incoming', 'outgoing')),
   is_read INTEGER NOT NULL DEFAULT 0,
+  telegram_message_id INTEGER,
   created_at TEXT NOT NULL,
   FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );

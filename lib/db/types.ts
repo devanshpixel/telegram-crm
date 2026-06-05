@@ -15,6 +15,8 @@ export interface ContactRow {
   lead_status: string;
   is_online: number;
   ppv_count: number;
+  telegram_id: string | null;
+  telegram_access_hash: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -26,6 +28,7 @@ export interface ConversationRow {
   last_message_time: string;
   unread_count: number;
   is_pinned: number;
+  last_synced_message_id: number;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +39,7 @@ export interface MessageRow {
   text: string;
   direction: "incoming" | "outgoing";
   is_read: number;
+  telegram_message_id: number | null;
   created_at: string;
 }
 
