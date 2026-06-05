@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS notes (
   FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS telegram_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_string TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_tags_contact ON tags(contact_id);
 CREATE INDEX IF NOT EXISTS idx_notes_contact ON notes(contact_id);
