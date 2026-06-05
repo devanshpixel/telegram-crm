@@ -1,8 +1,17 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
+import { getDb } from "@/lib/db";
 
 declare global {
   var __telegramClient: TelegramClient | undefined;
+}
+
+function loadStoredSessionString(): string {
+  const row = getDb()
+    .prepare("SELECT session_string FROM telegram_sessions LIMIT 1")
+    .get() as { session_string: string } | undefined;
+
+  return row?.session_string ?? "";
 }
 
 function createClient(): TelegramClient {
@@ -20,7 +29,7 @@ function createClient(): TelegramClient {
     throw new Error("Invalid TELEGRAM_API_ID: must be a numeric value");
   }
 
-  return new TelegramClient(new StringSession(""), apiId, apiHash, {
+  return new TelegramClient(new StringSession(loadStoredSessionString()), apiId, apiHash, {
     connectionRetries: 5,
   });
 }
