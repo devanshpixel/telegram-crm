@@ -48,6 +48,11 @@ export function mapContactToProfile(
     lastActivity: contact.is_online === 1 ? "Active now" : "Recently",
     isOnline: contact.is_online === 1,
     ppvCount: contact.ppv_count,
+    totalSpent: contact.total_spent,
+    vipLevel: contact.vip_level as ContactProfile["vipLevel"],
+    fanStatus: contact.fan_status as ContactProfile["fanStatus"],
+    fanScore: contact.fan_score,
+    lastPurchaseDate: contact.last_purchase_date,
   };
 }
 

@@ -17,6 +17,11 @@ export interface ContactRow {
   ppv_count: number;
   telegram_id: string | null;
   telegram_access_hash: string | null;
+  total_spent: number;
+  vip_level: string;
+  fan_status: string;
+  fan_score: number;
+  last_purchase_date: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -43,6 +43,11 @@ export interface ContactProfile {
   lastActivity: string;
   isOnline: boolean;
   ppvCount?: number;
+  totalSpent: number;
+  vipLevel: "none" | "bronze" | "silver" | "gold" | "platinum";
+  fanStatus: "active" | "inactive" | "churned" | "new";
+  fanScore: number;
+  lastPurchaseDate: string | null;
 }
 
 export interface DashboardStats {

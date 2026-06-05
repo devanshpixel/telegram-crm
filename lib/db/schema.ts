@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS contacts (
   ppv_count INTEGER NOT NULL DEFAULT 0,
   telegram_id TEXT UNIQUE,
   telegram_access_hash TEXT,
+  total_spent REAL NOT NULL DEFAULT 0,
+  vip_level TEXT NOT NULL DEFAULT 'none',
+  fan_status TEXT NOT NULL DEFAULT 'active',
+  fan_score INTEGER NOT NULL DEFAULT 0,
+  last_purchase_date TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

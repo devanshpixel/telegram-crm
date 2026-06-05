@@ -135,6 +135,11 @@ export interface CreateContactInput {
   isOnline?: boolean;
   telegramId?: string | null;
   telegramAccessHash?: string | null;
+  totalSpent?: number;
+  vipLevel?: string;
+  fanStatus?: string;
+  fanScore?: number;
+  lastPurchaseDate?: string | null;
 }
 
 export function createContact(input: CreateContactInput): ContactProfile {
@@ -154,8 +159,9 @@ export function createContact(input: CreateContactInput): ContactProfile {
       `INSERT INTO contacts (
         name, username, avatar, avatar_color, phone, email, company, location,
         joined_at, revenue, revenue_trend, lead_score, lead_status, is_online,
-        ppv_count, telegram_id, telegram_access_hash, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?)`,
+        ppv_count, telegram_id, telegram_access_hash, total_spent, vip_level,
+        fan_status, fan_score, last_purchase_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
@@ -175,6 +181,11 @@ export function createContact(input: CreateContactInput): ContactProfile {
       input.isOnline ? 1 : 0,
       input.telegramId ?? null,
       input.telegramAccessHash ?? null,
+      input.totalSpent ?? 0,
+      input.vipLevel ?? "none",
+      input.fanStatus ?? "active",
+      input.fanScore ?? 0,
+      input.lastPurchaseDate ?? null,
       ts,
       ts,
     );
@@ -208,6 +219,11 @@ export interface UpdateContactInput {
   ppvCount?: number;
   telegramId?: string | null;
   telegramAccessHash?: string | null;
+  totalSpent?: number;
+  vipLevel?: string;
+  fanStatus?: string;
+  fanScore?: number;
+  lastPurchaseDate?: string | null;
 }
 
 export function updateContact(
@@ -236,6 +252,11 @@ export function updateContact(
       ppv_count = COALESCE(?, ppv_count),
       telegram_id = COALESCE(?, telegram_id),
       telegram_access_hash = COALESCE(?, telegram_access_hash),
+      total_spent = COALESCE(?, total_spent),
+      vip_level = COALESCE(?, vip_level),
+      fan_status = COALESCE(?, fan_status),
+      fan_score = COALESCE(?, fan_score),
+      last_purchase_date = COALESCE(?, last_purchase_date),
       updated_at = ?
     WHERE id = ?`,
   ).run(
@@ -257,6 +278,11 @@ export function updateContact(
     input.ppvCount ?? null,
     input.telegramId ?? null,
     input.telegramAccessHash ?? null,
+    input.totalSpent ?? null,
+    input.vipLevel ?? null,
+    input.fanStatus ?? null,
+    input.fanScore ?? null,
+    input.lastPurchaseDate ?? null,
     ts,
     contactId,
   );

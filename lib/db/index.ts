@@ -39,6 +39,31 @@ function migrateDatabase(database: Database.Database): void {
       "ALTER TABLE conversations ADD COLUMN last_synced_message_id INTEGER NOT NULL DEFAULT 0",
     );
   }
+  if (!columnExists(database, "contacts", "total_spent")) {
+    database.exec(
+      "ALTER TABLE contacts ADD COLUMN total_spent REAL NOT NULL DEFAULT 0",
+    );
+  }
+  if (!columnExists(database, "contacts", "vip_level")) {
+    database.exec(
+      "ALTER TABLE contacts ADD COLUMN vip_level TEXT NOT NULL DEFAULT 'none'",
+    );
+  }
+  if (!columnExists(database, "contacts", "fan_status")) {
+    database.exec(
+      "ALTER TABLE contacts ADD COLUMN fan_status TEXT NOT NULL DEFAULT 'active'",
+    );
+  }
+  if (!columnExists(database, "contacts", "fan_score")) {
+    database.exec(
+      "ALTER TABLE contacts ADD COLUMN fan_score INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+  if (!columnExists(database, "contacts", "last_purchase_date")) {
+    database.exec(
+      "ALTER TABLE contacts ADD COLUMN last_purchase_date TEXT",
+    );
+  }
 }
 
 function createDatabase(): Database.Database {
