@@ -256,3 +256,23 @@ export async function importTelegramMessages(): Promise<MessageImportSummary> {
     await fetch("/api/telegram/import/messages", { method: "POST" }),
   );
 }
+
+export interface SendTelegramMessageResult {
+  contactId: number;
+  telegramMessageId: number;
+  text: string;
+  sentAt: string;
+}
+
+export async function sendTelegramMessageApi(
+  contactId: number,
+  text: string,
+): Promise<SendTelegramMessageResult> {
+  return parseJson<SendTelegramMessageResult>(
+    await fetch("/api/telegram/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId, text }),
+    }),
+  );
+}

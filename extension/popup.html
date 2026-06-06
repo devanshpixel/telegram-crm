@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Lustify CRM</title>
+  <style>
+    body { width: 320px; margin: 0; font: 13px system-ui, sans-serif; background: #0b0b0d; color: #e7e7ea; }
+    header { padding: 10px 12px; border-bottom: 1px solid #1f1f23; display: flex; align-items: center; justify-content: space-between; }
+    h1 { font-size: 13px; margin: 0; font-weight: 600; }
+    .status { font-size: 11px; padding: 2px 6px; border-radius: 6px; }
+    .status.on { background: #14532d; color: #86efac; }
+    .status.off { background: #7f1d1d; color: #fca5a5; }
+    ul { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; }
+    li { padding: 8px 12px; border-bottom: 1px solid #1f1f23; display: flex; justify-content: space-between; align-items: center; }
+    li:hover { background: #15151a; }
+    .name { font-weight: 500; }
+    .user { color: #8a8a93; font-size: 11px; }
+    .unread { background: #7c3aed; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px; min-width: 14px; text-align: center; }
+    .empty { padding: 24px 12px; text-align: center; color: #6b6b75; font-size: 12px; }
+    form { padding: 10px 12px; border-bottom: 1px solid #1f1f23; display: flex; flex-direction: column; gap: 6px; }
+    form input { background: #15151a; border: 1px solid #2a2a30; color: #e7e7ea; border-radius: 6px; padding: 6px 8px; font: inherit; }
+    form input:focus { outline: none; border-color: #7c3aed; }
+    form button { background: #7c3aed; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; font: inherit; cursor: pointer; }
+    form button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .msg { padding: 6px 12px; font-size: 11px; }
+    .msg.ok { color: #86efac; }
+    .msg.err { color: #fca5a5; }
+    .send-form { padding: 8px 12px; border-top: 1px solid #1f1f23; display: flex; gap: 6px; }
+    .send-form input { flex: 1; background: #15151a; border: 1px solid #2a2a30; color: #e7e7ea; border-radius: 6px; padding: 6px 8px; font: inherit; }
+    .send-form input:focus { outline: none; border-color: #7c3aed; }
+    .send-form button { background: #7c3aed; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+    .send-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .selected { padding: 6px 12px; font-size: 11px; color: #8a8a93; border-top: 1px solid #1f1f23; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Lustify CRM</h1>
+    <span id="status" class="status off">...</span>
+  </header>
+  <form id="newContact">
+    <input id="fName" placeholder="Name" required />
+    <input id="fUser" placeholder="Username (e.g. @elena_v)" required />
+    <input id="fPhone" placeholder="Phone (optional)" />
+    <button id="createBtn" type="submit">Create Contact</button>
+  </form>
+  <div id="formMsg"></div>
+  <div id="content"><p class="empty">Loading...</p></div>
+  <div id="selectedBar" class="selected" style="display:none"></div>
+  <form id="sendForm" class="send-form" style="display:none">
+    <input id="sendText" placeholder="Type a message..." required />
+    <button id="sendBtn" type="submit">Send</button>
+  </form>
+  <div id="sendMsg"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
