@@ -243,3 +243,16 @@ export async function importTelegramContacts(): Promise<ContactImportSummary> {
     await fetch("/api/telegram/import/contacts", { method: "POST" }),
   );
 }
+
+export interface MessageImportSummary {
+  contactsProcessed: number;
+  contactsCreated: number;
+  messagesImported: number;
+  messagesSkipped: number;
+}
+
+export async function importTelegramMessages(): Promise<MessageImportSummary> {
+  return parseJson<MessageImportSummary>(
+    await fetch("/api/telegram/import/messages", { method: "POST" }),
+  );
+}

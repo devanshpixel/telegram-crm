@@ -1,12 +1,13 @@
 import bigInt from "big-integer";
 import { Api } from "telegram";
 import { getDb, nowIso } from "@/lib/db";
-import { createMessage } from "@/lib/db/service";
+import { createContact, createMessage, getContactByTelegramId } from "@/lib/db/service";
 import type { ContactRow, ConversationRow } from "@/lib/db/types";
 import { getTelegramClient } from "./client";
 
 export interface MessageImportSummary {
   contactsProcessed: number;
+  contactsCreated: number;
   messagesImported: number;
   messagesSkipped: number;
 }
@@ -65,7 +66,46 @@ function buildPeer(contact: ContactRow): Api.InputPeerUser {
   });
 }
 
+function formatUserName(user: Api.User): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  return name || user.username || `User ${user.id}`;
+}
+
+function formatUsername(user: Api.User): string {
+  return user.username ?? `user_${user.id}`;
+}
+
+export async function importDialogs(): Promise<number> {
+  await ensureConnected();
+  const client = getTelegramClient();
+
+  let created = 0;
+  for await (const dialog of client.iterDialogs()) {
+    const entity = dialog.entity;
+    if (!(entity instanceof Api.User)) continue;
+    if (entity.bot || entity.deleted || entity.self) continue;
+
+    const telegramId = entity.id.toString();
+    if (getContactByTelegramId(telegramId)) continue;
+
+    const accessHash = entity.accessHash?.toString();
+    if (!accessHash) continue;
+
+    createContact({
+      name: formatUserName(entity),
+      username: formatUsername(entity),
+      phone: entity.phone ?? "",
+      telegramId,
+      telegramAccessHash: accessHash,
+    });
+    created++;
+  }
+  return created;
+}
+
 export async function importMessages(): Promise<MessageImportSummary> {
+  const contactsCreated = await importDialogs();
+
   await ensureConnected();
   const client = getTelegramClient();
 
@@ -127,5 +167,5 @@ export async function importMessages(): Promise<MessageImportSummary> {
     }
   }
 
-  return { contactsProcessed, messagesImported, messagesSkipped };
+  return { contactsProcessed, contactsCreated, messagesImported, messagesSkipped };
 }

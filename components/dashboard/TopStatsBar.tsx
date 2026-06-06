@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
-import { importTelegramContacts } from "@/lib/api";
+import { importTelegramContacts, importTelegramMessages } from "@/lib/api";
 import type { DashboardStats } from "@/types";
-import { BarChart3, Download, Loader2, MessageCircle, Radio, Send, Sparkles, Wallet } from "lucide-react";
+import { BarChart3, Download, Loader2, MessageCircle, Radio, RefreshCw, Send, Sparkles, Wallet } from "lucide-react";
 
 interface TopStatsBarProps {
   stats: DashboardStats;
@@ -21,6 +21,8 @@ export function TopStatsBar({
 }: TopStatsBarProps) {
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<string>("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>("");
 
   const handleImport = async () => {
     if (importing) return;
@@ -34,6 +36,21 @@ export function TopStatsBar({
       setImportStatus(e instanceof Error ? e.message : "Import failed");
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    setSyncStatus("");
+    try {
+      const result = await importTelegramMessages();
+      setSyncStatus(`Synced ${result.messagesImported} new messages`);
+      window.location.reload();
+    } catch (e) {
+      setSyncStatus(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -87,6 +104,23 @@ export function TopStatsBar({
           )}
           <span className="hidden text-xs font-medium sm:inline">
             {importing ? "Importing..." : "Import"}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={handleSync}
+          disabled={syncing}
+          aria-label="Sync messages from Telegram"
+          title={syncStatus || "Sync messages from Telegram"}
+          className="flex items-center gap-1.5 rounded-xl border border-border bg-surface-card px-2.5 py-1.5 text-text-secondary hover:bg-surface-hover disabled:opacity-50 sm:px-3 sm:py-2"
+        >
+          {syncing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+          <span className="hidden text-xs font-medium sm:inline">
+            {syncing ? "Syncing..." : "Sync"}
           </span>
         </button>
         {onOpenBroadcast && (

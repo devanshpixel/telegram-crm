@@ -71,6 +71,14 @@ function getContactById(id: number): ContactRow | undefined {
     | undefined;
 }
 
+export function getContactByTelegramId(
+  telegramId: string,
+): ContactRow | undefined {
+  return getDb()
+    .prepare("SELECT * FROM contacts WHERE telegram_id = ?")
+    .get(telegramId) as ContactRow | undefined;
+}
+
 function listChatRows(): ChatListRow[] {
   const db = getDb();
   return db
