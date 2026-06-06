@@ -18,6 +18,7 @@ import type {
   PpvStats,
   Purchase,
   RecentPurchaser,
+  RetentionData,
   RevenueData,
   TimelineEvent,
   TopSpender,
@@ -1036,6 +1037,113 @@ export function getAnalytics(): AnalyticsData {
     mostActive: getMostActiveContacts(),
     inactiveContacts: getInactiveContacts(),
     recentPurchasers: getRecentPurchasers(),
+    retention: getRetentionData(),
+  };
+}
+
+function getRetentionOverview(): RetentionData["overview"] {
+  const db = getDb();
+  const activeFans30d = (
+    db
+      .prepare(
+        "SELECT COUNT(DISTINCT contact_id) AS count FROM purchases WHERE purchase_date >= date('now', '-30 days')",
+      )
+      .get() as { count: number }
+  ).count;
+  const newFans30d = (
+    db
+      .prepare(
+        "SELECT COUNT(*) AS count FROM contacts WHERE created_at >= date('now', '-30 days')",
+      )
+      .get() as { count: number }
+  ).count;
+  const returningBuyers = (
+    db
+      .prepare(
+        "SELECT COUNT(*) AS count FROM (SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) > 1)",
+      )
+      .get() as { count: number }
+  ).count;
+  const totalBuyers = (
+    db
+      .prepare(
+        "SELECT COUNT(DISTINCT contact_id) AS count FROM purchases",
+      )
+      .get() as { count: number }
+  ).count;
+  const churnedBuyers = (
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT contact_id) AS count FROM purchases
+         WHERE contact_id IN (
+           SELECT contact_id FROM purchases
+           GROUP BY contact_id
+           HAVING MAX(purchase_date) < date('now', '-60 days')
+         )`,
+      )
+      .get() as { count: number }
+  ).count;
+  const repeatBuyerPercent =
+    totalBuyers > 0 ? Math.round((returningBuyers / totalBuyers) * 100) : 0;
+  return {
+    activeFans30d,
+    newFans30d,
+    returningBuyers,
+    churnedBuyers,
+    repeatBuyerPercent,
+  };
+}
+
+function getRetentionAnalytics(): RetentionData["analytics"] {
+  const db = getDb();
+  const buyersThisMonth = (
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT contact_id) AS count FROM purchases
+         WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now')`,
+      )
+      .get() as { count: number }
+  ).count;
+  const buyersLastMonth = (
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT contact_id) AS count FROM purchases
+         WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now', '-1 month')`,
+      )
+      .get() as { count: number }
+  ).count;
+  const revenueFromRepeatBuyers = (
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(p.amount), 0) AS total FROM purchases p
+         WHERE p.contact_id IN (
+           SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) > 1
+         )`,
+      )
+      .get() as { total: number }
+  ).total;
+  const revenueFromNewBuyers = (
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(p.amount), 0) AS total FROM purchases p
+         WHERE p.contact_id IN (
+           SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) = 1
+         )`,
+      )
+      .get() as { total: number }
+  ).total;
+  return {
+    buyersThisMonth,
+    buyersLastMonth,
+    revenueFromRepeatBuyers,
+    revenueFromNewBuyers,
+  };
+}
+
+export function getRetentionData(): RetentionData {
+  return {
+    overview: getRetentionOverview(),
+    analytics: getRetentionAnalytics(),
   };
 }
 

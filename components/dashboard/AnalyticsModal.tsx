@@ -176,6 +176,63 @@ export function AnalyticsModal({ open, onClose, onSelectContact }: AnalyticsModa
                   </ul>
                 )}
               </Section>
+
+              <Section title="Retention overview">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <Stat
+                    label="Active 30d"
+                    value={String(data.retention.overview.activeFans30d)}
+                    accent="violet"
+                  />
+                  <Stat
+                    label="New 30d"
+                    value={String(data.retention.overview.newFans30d)}
+                    accent="violet"
+                  />
+                  <Stat
+                    label="Returning"
+                    value={String(data.retention.overview.returningBuyers)}
+                  />
+                  <Stat
+                    label="Churned"
+                    value={String(data.retention.overview.churnedBuyers)}
+                  />
+                  <Stat
+                    label="Repeat %"
+                    value={`${data.retention.overview.repeatBuyerPercent}%`}
+                    accent="revenue"
+                  />
+                </div>
+              </Section>
+
+              <Section title="Retention analytics">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Stat
+                    label="Buyers this month"
+                    value={String(data.retention.analytics.buyersThisMonth)}
+                  />
+                  <Stat
+                    label="Buyers last month"
+                    value={String(data.retention.analytics.buyersLastMonth)}
+                  />
+                  <Stat
+                    label="Repeat revenue"
+                    value={formatCurrency(
+                      data.retention.analytics.revenueFromRepeatBuyers,
+                      true,
+                    )}
+                    accent="revenue"
+                  />
+                  <Stat
+                    label="New revenue"
+                    value={formatCurrency(
+                      data.retention.analytics.revenueFromNewBuyers,
+                      true,
+                    )}
+                    accent="revenue"
+                  />
+                </div>
+              </Section>
             </div>
           )}
         </div>

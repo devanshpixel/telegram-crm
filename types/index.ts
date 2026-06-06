@@ -251,6 +251,27 @@ export interface AnalyticsData {
   mostActive: ActiveContact[];
   inactiveContacts: InactiveContact[];
   recentPurchasers: RecentPurchaser[];
+  retention: RetentionData;
+}
+
+export interface RetentionOverview {
+  activeFans30d: number;
+  newFans30d: number;
+  returningBuyers: number;
+  churnedBuyers: number;
+  repeatBuyerPercent: number;
+}
+
+export interface RetentionMetrics {
+  buyersThisMonth: number;
+  buyersLastMonth: number;
+  revenueFromRepeatBuyers: number;
+  revenueFromNewBuyers: number;
+}
+
+export interface RetentionData {
+  overview: RetentionOverview;
+  analytics: RetentionMetrics;
 }
 
 export type TimelineEventType =

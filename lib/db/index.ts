@@ -143,6 +143,15 @@ function migrateDatabase(database: Database.Database): void {
   database.exec(
     "CREATE INDEX IF NOT EXISTS idx_broadcasts_trigger_created_at ON broadcasts(trigger, created_at)",
   );
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_purchases_purchase_date ON purchases(purchase_date)",
+  );
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_contacts_created_at ON contacts(created_at)",
+  );
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_contacts_last_purchase_date ON contacts(last_purchase_date)",
+  );
 }
 
 function createDatabase(): Database.Database {

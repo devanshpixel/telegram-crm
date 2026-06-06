@@ -1,0 +1,9 @@
+warning: in the working copy of 'components/dashboard/AnalyticsModal.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/db/service.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'types/index.ts', LF will be replaced by CRLF the next time Git touches it
+ components/dashboard/AnalyticsModal.tsx |  57 [32m+++++++++++++++++[m
+ lib/db/index.ts                         |   9 [32m+++[m
+ lib/db/service.ts                       | 108 [32m++++++++++++++++++++++++++++++++[m
+ types/index.ts                          |  21 [32m+++++++[m
+ 4 files changed, 195 insertions(+)
