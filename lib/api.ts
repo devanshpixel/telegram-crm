@@ -231,3 +231,15 @@ export async function createMessageApi(
   );
   return reviveMessage(data);
 }
+
+export interface ContactImportSummary {
+  total: number;
+  imported: number;
+  skipped: number;
+}
+
+export async function importTelegramContacts(): Promise<ContactImportSummary> {
+  return parseJson<ContactImportSummary>(
+    await fetch("/api/telegram/import/contacts", { method: "POST" }),
+  );
+}

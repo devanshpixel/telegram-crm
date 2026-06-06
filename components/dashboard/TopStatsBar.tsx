@@ -1,6 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
+import { importTelegramContacts } from "@/lib/api";
 import type { DashboardStats } from "@/types";
-import { BarChart3, MessageCircle, Radio, Send, Sparkles, Wallet } from "lucide-react";
+import { BarChart3, Download, Loader2, MessageCircle, Radio, Send, Sparkles, Wallet } from "lucide-react";
 
 interface TopStatsBarProps {
   stats: DashboardStats;
@@ -15,6 +19,24 @@ export function TopStatsBar({
   onOpenBroadcast,
   onOpenReengagement,
 }: TopStatsBarProps) {
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<string>("");
+
+  const handleImport = async () => {
+    if (importing) return;
+    setImporting(true);
+    setImportStatus("");
+    try {
+      const result = await importTelegramContacts();
+      setImportStatus(`Imported ${result.imported} of ${result.total}`);
+      window.location.reload();
+    } catch (e) {
+      setImportStatus(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-black px-4 py-3 sm:px-5 lg:px-6">
       <div className="flex items-center gap-2.5">
@@ -50,6 +72,23 @@ export function TopStatsBar({
           highlight
           className="hidden sm:flex"
         />
+        <button
+          type="button"
+          onClick={handleImport}
+          disabled={importing}
+          aria-label="Import contacts from Telegram"
+          title={importStatus || "Import contacts from Telegram"}
+          className="flex items-center gap-1.5 rounded-xl border border-border bg-surface-card px-2.5 py-1.5 text-text-secondary hover:bg-surface-hover disabled:opacity-50 sm:px-3 sm:py-2"
+        >
+          {importing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}
+          <span className="hidden text-xs font-medium sm:inline">
+            {importing ? "Importing..." : "Import"}
+          </span>
+        </button>
         {onOpenBroadcast && (
           <button
             type="button"
