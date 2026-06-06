@@ -64,6 +64,63 @@ function migrateDatabase(database: Database.Database): void {
       "ALTER TABLE contacts ADD COLUMN last_purchase_date TEXT",
     );
   }
+  const tables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='purchases'")
+    .all() as { name: string }[];
+  if (tables.length === 0) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS purchases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        purchase_date TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_purchases_contact ON purchases(contact_id);
+    `);
+  }
+  const tagEventTables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tag_events'")
+    .all() as { name: string }[];
+  if (tagEventTables.length === 0) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS tag_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_id INTEGER NOT NULL,
+        tag_name TEXT NOT NULL,
+        event_type TEXT NOT NULL CHECK (event_type IN ('added', 'removed')),
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_tag_events_contact ON tag_events(contact_id);
+    `);
+  }
+  if (!columnExists(database, "purchases", "kind")) {
+    database.exec(
+      "ALTER TABLE purchases ADD COLUMN kind TEXT NOT NULL DEFAULT 'ppv'",
+    );
+  }
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_purchases_contact_kind ON purchases(contact_id, kind)",
+  );
+  if (!columnExists(database, "contacts", "ppv_count")) {
+    database.exec(
+      "ALTER TABLE contacts ADD COLUMN ppv_count INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+  const backfillRow = database
+    .prepare("SELECT COUNT(*) AS c FROM contacts WHERE ppv_count > 0")
+    .get() as { c: number };
+  if (backfillRow.c === 0) {
+    database.exec(`
+      UPDATE contacts SET ppv_count = (
+        SELECT COUNT(*) FROM purchases
+        WHERE purchases.contact_id = contacts.id AND purchases.kind = 'ppv'
+      )
+    `);
+  }
 }
 
 function createDatabase(): Database.Database {

@@ -1,9 +1,25 @@
 import type {
+  ActiveContact,
+  AnalyticsData,
   Chat,
   ContactProfile,
   DashboardStats,
+  FanScoreStats,
+  FanStatusBreakdown,
+  FollowUpData,
+  FollowUpList,
+  FollowUpListItem,
+  InactiveContact,
   Message,
   MessageDirection,
+  MonthlyRevenue,
+  PpvStats,
+  Purchase,
+  RecentPurchaser,
+  RevenueData,
+  TimelineEvent,
+  TopSpender,
+  VipLevelBreakdown,
 } from "@/types";
 import { getDb, nowIso } from "./index";
 import {
@@ -12,6 +28,7 @@ import {
   mapContactToProfile,
   mapDashboardStats,
   mapMessageRow,
+  mapPurchaseRow,
 } from "./mappers";
 import type { ChatListRow, ContactRow } from "./types";
 
@@ -333,6 +350,9 @@ export function addTag(contactId: number, name: string) {
         "INSERT INTO tags (contact_id, name, created_at) VALUES (?, ?, ?)",
       )
       .run(contactId, trimmed, ts);
+    db.prepare(
+      "INSERT INTO tag_events (contact_id, tag_name, event_type, created_at) VALUES (?, ?, 'added', ?)",
+    ).run(contactId, trimmed, ts);
     return {
       id: Number(result.lastInsertRowid),
       contactId,
@@ -345,9 +365,17 @@ export function addTag(contactId: number, name: string) {
 
 export function deleteTag(contactId: number, name: string): boolean {
   const db = getDb();
+  const ts = nowIso();
+  const trimmed = name.trim();
   const result = db
     .prepare("DELETE FROM tags WHERE contact_id = ? AND name = ?")
-    .run(contactId, name.trim());
+    .run(contactId, trimmed);
+  if (result.changes > 0) {
+    db.prepare(
+      "INSERT INTO tag_events (contact_id, tag_name, event_type, created_at) VALUES (?, ?, 'removed', ?)",
+    ).run(contactId, trimmed, ts);
+    db.prepare("UPDATE contacts SET updated_at = ? WHERE id = ?").run(ts, contactId);
+  }
   return result.changes > 0;
 }
 
@@ -392,4 +420,662 @@ export function createMessage(
     .get(result.lastInsertRowid) as import("./types").MessageRow;
 
   return mapMessageRow(row);
+}
+
+export interface CreatePurchaseInput {
+  contactId: number;
+  amount: number;
+  purchaseDate: string;
+  note?: string;
+  kind?: string;
+}
+
+export function createPurchase(input: CreatePurchaseInput): Purchase {
+  const db = getDb();
+  const ts = nowIso();
+  const kind = input.kind ?? "ppv";
+  const contact = db.prepare("SELECT id FROM contacts WHERE id = ?").get(input.contactId) as { id: number } | undefined;
+  if (!contact) throw new Error("Contact not found");
+
+  const result = db
+    .prepare(
+      `INSERT INTO purchases (contact_id, amount, purchase_date, note, kind, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(input.contactId, input.amount, input.purchaseDate, input.note ?? "", kind, ts);
+
+  const updateParts = [
+    "total_spent = total_spent + ?",
+    "revenue = revenue + ?",
+    "last_purchase_date = MAX(COALESCE(last_purchase_date, ''), ?)",
+    "updated_at = ?",
+  ];
+  const updateArgs: (string | number)[] = [input.amount, input.amount, input.purchaseDate, ts];
+  if (kind === "ppv") {
+    updateParts.push("ppv_count = ppv_count + 1");
+  }
+  db.prepare(
+    `UPDATE contacts SET ${updateParts.join(", ")} WHERE id = ?`,
+  ).run(...updateArgs, input.contactId);
+
+  const row = db.prepare("SELECT * FROM purchases WHERE id = ?").get(result.lastInsertRowid) as import("./types").PurchaseRow;
+  return mapPurchaseRow(row);
+}
+
+export function getPurchasesByContact(contactId: number): Purchase[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      "SELECT * FROM purchases WHERE contact_id = ? ORDER BY purchase_date DESC",
+    )
+    .all(contactId) as import("./types").PurchaseRow[];
+  return rows.map(mapPurchaseRow);
+}
+
+export function getMonthlyRevenue(months: number = 12): MonthlyRevenue[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT
+         strftime('%Y-%m', purchase_date) AS month,
+         COALESCE(SUM(amount), 0) AS total,
+         COUNT(*) AS count
+       FROM purchases
+       WHERE purchase_date >= date('now', ?)
+       GROUP BY strftime('%Y-%m', purchase_date)
+       ORDER BY month DESC`,
+    )
+    .all(`-${months} months`) as { month: string; total: number; count: number }[];
+  return rows;
+}
+
+export function getTopSpenders(limit: number = 10): TopSpender[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT
+         c.id,
+         c.name,
+         c.username,
+         c.avatar,
+         c.avatar_color,
+         c.total_spent,
+         (SELECT COUNT(*) FROM purchases p WHERE p.contact_id = c.id) AS purchase_count
+       FROM contacts c
+       WHERE c.total_spent > 0
+       ORDER BY c.total_spent DESC
+       LIMIT ?`,
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      total_spent: number;
+      purchase_count: number;
+    }[];
+  return rows.map((row) => ({
+    id: String(row.id),
+    name: row.name,
+    username: row.username,
+    avatar: row.avatar,
+    avatarColor: row.avatar_color,
+    totalSpent: row.total_spent,
+    purchaseCount: row.purchase_count,
+  }));
+}
+
+export function getRevenueData(months: number = 12, limit: number = 10): RevenueData {
+  return {
+    monthly: getMonthlyRevenue(months),
+    topSpenders: getTopSpenders(limit),
+  };
+}
+
+export function getPpvStats(limit: number = 10): PpvStats {
+  const db = getDb();
+  const totals = db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(amount), 0) AS totalRevenue,
+         COUNT(*) AS purchaseCount,
+         COUNT(DISTINCT contact_id) AS uniqueBuyers
+       FROM purchases
+       WHERE kind = 'ppv'`,
+    )
+    .get() as { totalRevenue: number; purchaseCount: number; uniqueBuyers: number };
+  const topBuyers = db
+    .prepare(
+      `SELECT
+         c.id,
+         c.name,
+         c.username,
+         c.avatar,
+         c.avatar_color,
+         c.total_spent,
+         (SELECT COUNT(*) FROM purchases p WHERE p.contact_id = c.id AND p.kind = 'ppv') AS purchase_count
+       FROM contacts c
+       WHERE EXISTS (SELECT 1 FROM purchases p WHERE p.contact_id = c.id AND p.kind = 'ppv')
+       ORDER BY c.total_spent DESC
+       LIMIT ?`,
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      total_spent: number;
+      purchase_count: number;
+    }[];
+  return {
+    totalRevenue: totals.totalRevenue,
+    purchaseCount: totals.purchaseCount,
+    uniqueBuyers: totals.uniqueBuyers,
+    topBuyers: topBuyers.map((row) => ({
+      id: String(row.id),
+      name: row.name,
+      username: row.username,
+      avatar: row.avatar,
+      avatarColor: row.avatar_color,
+      totalSpent: row.total_spent,
+      purchaseCount: row.purchase_count,
+    })),
+  };
+}
+
+function getOverview(): AnalyticsData["overview"] {
+  const db = getDb();
+  const totalFans = (
+    db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number }
+  ).count;
+  const activeFans = (
+    db
+      .prepare("SELECT COUNT(*) AS count FROM contacts WHERE fan_status = 'active'")
+      .get() as { count: number }
+  ).count;
+  const vipFans = (
+    db
+      .prepare("SELECT COUNT(*) AS count FROM contacts WHERE vip_level != 'none'")
+      .get() as { count: number }
+  ).count;
+  const totalRevenue = (
+    db.prepare("SELECT COALESCE(SUM(revenue), 0) AS total FROM contacts").get() as {
+      total: number;
+    }
+  ).total;
+  const revenueLast30Days = (
+    db
+      .prepare(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM purchases WHERE purchase_date >= date('now', '-30 days')",
+      )
+      .get() as { total: number }
+  ).total;
+  const messagesSent = (
+    db
+      .prepare("SELECT COUNT(*) AS count FROM messages WHERE direction = 'outgoing'")
+      .get() as { count: number }
+  ).count;
+  const messagesReceived = (
+    db
+      .prepare("SELECT COUNT(*) AS count FROM messages WHERE direction = 'incoming'")
+      .get() as { count: number }
+  ).count;
+
+  const currentMonth = (
+    db
+      .prepare(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM purchases WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now')",
+      )
+      .get() as { total: number }
+  ).total;
+  const previousMonth = (
+    db
+      .prepare(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM purchases WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now', '-1 month')",
+      )
+      .get() as { total: number }
+  ).total;
+  const revenueGrowthPercent =
+    previousMonth > 0
+      ? Math.round(((currentMonth - previousMonth) / previousMonth) * 100)
+      : currentMonth > 0
+        ? 100
+        : 0;
+
+  return {
+    totalFans,
+    activeFans,
+    vipFans,
+    totalRevenue,
+    revenueLast30Days,
+    messagesSent,
+    messagesReceived,
+    revenueGrowthPercent,
+  };
+}
+
+function getFansByVipLevel(): VipLevelBreakdown[] {
+  const db = getDb();
+  return db
+    .prepare(
+      "SELECT vip_level AS level, COUNT(*) AS count FROM contacts GROUP BY vip_level ORDER BY count DESC",
+    )
+    .all() as VipLevelBreakdown[];
+}
+
+function getFansByStatus(): FanStatusBreakdown[] {
+  const db = getDb();
+  return db
+    .prepare(
+      "SELECT fan_status AS status, COUNT(*) AS count FROM contacts GROUP BY fan_status ORDER BY count DESC",
+    )
+    .all() as FanStatusBreakdown[];
+}
+
+function getFanScoreStats(): FanScoreStats {
+  const db = getDb();
+  const row = db
+    .prepare(
+      "SELECT COALESCE(MAX(fan_score), 0) AS highest, COALESCE(ROUND(AVG(fan_score), 1), 0) AS average FROM contacts",
+    )
+    .get() as { highest: number; average: number };
+  return row;
+}
+
+function getMostActiveContacts(limit: number = 5): ActiveContact[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              COUNT(m.id) AS message_count
+       FROM contacts c
+       INNER JOIN conversations conv ON conv.contact_id = c.id
+       LEFT JOIN messages m ON m.conversation_id = conv.id
+       GROUP BY c.id
+       ORDER BY message_count DESC
+       LIMIT ?`,
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      message_count: number;
+    }[];
+  return rows.map((row) => ({
+    id: String(row.id),
+    name: row.name,
+    username: row.username,
+    avatar: row.avatar,
+    avatarColor: row.avatar_color,
+    messageCount: row.message_count,
+  }));
+}
+
+function getInactiveContacts(days: number = 30, limit: number = 10): InactiveContact[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              CAST(julianday('now') - julianday(c.updated_at) AS INTEGER) AS days_since_activity
+       FROM contacts c
+       WHERE c.updated_at < date('now', ?)
+         AND c.is_online = 0
+       ORDER BY c.updated_at ASC
+       LIMIT ?`,
+    )
+    .all(`-${days} days`, limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since_activity: number;
+    }[];
+  return rows.map((row) => ({
+    id: String(row.id),
+    name: row.name,
+    username: row.username,
+    avatar: row.avatar,
+    avatarColor: row.avatar_color,
+    daysSinceActivity: row.days_since_activity,
+  }));
+}
+
+function getRecentPurchasers(limit: number = 5): RecentPurchaser[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT id, name, username, avatar, avatar_color, last_purchase_date, total_spent
+       FROM contacts
+       WHERE last_purchase_date IS NOT NULL
+       ORDER BY last_purchase_date DESC
+       LIMIT ?`,
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      last_purchase_date: string;
+      total_spent: number;
+    }[];
+  return rows.map((row) => ({
+    id: String(row.id),
+    name: row.name,
+    username: row.username,
+    avatar: row.avatar,
+    avatarColor: row.avatar_color,
+    lastPurchaseDate: row.last_purchase_date,
+    totalSpent: row.total_spent,
+  }));
+}
+
+export function getAnalytics(): AnalyticsData {
+  return {
+    overview: getOverview(),
+    fansByVipLevel: getFansByVipLevel(),
+    fansByStatus: getFansByStatus(),
+    fanScores: getFanScoreStats(),
+    mostActive: getMostActiveContacts(),
+    inactiveContacts: getInactiveContacts(),
+    recentPurchasers: getRecentPurchasers(),
+  };
+}
+
+interface TimelineRow {
+  id: number;
+  type: "message_in" | "message_out" | "purchase" | "note" | "tag_added" | "tag_removed";
+  ts: string;
+  text: string | null;
+  amount: number | null;
+}
+
+export function getTimeline(contactId: number, limit: number = 100): TimelineEvent[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT id, type, ts, text, amount FROM (
+        SELECT
+          m.id AS id,
+          CASE WHEN m.direction = 'incoming' THEN 'message_in' ELSE 'message_out' END AS type,
+          m.created_at AS ts,
+          m.text AS text,
+          NULL AS amount
+        FROM messages m
+        INNER JOIN conversations conv ON conv.id = m.conversation_id
+        WHERE conv.contact_id = ?
+
+        UNION ALL
+
+        SELECT
+          p.id AS id,
+          'purchase' AS type,
+          COALESCE(p.purchase_date, p.created_at) AS ts,
+          p.note AS text,
+          p.amount AS amount
+        FROM purchases p
+        WHERE p.contact_id = ?
+
+        UNION ALL
+
+        SELECT
+          n.id AS id,
+          'note' AS type,
+          n.created_at AS ts,
+          n.content AS text,
+          NULL AS amount
+        FROM notes n
+        WHERE n.contact_id = ?
+
+        UNION ALL
+
+        SELECT
+          te.id AS id,
+          CASE WHEN te.event_type = 'added' THEN 'tag_added' ELSE 'tag_removed' END AS type,
+          te.created_at AS ts,
+          te.tag_name AS text,
+          NULL AS amount
+        FROM tag_events te
+        WHERE te.contact_id = ?
+      )
+      ORDER BY ts DESC
+      LIMIT ?`,
+    )
+    .all(contactId, contactId, contactId, contactId, limit) as TimelineRow[];
+
+  return rows.map((row) => ({
+    id: `${row.type}-${row.id}`,
+    type: row.type,
+    timestamp: row.ts,
+    text: row.text ?? undefined,
+    amount: row.amount ?? undefined,
+  }));
+}
+
+function mapFollowUpRow(row: {
+  id: number;
+  name: string;
+  username: string;
+  avatar: string;
+  avatar_color: string;
+  days_since: number | null;
+  hint_value: string | number | null;
+}): FollowUpListItem {
+  return {
+    id: String(row.id),
+    name: row.name,
+    username: row.username,
+    avatar: row.avatar,
+    avatarColor: row.avatar_color,
+    hint:
+      row.hint_value !== null && row.hint_value !== undefined
+        ? String(row.hint_value)
+        : row.days_since !== null
+          ? `${row.days_since}d`
+          : "—",
+  };
+}
+
+function getNoMessageInDays(days: number, limit: number): FollowUpListItem[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              CAST(julianday('now') - julianday(MAX(m.created_at)) AS INTEGER) AS days_since
+       FROM contacts c
+       INNER JOIN conversations conv ON conv.contact_id = c.id
+       LEFT JOIN messages m ON m.conversation_id = conv.id
+       GROUP BY c.id
+       HAVING MAX(m.created_at) IS NOT NULL
+          AND MAX(m.created_at) < date('now', ?)
+       ORDER BY MAX(m.created_at) ASC
+       LIMIT ?`,
+    )
+    .all(`-${days} days`, limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since: number;
+    }[];
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
+}
+
+function getNoPurchaseInDays(days: number, limit: number): FollowUpListItem[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT id, name, username, avatar, avatar_color,
+              CAST(julianday('now') - julianday(last_purchase_date) AS INTEGER) AS days_since
+       FROM contacts
+       WHERE last_purchase_date IS NOT NULL
+         AND last_purchase_date < date('now', ?)
+       ORDER BY last_purchase_date ASC
+       LIMIT ?`,
+    )
+    .all(`-${days} days`, limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since: number;
+    }[];
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
+}
+
+function getNoPpvInDays(days: number, limit: number): FollowUpListItem[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              CAST(julianday('now') - julianday(MAX(p.purchase_date)) AS INTEGER) AS days_since
+       FROM contacts c
+       INNER JOIN purchases p ON p.contact_id = c.id
+       WHERE p.kind = 'ppv'
+       GROUP BY c.id
+       HAVING MAX(p.purchase_date) < date('now', ?)
+       ORDER BY MAX(p.purchase_date) ASC
+       LIMIT ?`,
+    )
+    .all(`-${days} days`, limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since: number;
+    }[];
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
+}
+
+function getVipInactive(vipLevels: string[], days: number, limit: number): FollowUpListItem[] {
+  const db = getDb();
+  const placeholders = vipLevels.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT id, name, username, avatar, avatar_color,
+              CAST(julianday('now') - julianday(updated_at) AS INTEGER) AS days_since
+       FROM contacts
+       WHERE vip_level IN (${placeholders})
+         AND updated_at < date('now', ?)
+       ORDER BY updated_at ASC
+       LIMIT ?`,
+    )
+    .all(...vipLevels, `-${days} days`, limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since: number;
+    }[];
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
+}
+
+function getHighSpenderInactive(minSpent: number, days: number, limit: number): FollowUpListItem[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT id, name, username, avatar, avatar_color, total_spent,
+              CAST(julianday('now') - julianday(COALESCE(last_purchase_date, updated_at)) AS INTEGER) AS days_since
+       FROM contacts
+       WHERE total_spent >= ?
+         AND (last_purchase_date IS NULL OR last_purchase_date < date('now', ?))
+         AND updated_at < date('now', ?)
+       ORDER BY total_spent DESC
+       LIMIT ?`,
+    )
+    .all(minSpent, `-${days} days`, `-${days} days`, limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      total_spent: number;
+      days_since: number;
+    }[];
+  return rows.map((r) =>
+    mapFollowUpRow({ ...r, hint_value: `$${r.total_spent.toFixed(0)}` }),
+  );
+}
+
+function getNeverPurchased(limit: number): FollowUpListItem[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color
+       FROM contacts c
+       LEFT JOIN purchases p ON p.contact_id = c.id
+       WHERE p.id IS NULL
+       ORDER BY c.created_at DESC
+       LIMIT ?`,
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+    }[];
+  return rows.map((r) =>
+    mapFollowUpRow({ ...r, days_since: null, hint_value: "no purchases" }),
+  );
+}
+
+export function getFollowUps(limit: number = 10): FollowUpData {
+  const lists: FollowUpList[] = [
+    {
+      key: "no_message_7d",
+      title: "No message in 7 days",
+      description: "Fans you haven't replied to in a week",
+      count: 0,
+      items: getNoMessageInDays(7, limit),
+    },
+    {
+      key: "no_purchase_30d",
+      title: "No purchase in 30 days",
+      description: "Previous buyers at risk of churning",
+      count: 0,
+      items: getNoPurchaseInDays(30, limit),
+    },
+    {
+      key: "vip_inactive_14d",
+      title: "VIP inactive for 14 days",
+      description: "VIP-tier fans who went quiet",
+      count: 0,
+      items: getVipInactive(["gold", "platinum", "silver"], 14, limit),
+    },
+    {
+      key: "high_spender_inactive",
+      title: "High spender inactive",
+      description: "Top spenders (≥$200) silent for 30+ days",
+      count: 0,
+      items: getHighSpenderInactive(200, 30, limit),
+    },
+    {
+      key: "no_ppv_30d",
+      title: "No PPV purchase in 30 days",
+      description: "Past PPV buyers who stopped unlocking",
+      count: 0,
+      items: getNoPpvInDays(30, limit),
+    },
+    {
+      key: "never_purchased",
+      title: "Never purchased",
+      description: "Engaged fans who never bought",
+      count: 0,
+      items: getNeverPurchased(limit),
+    },
+  ];
+  for (const list of lists) {
+    list.count = list.items.length;
+  }
+  return { lists };
 }

@@ -18,6 +18,7 @@ import { SidebarLeft } from "@/components/sidebar-left/SidebarLeft";
 import { ConversationView } from "@/components/conversation/ConversationView";
 import { SidebarRight } from "@/components/sidebar-right/SidebarRight";
 import { TopStatsBar } from "./TopStatsBar";
+import { AnalyticsModal } from "./AnalyticsModal";
 import { CreateContactModal } from "@/components/forms/CreateContactModal";
 
 type MobilePanel = "list" | "chat" | "crm";
@@ -44,6 +45,7 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
   const [profiles, setProfiles] = useState<Record<string, ContactProfile>>({});
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
@@ -84,6 +86,14 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
     setActiveChatId(id);
     setMobilePanel("chat");
   }, []);
+
+  const handleFollowUpSelect = useCallback(
+    (id: string) => {
+      setActiveChatId(id);
+      setShowAnalytics(false);
+    },
+    [],
+  );
 
   const handleBackToList = useCallback(() => {
     setMobilePanel("list");
@@ -171,7 +181,7 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
   if (chats.length === 0) {
     return (
       <div className="flex h-dvh flex-col bg-black">
-        <TopStatsBar stats={stats} />
+        <TopStatsBar stats={stats} onOpenAnalytics={() => setShowAnalytics(true)} />
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
           <p className="text-text-secondary">No contacts yet.</p>
           <p className="text-sm text-text-muted">
@@ -191,6 +201,11 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
           onClose={() => setShowCreateModal(false)}
           onCreated={handleContactCreated}
         />
+        <AnalyticsModal
+          open={showAnalytics}
+          onClose={() => setShowAnalytics(false)}
+          onSelectContact={handleFollowUpSelect}
+        />
       </div>
     );
   }
@@ -205,7 +220,7 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
 
   return (
     <div className="flex h-dvh min-h-dvh w-full flex-col overflow-hidden bg-black">
-      <TopStatsBar stats={stats} />
+      <TopStatsBar stats={stats} onOpenAnalytics={() => setShowAnalytics(true)} />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
@@ -284,6 +299,11 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreated={handleContactCreated}
+      />
+      <AnalyticsModal
+        open={showAnalytics}
+        onClose={() => setShowAnalytics(false)}
+        onSelectContact={handleFollowUpSelect}
       />
     </div>
   );

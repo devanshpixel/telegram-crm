@@ -50,9 +50,147 @@ export interface ContactProfile {
   lastPurchaseDate: string | null;
 }
 
+export interface Purchase {
+  id: string;
+  contactId: string;
+  amount: number;
+  purchaseDate: string;
+  note: string;
+  kind: string;
+}
+
 export interface DashboardStats {
   totalChats: number;
   onlineCount: number;
   totalRevenue: number;
   unreadTotal: number;
+}
+
+export interface MonthlyRevenue {
+  month: string;
+  total: number;
+  count: number;
+}
+
+export interface TopSpender {
+  id: string;
+  name: string;
+  username: string;
+  avatar: string;
+  avatarColor: string;
+  totalSpent: number;
+  purchaseCount: number;
+}
+
+export interface RevenueData {
+  monthly: MonthlyRevenue[];
+  topSpenders: TopSpender[];
+}
+
+export interface PpvStats {
+  totalRevenue: number;
+  purchaseCount: number;
+  uniqueBuyers: number;
+  topBuyers: TopSpender[];
+}
+
+export interface FollowUpListItem {
+  id: string;
+  name: string;
+  username: string;
+  avatar: string;
+  avatarColor: string;
+  hint: string;
+}
+
+export interface FollowUpList {
+  key: string;
+  title: string;
+  description: string;
+  count: number;
+  items: FollowUpListItem[];
+}
+
+export interface FollowUpData {
+  lists: FollowUpList[];
+}
+
+export interface AnalyticsOverview {
+  totalFans: number;
+  activeFans: number;
+  vipFans: number;
+  totalRevenue: number;
+  revenueLast30Days: number;
+  messagesSent: number;
+  messagesReceived: number;
+  revenueGrowthPercent: number;
+}
+
+export interface VipLevelBreakdown {
+  level: string;
+  count: number;
+}
+
+export interface FanStatusBreakdown {
+  status: string;
+  count: number;
+}
+
+export interface FanScoreStats {
+  highest: number;
+  average: number;
+}
+
+export interface ActiveContact {
+  id: string;
+  name: string;
+  username: string;
+  avatar: string;
+  avatarColor: string;
+  messageCount: number;
+}
+
+export interface InactiveContact {
+  id: string;
+  name: string;
+  username: string;
+  avatar: string;
+  avatarColor: string;
+  daysSinceActivity: number;
+}
+
+export interface RecentPurchaser {
+  id: string;
+  name: string;
+  username: string;
+  avatar: string;
+  avatarColor: string;
+  lastPurchaseDate: string;
+  totalSpent: number;
+}
+
+export interface AnalyticsData {
+  overview: AnalyticsOverview;
+  fansByVipLevel: VipLevelBreakdown[];
+  fansByStatus: FanStatusBreakdown[];
+  fanScores: FanScoreStats;
+  mostActive: ActiveContact[];
+  inactiveContacts: InactiveContact[];
+  recentPurchasers: RecentPurchaser[];
+}
+
+export type TimelineEventType =
+  | "message_in"
+  | "message_out"
+  | "purchase"
+  | "note"
+  | "tag_added"
+  | "tag_removed";
+
+export interface TimelineEvent {
+  id: string;
+  type: TimelineEventType;
+  timestamp: string;
+  text?: string;
+  amount?: number;
 }

@@ -1,9 +1,14 @@
 import type {
+  AnalyticsData,
   Chat,
   ContactProfile,
   DashboardStats,
+  FollowUpData,
   Message,
   MessageDirection,
+  PpvStats,
+  RevenueData,
+  TimelineEvent,
 } from "@/types";
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -31,6 +36,31 @@ export async function fetchStats(): Promise<DashboardStats> {
   return parseJson<DashboardStats>(await fetch("/api/stats"));
 }
 
+export async function fetchRevenue(
+  months: number = 12,
+  limit: number = 10,
+): Promise<RevenueData> {
+  return parseJson<RevenueData>(
+    await fetch(`/api/revenue?months=${months}&limit=${limit}`),
+  );
+}
+
+export async function fetchAnalytics(): Promise<AnalyticsData> {
+  return parseJson<AnalyticsData>(await fetch("/api/analytics"));
+}
+
+export async function fetchPpvStats(limit: number = 10): Promise<PpvStats> {
+  return parseJson<PpvStats>(
+    await fetch(`/api/purchases/ppv?limit=${limit}`),
+  );
+}
+
+export async function fetchFollowUps(limit: number = 10): Promise<FollowUpData> {
+  return parseJson<FollowUpData>(
+    await fetch(`/api/followups?limit=${limit}`),
+  );
+}
+
 export async function fetchContact(id: string): Promise<ContactProfile> {
   return parseJson<ContactProfile>(await fetch(`/api/contacts/${id}`));
 }
@@ -40,6 +70,15 @@ export async function fetchMessages(contactId: string): Promise<Message[]> {
     await fetch(`/api/contacts/${contactId}/messages`),
   );
   return data.map(reviveMessage);
+}
+
+export async function fetchTimeline(
+  contactId: string,
+  limit: number = 100,
+): Promise<TimelineEvent[]> {
+  return parseJson<TimelineEvent[]>(
+    await fetch(`/api/contacts/${contactId}/timeline?limit=${limit}`),
+  );
 }
 
 export async function createContactApi(body: {

@@ -3,8 +3,9 @@ import type {
   ContactProfile,
   DashboardStats,
   Message,
+  Purchase,
 } from "@/types";
-import type { ChatListRow, ContactRow, MessageRow } from "./types";
+import type { ChatListRow, ContactRow, MessageRow, PurchaseRow } from "./types";
 
 export function mapChatRow(row: ChatListRow, tags: string[]): Chat {
   return {
@@ -73,6 +74,17 @@ export function mapDashboardStats(
   unreadTotal: number,
 ): DashboardStats {
   return { totalChats, onlineCount, totalRevenue, unreadTotal };
+}
+
+export function mapPurchaseRow(row: PurchaseRow): Purchase {
+  return {
+    id: String(row.id),
+    contactId: String(row.contact_id),
+    amount: row.amount,
+    purchaseDate: row.purchase_date,
+    note: row.note,
+    kind: row.kind,
+  };
 }
 
 export function initialsFromName(name: string): string {

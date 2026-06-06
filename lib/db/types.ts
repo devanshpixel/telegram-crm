@@ -63,6 +63,16 @@ export interface NoteRow {
   updated_at: string;
 }
 
+export interface PurchaseRow {
+  id: number;
+  contact_id: number;
+  amount: number;
+  purchase_date: string;
+  note: string;
+  kind: string;
+  created_at: string;
+}
+
 export interface ChatListRow extends ContactRow {
   conversation_id: number;
   last_message: string;

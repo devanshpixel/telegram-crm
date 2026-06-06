@@ -76,7 +76,30 @@ CREATE TABLE IF NOT EXISTS telegram_sessions (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS purchases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id INTEGER NOT NULL,
+  amount REAL NOT NULL,
+  purchase_date TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'ppv',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS tag_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id INTEGER NOT NULL,
+  tag_name TEXT NOT NULL,
+  event_type TEXT NOT NULL CHECK (event_type IN ('added', 'removed')),
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_tags_contact ON tags(contact_id);
 CREATE INDEX IF NOT EXISTS idx_notes_contact ON notes(contact_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_contact ON purchases(contact_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_contact_kind ON purchases(contact_id, kind);
+CREATE INDEX IF NOT EXISTS idx_tag_events_contact ON tag_events(contact_id);
 `;

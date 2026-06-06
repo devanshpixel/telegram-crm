@@ -3,9 +3,11 @@ import { IconButton } from "@/components/ui/IconButton";
 import type { ContactProfile } from "@/types";
 import { LeadScoreSection } from "./LeadScoreSection";
 import { NotesSection } from "./NotesSection";
+import { PpvSection } from "./PpvSection";
 import { ProfileSection } from "./ProfileSection";
 import { RevenueSection } from "./RevenueSection";
 import { TagsSection } from "./TagsSection";
+import { TimelineSection } from "./TimelineSection";
 
 interface SidebarRightProps {
   profile: ContactProfile;
@@ -47,9 +49,11 @@ export function SidebarRight({
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         <ProfileSection profile={profile} />
         <RevenueSection profile={profile} />
+        <PpvSection profile={profile} />
         <TagsSection profile={profile} onAddTag={onAddTag} onDeleteTag={onDeleteTag} />
         <NotesSection profile={profile} onSaveNote={onAddNote} />
         <LeadScoreSection profile={profile} />
+        <TimelineSection contactId={profile.id} />
       </div>
     </aside>
   );
