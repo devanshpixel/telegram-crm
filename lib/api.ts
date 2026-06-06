@@ -1,7 +1,12 @@
 import type {
   AnalyticsData,
+  Broadcast,
+  BroadcastAudiencePreview,
+  BroadcastFilters,
   Chat,
   ContactProfile,
+  CreateBroadcastInput,
+  CreateBroadcastResult,
   DashboardStats,
   FollowUpData,
   Message,
@@ -58,6 +63,34 @@ export async function fetchPpvStats(limit: number = 10): Promise<PpvStats> {
 export async function fetchFollowUps(limit: number = 10): Promise<FollowUpData> {
   return parseJson<FollowUpData>(
     await fetch(`/api/followups?limit=${limit}`),
+  );
+}
+
+export async function fetchBroadcasts(): Promise<Broadcast[]> {
+  return parseJson<Broadcast[]>(await fetch("/api/broadcasts"));
+}
+
+export async function previewBroadcastAudience(
+  filters: BroadcastFilters,
+): Promise<BroadcastAudiencePreview> {
+  return parseJson<BroadcastAudiencePreview>(
+    await fetch("/api/broadcasts/audience", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filters }),
+    }),
+  );
+}
+
+export async function sendBroadcast(
+  body: CreateBroadcastInput,
+): Promise<CreateBroadcastResult> {
+  return parseJson<CreateBroadcastResult>(
+    await fetch("/api/broadcasts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
   );
 }
 

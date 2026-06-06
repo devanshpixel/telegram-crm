@@ -97,7 +97,7 @@ export async function verifyCode(
     pendingCodes.delete(phone);
   }
 
-  const sessionString = client.session.save();
+  const sessionString = client.session.save() as unknown as string;
   if (!sessionString) {
     throw new Error("Failed to save Telegram session after sign-in");
   }

@@ -1,6 +1,8 @@
 import type {
   ActiveContact,
   AnalyticsData,
+  Broadcast,
+  BroadcastFilters,
   Chat,
   ContactProfile,
   DashboardStats,
@@ -30,7 +32,7 @@ import {
   mapMessageRow,
   mapPurchaseRow,
 } from "./mappers";
-import type { ChatListRow, ContactRow } from "./types";
+import type { BroadcastRow, ChatListRow, ContactRow } from "./types";
 
 const AVATAR_COLORS = [
   "from-violet-500 to-purple-600",
@@ -583,6 +585,136 @@ export function getPpvStats(limit: number = 10): PpvStats {
       purchaseCount: row.purchase_count,
     })),
   };
+}
+
+export interface BroadcastRecipient {
+  id: number;
+  name: string;
+  username: string;
+}
+
+function mapBroadcastRow(row: BroadcastRow): Broadcast {
+  return {
+    id: String(row.id),
+    name: row.name,
+    message: row.message,
+    recipientCount: row.recipient_count,
+    sentCount: row.sent_count,
+    createdAt: row.created_at,
+  };
+}
+
+function normalizeBroadcastFilters(filters: BroadcastFilters = {}): BroadcastFilters {
+  return {
+    tags: (filters.tags ?? [])
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .filter((tag, index, tags) => tags.indexOf(tag) === index),
+    vipLevel: filters.vipLevel,
+    fanStatus: filters.fanStatus,
+    minTotalSpent: filters.minTotalSpent,
+    minFanScore: filters.minFanScore,
+  };
+}
+
+function buildBroadcastAudienceWhere(filters: BroadcastFilters): {
+  where: string[];
+  args: (number | string)[];
+} {
+  const normalized = normalizeBroadcastFilters(filters);
+  const where = [
+    "c.telegram_id IS NOT NULL",
+    "c.telegram_access_hash IS NOT NULL",
+  ];
+  const args: (number | string)[] = [];
+
+  if (normalized.tags?.length) {
+    where.push(
+      `EXISTS (
+        SELECT 1 FROM tags t
+        WHERE t.contact_id = c.id AND t.name IN (${normalized.tags.map(() => "?").join(", ")})
+      )`,
+    );
+    args.push(...normalized.tags);
+  }
+  if (normalized.vipLevel) {
+    where.push("c.vip_level = ?");
+    args.push(normalized.vipLevel);
+  }
+  if (normalized.fanStatus) {
+    where.push("c.fan_status = ?");
+    args.push(normalized.fanStatus);
+  }
+  if (normalized.minTotalSpent !== undefined) {
+    where.push("c.total_spent >= ?");
+    args.push(normalized.minTotalSpent);
+  }
+  if (normalized.minFanScore !== undefined) {
+    where.push("c.fan_score >= ?");
+    args.push(normalized.minFanScore);
+  }
+
+  return { where, args };
+}
+
+export function getBroadcastAudienceCount(filters: BroadcastFilters): number {
+  const db = getDb();
+  const { where, args } = buildBroadcastAudienceWhere(filters);
+  const row = db
+    .prepare(
+      `SELECT COUNT(DISTINCT c.id) AS count
+       FROM contacts c
+       WHERE ${where.join(" AND ")}`,
+    )
+    .get(...args) as { count: number };
+  return row.count;
+}
+
+export function getBroadcastRecipients(filters: BroadcastFilters): BroadcastRecipient[] {
+  const db = getDb();
+  const { where, args } = buildBroadcastAudienceWhere(filters);
+  return db
+    .prepare(
+      `SELECT DISTINCT c.id, c.name, c.username
+       FROM contacts c
+       WHERE ${where.join(" AND ")}
+       ORDER BY c.total_spent DESC, c.updated_at DESC`,
+    )
+    .all(...args) as BroadcastRecipient[];
+}
+
+export function listBroadcasts(limit: number = 20): Broadcast[] {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT * FROM broadcasts ORDER BY created_at DESC LIMIT ?")
+    .all(limit) as BroadcastRow[];
+  return rows.map(mapBroadcastRow);
+}
+
+export function createBroadcastHistory(input: {
+  name: string;
+  message: string;
+  recipientCount: number;
+  sentCount: number;
+}): Broadcast {
+  const db = getDb();
+  const ts = nowIso();
+  const result = db
+    .prepare(
+      `INSERT INTO broadcasts (name, message, recipient_count, sent_count, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.name.trim(),
+      input.message.trim(),
+      input.recipientCount,
+      input.sentCount,
+      ts,
+    );
+  const row = db
+    .prepare("SELECT * FROM broadcasts WHERE id = ?")
+    .get(result.lastInsertRowid) as BroadcastRow;
+  return mapBroadcastRow(row);
 }
 
 function getOverview(): AnalyticsData["overview"] {

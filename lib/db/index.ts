@@ -121,6 +121,22 @@ function migrateDatabase(database: Database.Database): void {
       )
     `);
   }
+  const broadcastTables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='broadcasts'")
+    .all() as { name: string }[];
+  if (broadcastTables.length === 0) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS broadcasts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        recipient_count INTEGER NOT NULL,
+        sent_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_broadcasts_created_at ON broadcasts(created_at);
+    `);
+  }
 }
 
 function createDatabase(): Database.Database {

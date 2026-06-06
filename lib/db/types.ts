@@ -73,6 +73,15 @@ export interface PurchaseRow {
   created_at: string;
 }
 
+export interface BroadcastRow {
+  id: number;
+  name: string;
+  message: string;
+  recipient_count: number;
+  sent_count: number;
+  created_at: string;
+}
+
 export interface ChatListRow extends ContactRow {
   conversation_id: number;
   last_message: string;

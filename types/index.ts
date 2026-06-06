@@ -115,6 +115,55 @@ export interface FollowUpData {
   lists: FollowUpList[];
 }
 
+export type BroadcastVipLevel =
+  | ""
+  | "none"
+  | "bronze"
+  | "silver"
+  | "gold"
+  | "platinum";
+
+export type BroadcastFanStatus =
+  | ""
+  | "active"
+  | "inactive"
+  | "churned"
+  | "new";
+
+export interface BroadcastFilters {
+  tags?: string[];
+  vipLevel?: BroadcastVipLevel;
+  fanStatus?: BroadcastFanStatus;
+  minTotalSpent?: number;
+  minFanScore?: number;
+}
+
+export interface BroadcastAudiencePreview {
+  count: number;
+}
+
+export interface Broadcast {
+  id: string;
+  name: string;
+  message: string;
+  recipientCount: number;
+  sentCount: number;
+  createdAt: string;
+}
+
+export interface CreateBroadcastInput {
+  name: string;
+  message: string;
+  filters: BroadcastFilters;
+}
+
+export interface CreateBroadcastResult {
+  broadcast: Broadcast;
+  sentCount: number;
+  failedCount: number;
+  errors: string[];
+}
+
 export interface AnalyticsOverview {
   totalFans: number;
   activeFans: number;

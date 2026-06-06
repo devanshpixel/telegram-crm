@@ -96,10 +96,20 @@ CREATE TABLE IF NOT EXISTS tag_events (
   FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS broadcasts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  message TEXT NOT NULL,
+  recipient_count INTEGER NOT NULL,
+  sent_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_tags_contact ON tags(contact_id);
 CREATE INDEX IF NOT EXISTS idx_notes_contact ON notes(contact_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_contact ON purchases(contact_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_contact_kind ON purchases(contact_id, kind);
 CREATE INDEX IF NOT EXISTS idx_tag_events_contact ON tag_events(contact_id);
+CREATE INDEX IF NOT EXISTS idx_broadcasts_created_at ON broadcasts(created_at);
 `;

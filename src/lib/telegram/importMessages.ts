@@ -88,8 +88,10 @@ export async function importMessages(): Promise<MessageImportSummary> {
       reverse: true,
     })) {
       if (message instanceof Api.MessageService) {
-        if (message.id && message.id > maxMessageId) {
-          maxMessageId = message.id;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((message as any).id && (message as any).id > maxMessageId) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          maxMessageId = (message as any).id;
         }
         messagesSkipped++;
         continue;
