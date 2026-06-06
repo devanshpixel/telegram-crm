@@ -1144,6 +1144,37 @@ export function getRetentionData(): RetentionData {
   return {
     overview: getRetentionOverview(),
     analytics: getRetentionAnalytics(),
+    segments: getRetentionSegmentCounts(),
+  };
+}
+
+function getRetentionSegmentCounts(): RetentionData["segments"] {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT
+        SUM(CASE
+              WHEN c.last_purchase_date >= date('now', '-30 days') THEN 1
+              WHEN c.last_purchase_date IS NULL AND c.created_at >= date('now', '-30 days') THEN 1
+              ELSE 0
+            END) AS active_count,
+        SUM(CASE
+              WHEN c.last_purchase_date < date('now', '-30 days')
+               AND c.last_purchase_date >= date('now', '-60 days') THEN 1
+              ELSE 0
+            END) AS at_risk_count,
+        SUM(CASE
+              WHEN c.last_purchase_date < date('now', '-60 days') THEN 1
+              WHEN c.last_purchase_date IS NULL AND c.created_at < date('now', '-30 days') THEN 1
+              ELSE 0
+            END) AS churned_count
+      FROM contacts c`,
+    )
+    .get() as { active_count: number | null; at_risk_count: number | null; churned_count: number | null };
+  return {
+    active: row.active_count ?? 0,
+    at_risk: row.at_risk_count ?? 0,
+    churned: row.churned_count ?? 0,
   };
 }
 

@@ -205,6 +205,24 @@ export function AnalyticsModal({ open, onClose, onSelectContact }: AnalyticsModa
                 </div>
               </Section>
 
+              <Section title="Retention segments">
+                <div className="grid grid-cols-3 gap-3">
+                  <Stat
+                    label="Active"
+                    value={String(data.retention.segments.active)}
+                    accent="violet"
+                  />
+                  <Stat
+                    label="At Risk"
+                    value={String(data.retention.segments.at_risk)}
+                  />
+                  <Stat
+                    label="Churned"
+                    value={String(data.retention.segments.churned)}
+                  />
+                </div>
+              </Section>
+
               <Section title="Retention analytics">
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <Stat

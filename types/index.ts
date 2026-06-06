@@ -269,9 +269,16 @@ export interface RetentionMetrics {
   revenueFromNewBuyers: number;
 }
 
+export interface RetentionSegmentCounts {
+  active: number;
+  at_risk: number;
+  churned: number;
+}
+
 export interface RetentionData {
   overview: RetentionOverview;
   analytics: RetentionMetrics;
+  segments: RetentionSegmentCounts;
 }
 
 export type TimelineEventType =
