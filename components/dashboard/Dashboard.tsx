@@ -20,6 +20,7 @@ import { SidebarRight } from "@/components/sidebar-right/SidebarRight";
 import { TopStatsBar } from "./TopStatsBar";
 import { AnalyticsModal } from "./AnalyticsModal";
 import { BroadcastModal } from "./BroadcastModal";
+import { ReengagementModal } from "./ReengagementModal";
 import { CreateContactModal } from "@/components/forms/CreateContactModal";
 
 type MobilePanel = "list" | "chat" | "crm";
@@ -48,6 +49,7 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [showBroadcast, setShowBroadcast] = useState(false);
+  const [showReengagement, setShowReengagement] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
@@ -187,6 +189,7 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
           stats={stats}
           onOpenAnalytics={() => setShowAnalytics(true)}
           onOpenBroadcast={() => setShowBroadcast(true)}
+          onOpenReengagement={() => setShowReengagement(true)}
         />
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
           <p className="text-text-secondary">No contacts yet.</p>
@@ -217,6 +220,11 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
           onClose={() => setShowBroadcast(false)}
           onSent={refreshAll}
         />
+        <ReengagementModal
+          open={showReengagement}
+          onClose={() => setShowReengagement(false)}
+          onSent={refreshAll}
+        />
       </div>
     );
   }
@@ -235,6 +243,7 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
         stats={stats}
         onOpenAnalytics={() => setShowAnalytics(true)}
         onOpenBroadcast={() => setShowBroadcast(true)}
+        onOpenReengagement={() => setShowReengagement(true)}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -323,6 +332,11 @@ export function Dashboard({ initialChats, initialStats }: DashboardProps) {
       <BroadcastModal
         open={showBroadcast}
         onClose={() => setShowBroadcast(false)}
+        onSent={refreshAll}
+      />
+      <ReengagementModal
+        open={showReengagement}
+        onClose={() => setShowReengagement(false)}
         onSent={refreshAll}
       />
     </div>

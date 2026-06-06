@@ -79,6 +79,7 @@ export interface BroadcastRow {
   message: string;
   recipient_count: number;
   sent_count: number;
+  trigger: string | null;
   created_at: string;
 }
 

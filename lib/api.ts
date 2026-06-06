@@ -12,6 +12,9 @@ import type {
   Message,
   MessageDirection,
   PpvStats,
+  ReengagementAudiences,
+  ReengagementSendInput,
+  ReengagementSendResult,
   RevenueData,
   TimelineEvent,
 } from "@/types";
@@ -87,6 +90,26 @@ export async function sendBroadcast(
 ): Promise<CreateBroadcastResult> {
   return parseJson<CreateBroadcastResult>(
     await fetch("/api/broadcasts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function fetchReengagementAudiences(): Promise<{
+  counts: ReengagementAudiences;
+}> {
+  return parseJson<{ counts: ReengagementAudiences }>(
+    await fetch("/api/reengagement/audiences"),
+  );
+}
+
+export async function sendReengagementCampaign(
+  body: ReengagementSendInput,
+): Promise<ReengagementSendResult> {
+  return parseJson<ReengagementSendResult>(
+    await fetch("/api/reengagement/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

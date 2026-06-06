@@ -142,12 +142,21 @@ export interface BroadcastAudiencePreview {
   count: number;
 }
 
+export type BroadcastTrigger =
+  | "no_message_7d"
+  | "no_purchase_30d"
+  | "vip_inactive_14d"
+  | "high_spender_inactive"
+  | "no_ppv_30d"
+  | "never_purchased";
+
 export interface Broadcast {
   id: string;
   name: string;
   message: string;
   recipientCount: number;
   sentCount: number;
+  trigger?: BroadcastTrigger | null;
   createdAt: string;
 }
 
@@ -163,6 +172,22 @@ export interface CreateBroadcastResult {
   failedCount: number;
   errors: string[];
 }
+
+export interface ReengagementSendInput {
+  name: string;
+  message: string;
+  segmentKey: BroadcastTrigger;
+}
+
+export interface ReengagementSendResult {
+  count: number;
+  sentCount: number;
+  failedCount: number;
+  errors: string[];
+  broadcast?: Broadcast;
+}
+
+export type ReengagementAudiences = Record<BroadcastTrigger, number>;
 
 export interface AnalyticsOverview {
   totalFans: number;

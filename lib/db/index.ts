@@ -137,6 +137,12 @@ function migrateDatabase(database: Database.Database): void {
       CREATE INDEX IF NOT EXISTS idx_broadcasts_created_at ON broadcasts(created_at);
     `);
   }
+  if (!columnExists(database, "broadcasts", "trigger")) {
+    database.exec("ALTER TABLE broadcasts ADD COLUMN trigger TEXT");
+  }
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS idx_broadcasts_trigger_created_at ON broadcasts(trigger, created_at)",
+  );
 }
 
 function createDatabase(): Database.Database {

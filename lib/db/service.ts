@@ -600,6 +600,7 @@ function mapBroadcastRow(row: BroadcastRow): Broadcast {
     message: row.message,
     recipientCount: row.recipient_count,
     sentCount: row.sent_count,
+    trigger: row.trigger as Broadcast["trigger"],
     createdAt: row.created_at,
   };
 }
@@ -691,24 +692,143 @@ export function listBroadcasts(limit: number = 20): Broadcast[] {
   return rows.map(mapBroadcastRow);
 }
 
+const AUDIENCE_LIMIT = 1000;
+
+function audienceToRecipients(items: FollowUpListItem[]): BroadcastRecipient[] {
+  return items.map((item) => ({
+    id: Number(item.id),
+    name: item.name,
+    username: item.username,
+  }));
+}
+
+export function getFollowUpAudience(
+  segmentKey: string,
+  limit: number = AUDIENCE_LIMIT,
+): BroadcastRecipient[] {
+  const capped = Math.min(limit, AUDIENCE_LIMIT);
+  switch (segmentKey) {
+    case "no_message_7d":
+      return audienceToRecipients(getFollowUpNoMessageInDays(7, capped));
+    case "no_purchase_30d":
+      return audienceToRecipients(getFollowUpNoPurchaseInDays(30, capped));
+    case "vip_inactive_14d":
+      return audienceToRecipients(
+        getFollowUpVipInactive(["gold", "platinum", "silver"], 14, capped),
+      );
+    case "high_spender_inactive":
+      return audienceToRecipients(
+        getFollowUpHighSpenderInactive(200, 30, capped),
+      );
+    case "no_ppv_30d":
+      return audienceToRecipients(getFollowUpNoPpvInDays(30, capped));
+    case "never_purchased":
+      return audienceToRecipients(getFollowUpNeverPurchased(capped));
+    default:
+      return [];
+  }
+}
+
+export function getFollowUpAudienceCount(segmentKey: string): number {
+  const db = getDb();
+  switch (segmentKey) {
+    case "no_message_7d":
+      return (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM (
+              SELECT c.id
+              FROM contacts c
+              INNER JOIN conversations conv ON conv.contact_id = c.id
+              LEFT JOIN messages m ON m.conversation_id = conv.id
+              GROUP BY c.id
+              HAVING MAX(m.created_at) IS NOT NULL
+                AND MAX(m.created_at) < date('now', '-7 days')
+            )`,
+          )
+          .get() as { count: number }
+      ).count;
+    case "no_purchase_30d":
+      return (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM contacts
+             WHERE last_purchase_date IS NOT NULL
+               AND last_purchase_date < date('now', '-30 days')`,
+          )
+          .get() as { count: number }
+      ).count;
+    case "vip_inactive_14d":
+      return (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM contacts
+             WHERE vip_level IN ('gold', 'platinum', 'silver')
+               AND updated_at < date('now', '-14 days')`,
+          )
+          .get() as { count: number }
+      ).count;
+    case "high_spender_inactive":
+      return (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM contacts
+             WHERE total_spent >= 200
+               AND (last_purchase_date IS NULL OR last_purchase_date < date('now', '-30 days'))
+               AND updated_at < date('now', '-30 days')`,
+          )
+          .get() as { count: number }
+      ).count;
+    case "no_ppv_30d":
+      return (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM (
+              SELECT c.id
+              FROM contacts c
+              INNER JOIN purchases p ON p.contact_id = c.id
+              WHERE p.kind = 'ppv'
+              GROUP BY c.id
+              HAVING MAX(p.purchase_date) < date('now', '-30 days')
+            )`,
+          )
+          .get() as { count: number }
+      ).count;
+    case "never_purchased":
+      return (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM contacts c
+             LEFT JOIN purchases p ON p.contact_id = c.id
+             WHERE p.id IS NULL`,
+          )
+          .get() as { count: number }
+      ).count;
+    default:
+      return 0;
+  }
+}
+
 export function createBroadcastHistory(input: {
   name: string;
   message: string;
   recipientCount: number;
   sentCount: number;
+  trigger?: string | null;
 }): Broadcast {
   const db = getDb();
   const ts = nowIso();
   const result = db
     .prepare(
-      `INSERT INTO broadcasts (name, message, recipient_count, sent_count, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO broadcasts (name, message, recipient_count, sent_count, trigger, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name.trim(),
       input.message.trim(),
       input.recipientCount,
       input.sentCount,
+      input.trigger ?? null,
       ts,
     );
   const row = db
@@ -1013,7 +1133,7 @@ function mapFollowUpRow(row: {
   };
 }
 
-function getNoMessageInDays(days: number, limit: number): FollowUpListItem[] {
+function getFollowUpNoMessageInDays(days: number, limit: number): FollowUpListItem[] {
   const db = getDb();
   const rows = db
     .prepare(
@@ -1039,7 +1159,7 @@ function getNoMessageInDays(days: number, limit: number): FollowUpListItem[] {
   return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
 }
 
-function getNoPurchaseInDays(days: number, limit: number): FollowUpListItem[] {
+function getFollowUpNoPurchaseInDays(days: number, limit: number): FollowUpListItem[] {
   const db = getDb();
   const rows = db
     .prepare(
@@ -1062,7 +1182,7 @@ function getNoPurchaseInDays(days: number, limit: number): FollowUpListItem[] {
   return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
 }
 
-function getNoPpvInDays(days: number, limit: number): FollowUpListItem[] {
+function getFollowUpNoPpvInDays(days: number, limit: number): FollowUpListItem[] {
   const db = getDb();
   const rows = db
     .prepare(
@@ -1087,7 +1207,7 @@ function getNoPpvInDays(days: number, limit: number): FollowUpListItem[] {
   return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
 }
 
-function getVipInactive(vipLevels: string[], days: number, limit: number): FollowUpListItem[] {
+function getFollowUpVipInactive(vipLevels: string[], days: number, limit: number): FollowUpListItem[] {
   const db = getDb();
   const placeholders = vipLevels.map(() => "?").join(",");
   const rows = db
@@ -1111,7 +1231,7 @@ function getVipInactive(vipLevels: string[], days: number, limit: number): Follo
   return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
 }
 
-function getHighSpenderInactive(minSpent: number, days: number, limit: number): FollowUpListItem[] {
+function getFollowUpHighSpenderInactive(minSpent: number, days: number, limit: number): FollowUpListItem[] {
   const db = getDb();
   const rows = db
     .prepare(
@@ -1138,7 +1258,7 @@ function getHighSpenderInactive(minSpent: number, days: number, limit: number): 
   );
 }
 
-function getNeverPurchased(limit: number): FollowUpListItem[] {
+function getFollowUpNeverPurchased(limit: number): FollowUpListItem[] {
   const db = getDb();
   const rows = db
     .prepare(
@@ -1168,42 +1288,42 @@ export function getFollowUps(limit: number = 10): FollowUpData {
       title: "No message in 7 days",
       description: "Fans you haven't replied to in a week",
       count: 0,
-      items: getNoMessageInDays(7, limit),
+      items: getFollowUpNoMessageInDays(7, limit),
     },
     {
       key: "no_purchase_30d",
       title: "No purchase in 30 days",
       description: "Previous buyers at risk of churning",
       count: 0,
-      items: getNoPurchaseInDays(30, limit),
+      items: getFollowUpNoPurchaseInDays(30, limit),
     },
     {
       key: "vip_inactive_14d",
       title: "VIP inactive for 14 days",
       description: "VIP-tier fans who went quiet",
       count: 0,
-      items: getVipInactive(["gold", "platinum", "silver"], 14, limit),
+      items: getFollowUpVipInactive(["gold", "platinum", "silver"], 14, limit),
     },
     {
       key: "high_spender_inactive",
       title: "High spender inactive",
       description: "Top spenders (≥$200) silent for 30+ days",
       count: 0,
-      items: getHighSpenderInactive(200, 30, limit),
+      items: getFollowUpHighSpenderInactive(200, 30, limit),
     },
     {
       key: "no_ppv_30d",
       title: "No PPV purchase in 30 days",
       description: "Past PPV buyers who stopped unlocking",
       count: 0,
-      items: getNoPpvInDays(30, limit),
+      items: getFollowUpNoPpvInDays(30, limit),
     },
     {
       key: "never_purchased",
       title: "Never purchased",
       description: "Engaged fans who never bought",
       count: 0,
-      items: getNeverPurchased(limit),
+      items: getFollowUpNeverPurchased(limit),
     },
   ];
   for (const list of lists) {
