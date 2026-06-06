@@ -48,6 +48,7 @@ export interface ContactProfile {
   fanStatus: "active" | "inactive" | "churned" | "new";
   fanScore: number;
   lastPurchaseDate: string | null;
+  purchases?: Purchase[];
 }
 
 export interface Purchase {

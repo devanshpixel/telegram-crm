@@ -115,11 +115,14 @@ export function getDashboardStats(): DashboardStats {
 export function getContactProfile(contactId: number): ContactProfile | null {
   const contact = getContactById(contactId);
   if (!contact) return null;
-  return mapContactToProfile(
-    contact,
-    getTagsForContact(contactId),
-    getNotesText(contactId),
-  );
+  return {
+    ...mapContactToProfile(
+      contact,
+      getTagsForContact(contactId),
+      getNotesText(contactId),
+    ),
+    purchases: getPurchasesByContact(contactId),
+  };
 }
 
 export function getConversationIdByContactId(
