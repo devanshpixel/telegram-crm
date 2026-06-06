@@ -252,6 +252,13 @@ export interface AnalyticsData {
   inactiveContacts: InactiveContact[];
   recentPurchasers: RecentPurchaser[];
   retention: RetentionData;
+  campaigns: CampaignAnalyticsSummary;
+}
+
+export interface CampaignAnalyticsSummary {
+  totalCampaigns: number;
+  totalMessagesSent: number;
+  mostUsedSegment: { trigger: string; sentCount: number } | null;
 }
 
 export interface RetentionOverview {

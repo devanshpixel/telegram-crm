@@ -2,6 +2,7 @@ import type {
   ActiveContact,
   AnalyticsData,
   Broadcast,
+  CampaignAnalyticsSummary,
   BroadcastFilters,
   Chat,
   ContactProfile,
@@ -1038,6 +1039,44 @@ export function getAnalytics(): AnalyticsData {
     inactiveContacts: getInactiveContacts(),
     recentPurchasers: getRecentPurchasers(),
     retention: getRetentionData(),
+    campaigns: getCampaignAnalyticsSummary(),
+  };
+}
+
+function getCampaignAnalyticsSummary(): CampaignAnalyticsSummary {
+  const db = getDb();
+  const totalCampaigns = (
+    db
+      .prepare(
+        "SELECT COUNT(*) AS count FROM broadcasts WHERE created_at >= date('now', '-30 days')",
+      )
+      .get() as { count: number }
+  ).count;
+  const totalMessagesSent = (
+    db
+      .prepare(
+        "SELECT COALESCE(SUM(sent_count), 0) AS total FROM broadcasts WHERE created_at >= date('now', '-30 days')",
+      )
+      .get() as { total: number }
+  ).total;
+  const mostUsedRow = db
+    .prepare(
+      `SELECT trigger, SUM(sent_count) AS total
+       FROM broadcasts
+       WHERE trigger IS NOT NULL
+         AND created_at >= date('now', '-30 days')
+       GROUP BY trigger
+       ORDER BY total DESC, trigger ASC
+       LIMIT 1`,
+    )
+    .get() as { trigger: string; total: number } | undefined;
+  const mostUsedSegment = mostUsedRow
+    ? { trigger: mostUsedRow.trigger, sentCount: mostUsedRow.total }
+    : null;
+  return {
+    totalCampaigns,
+    totalMessagesSent,
+    mostUsedSegment,
   };
 }
 

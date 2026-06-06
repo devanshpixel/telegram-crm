@@ -251,6 +251,28 @@ export function AnalyticsModal({ open, onClose, onSelectContact }: AnalyticsModa
                   />
                 </div>
               </Section>
+
+              <Section title="Campaign analytics">
+                <div className="grid grid-cols-3 gap-3">
+                  <Stat
+                    label="Campaigns (30d)"
+                    value={String(data.campaigns.totalCampaigns)}
+                  />
+                  <Stat
+                    label="Messages sent (30d)"
+                    value={String(data.campaigns.totalMessagesSent)}
+                    accent="violet"
+                  />
+                  <Stat
+                    label="Most used segment"
+                    value={
+                      data.campaigns.mostUsedSegment
+                        ? `${data.campaigns.mostUsedSegment.trigger} (${data.campaigns.mostUsedSegment.sentCount})`
+                        : "—"
+                    }
+                  />
+                </div>
+              </Section>
             </div>
           )}
         </div>
