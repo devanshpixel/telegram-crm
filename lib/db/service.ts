@@ -148,6 +148,18 @@ export function getMessagesByContactId(contactId: number): Message[] {
   if (!conversationId) return [];
 
   const db = getDb();
+  const ts = nowIso();
+
+  const markRead = db.transaction(() => {
+    db.prepare(
+      "UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND direction = 'incoming' AND is_read = 0",
+    ).run(conversationId);
+    db.prepare(
+      "UPDATE conversations SET unread_count = 0, updated_at = ? WHERE id = ?",
+    ).run(ts, conversationId);
+  });
+  markRead();
+
   const rows = db
     .prepare(
       "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
@@ -186,50 +198,56 @@ export function createContact(input: CreateContactInput): ContactProfile {
       count: number;
     }).count % AVATAR_COLORS.length;
 
-  const result = db
-    .prepare(
-      `INSERT INTO contacts (
-        name, username, avatar, avatar_color, phone, email, company, location,
-        joined_at, revenue, revenue_trend, lead_score, lead_status, is_online,
-        ppv_count, telegram_id, telegram_access_hash, total_spent, vip_level,
-        fan_status, fan_score, last_purchase_date, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      input.name,
-      username,
-      avatar,
-      AVATAR_COLORS[colorIndex],
-      input.phone ?? "",
-      input.email ?? "",
-      input.company ?? "",
-      input.location ?? "",
-      new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      input.revenue ?? 0,
-      input.isOnline ? 1 : 0,
-      input.telegramId ?? null,
-      input.telegramAccessHash ?? null,
-      input.totalSpent ?? 0,
-      input.vipLevel ?? "none",
-      input.fanStatus ?? "active",
-      input.fanScore ?? 0,
-      input.lastPurchaseDate ?? null,
-      ts,
-      ts,
-    );
+  const insertContactAndConversation = db.transaction(() => {
+    const result = db
+      .prepare(
+        `INSERT INTO contacts (
+          name, username, avatar, avatar_color, phone, email, company, location,
+          joined_at, revenue, revenue_trend, lead_score, lead_status, is_online,
+          ppv_count, telegram_id, telegram_access_hash, total_spent, vip_level,
+          fan_status, fan_score, last_purchase_date, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.name,
+        username,
+        avatar,
+        AVATAR_COLORS[colorIndex],
+        input.phone ?? "",
+        input.email ?? "",
+        input.company ?? "",
+        input.location ?? "",
+        new Date().toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
+        input.revenue ?? 0,
+        input.isOnline ? 1 : 0,
+        input.telegramId ?? null,
+        input.telegramAccessHash ?? null,
+        input.totalSpent ?? 0,
+        input.vipLevel ?? "none",
+        input.fanStatus ?? "active",
+        input.fanScore ?? 0,
+        input.lastPurchaseDate ?? null,
+        ts,
+        ts,
+      );
 
-  const contactId = Number(result.lastInsertRowid);
+    const contactId = Number(result.lastInsertRowid);
 
-  db.prepare(
-    `INSERT INTO conversations (
-      contact_id, last_message, last_message_time, unread_count, is_pinned,
-      created_at, updated_at
-    ) VALUES (?, '', ?, 0, 0, ?, ?)`,
-  ).run(contactId, ts, ts, ts);
+    db.prepare(
+      `INSERT INTO conversations (
+        contact_id, last_message, last_message_time, unread_count, is_pinned,
+        created_at, updated_at
+      ) VALUES (?, '', ?, 0, 0, ?, ?)`,
+    ).run(contactId, ts, ts, ts);
+
+    return contactId;
+  });
+
+  const contactId = insertContactAndConversation();
 
   const profile = getContactProfile(contactId);
   if (!profile) throw new Error("Failed to create contact");
@@ -268,63 +286,67 @@ export function updateContact(
   const db = getDb();
   const ts = nowIso();
 
-  db.prepare(
-    `UPDATE contacts SET
-      name = COALESCE(?, name),
-      username = COALESCE(?, username),
-      phone = COALESCE(?, phone),
-      email = COALESCE(?, email),
-      company = COALESCE(?, company),
-      location = COALESCE(?, location),
-      revenue = COALESCE(?, revenue),
-      revenue_trend = COALESCE(?, revenue_trend),
-      lead_score = COALESCE(?, lead_score),
-      lead_status = COALESCE(?, lead_status),
-      is_online = COALESCE(?, is_online),
-      ppv_count = COALESCE(?, ppv_count),
-      telegram_id = COALESCE(?, telegram_id),
-      telegram_access_hash = COALESCE(?, telegram_access_hash),
-      total_spent = COALESCE(?, total_spent),
-      vip_level = COALESCE(?, vip_level),
-      fan_status = COALESCE(?, fan_status),
-      fan_score = COALESCE(?, fan_score),
-      last_purchase_date = COALESCE(?, last_purchase_date),
-      updated_at = ?
-    WHERE id = ?`,
-  ).run(
-    input.name ?? null,
-    input.username
-      ? input.username.startsWith("@")
-        ? input.username
-        : `@${input.username}`
-      : null,
-    input.phone ?? null,
-    input.email ?? null,
-    input.company ?? null,
-    input.location ?? null,
-    input.revenue ?? null,
-    input.revenueTrend ?? null,
-    input.leadScore ?? null,
-    input.leadStatus ?? null,
-    input.isOnline !== undefined ? (input.isOnline ? 1 : 0) : null,
-    input.ppvCount ?? null,
-    input.telegramId ?? null,
-    input.telegramAccessHash ?? null,
-    input.totalSpent ?? null,
-    input.vipLevel ?? null,
-    input.fanStatus ?? null,
-    input.fanScore ?? null,
-    input.lastPurchaseDate ?? null,
-    ts,
-    contactId,
-  );
-
-  if (input.name) {
-    db.prepare("UPDATE contacts SET avatar = ? WHERE id = ?").run(
-      initialsFromName(input.name),
+  const updateFieldsAndAvatar = db.transaction(() => {
+    db.prepare(
+      `UPDATE contacts SET
+        name = COALESCE(?, name),
+        username = COALESCE(?, username),
+        phone = COALESCE(?, phone),
+        email = COALESCE(?, email),
+        company = COALESCE(?, company),
+        location = COALESCE(?, location),
+        revenue = COALESCE(?, revenue),
+        revenue_trend = COALESCE(?, revenue_trend),
+        lead_score = COALESCE(?, lead_score),
+        lead_status = COALESCE(?, lead_status),
+        is_online = COALESCE(?, is_online),
+        ppv_count = COALESCE(?, ppv_count),
+        telegram_id = COALESCE(?, telegram_id),
+        telegram_access_hash = COALESCE(?, telegram_access_hash),
+        total_spent = COALESCE(?, total_spent),
+        vip_level = COALESCE(?, vip_level),
+        fan_status = COALESCE(?, fan_status),
+        fan_score = COALESCE(?, fan_score),
+        last_purchase_date = COALESCE(?, last_purchase_date),
+        updated_at = ?
+      WHERE id = ?`,
+    ).run(
+      input.name ?? null,
+      input.username
+        ? input.username.startsWith("@")
+          ? input.username
+          : `@${input.username}`
+        : null,
+      input.phone ?? null,
+      input.email ?? null,
+      input.company ?? null,
+      input.location ?? null,
+      input.revenue ?? null,
+      input.revenueTrend ?? null,
+      input.leadScore ?? null,
+      input.leadStatus ?? null,
+      input.isOnline !== undefined ? (input.isOnline ? 1 : 0) : null,
+      input.ppvCount ?? null,
+      input.telegramId ?? null,
+      input.telegramAccessHash ?? null,
+      input.totalSpent ?? null,
+      input.vipLevel ?? null,
+      input.fanStatus ?? null,
+      input.fanScore ?? null,
+      input.lastPurchaseDate ?? null,
+      ts,
       contactId,
     );
-  }
+
+    if (input.name) {
+      db.prepare("UPDATE contacts SET avatar = ? WHERE id = ?").run(
+        initialsFromName(input.name),
+        contactId,
+      );
+    }
+  });
+
+  updateFieldsAndAvatar();
 
   return getContactProfile(contactId);
 }
@@ -355,11 +377,11 @@ export function addNote(contactId: number, content: string) {
 
 export function addTag(contactId: number, name: string) {
   const db = getDb();
-  const ts = nowIso();
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Tag name is required");
+  const ts = nowIso();
 
-  try {
+  const insertTagAndEvent = db.transaction(() => {
     const result = db
       .prepare(
         "INSERT INTO tags (contact_id, name, created_at) VALUES (?, ?, ?)",
@@ -373,6 +395,10 @@ export function addTag(contactId: number, name: string) {
       contactId,
       name: trimmed,
     };
+  });
+
+  try {
+    return insertTagAndEvent();
   } catch {
     throw new Error("Tag already exists for this contact");
   }
@@ -380,18 +406,22 @@ export function addTag(contactId: number, name: string) {
 
 export function deleteTag(contactId: number, name: string): boolean {
   const db = getDb();
-  const ts = nowIso();
   const trimmed = name.trim();
-  const result = db
-    .prepare("DELETE FROM tags WHERE contact_id = ? AND name = ?")
-    .run(contactId, trimmed);
-  if (result.changes > 0) {
+  const ts = nowIso();
+
+  const deleteAndRecord = db.transaction(() => {
+    const result = db
+      .prepare("DELETE FROM tags WHERE contact_id = ? AND name = ?")
+      .run(contactId, trimmed);
+    if (result.changes === 0) return 0;
     db.prepare(
       "INSERT INTO tag_events (contact_id, tag_name, event_type, created_at) VALUES (?, ?, 'removed', ?)",
     ).run(contactId, trimmed, ts);
     db.prepare("UPDATE contacts SET updated_at = ? WHERE id = ?").run(ts, contactId);
-  }
-  return result.changes > 0;
+    return result.changes;
+  });
+
+  return deleteAndRecord() > 0;
 }
 
 export function createMessage(
@@ -407,33 +437,36 @@ export function createMessage(
   const ts = nowIso();
   const isRead = direction === "outgoing" ? 1 : 0;
 
-  const result = db
-    .prepare(
-      `INSERT INTO messages (conversation_id, text, direction, is_read, telegram_message_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      conversationId,
-      text.trim(),
-      direction,
-      isRead,
-      telegramMessageId ?? null,
-      ts,
-    );
+  const insertAndUpdateConversation = db.transaction(() => {
+    const result = db
+      .prepare(
+        `INSERT INTO messages (conversation_id, text, direction, is_read, telegram_message_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        conversationId,
+        text.trim(),
+        direction,
+        isRead,
+        telegramMessageId ?? null,
+        ts,
+      );
 
-  db.prepare(
-    `UPDATE conversations SET
-      last_message = ?,
-      last_message_time = ?,
-      unread_count = CASE WHEN ? = 'incoming' THEN unread_count + 1 ELSE unread_count END,
-      updated_at = ?
-    WHERE id = ?`,
-  ).run(text.trim(), ts, direction, ts, conversationId);
+    db.prepare(
+      `UPDATE conversations SET
+        last_message = ?,
+        last_message_time = ?,
+        unread_count = CASE WHEN ? = 'incoming' THEN unread_count + 1 ELSE unread_count END,
+        updated_at = ?
+      WHERE id = ?`,
+    ).run(text.trim(), ts, direction, ts, conversationId);
 
-  const row = db
-    .prepare("SELECT * FROM messages WHERE id = ?")
-    .get(result.lastInsertRowid) as import("./types").MessageRow;
+    return db
+      .prepare("SELECT * FROM messages WHERE id = ?")
+      .get(result.lastInsertRowid) as import("./types").MessageRow;
+  });
 
+  const row = insertAndUpdateConversation();
   return mapMessageRow(row);
 }
 
@@ -452,28 +485,32 @@ export function createPurchase(input: CreatePurchaseInput): Purchase {
   const contact = db.prepare("SELECT id FROM contacts WHERE id = ?").get(input.contactId) as { id: number } | undefined;
   if (!contact) throw new Error("Contact not found");
 
-  const result = db
-    .prepare(
-      `INSERT INTO purchases (contact_id, amount, purchase_date, note, kind, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(input.contactId, input.amount, input.purchaseDate, input.note ?? "", kind, ts);
+  const insertAndUpdateStats = db.transaction(() => {
+    const result = db
+      .prepare(
+        `INSERT INTO purchases (contact_id, amount, purchase_date, note, kind, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(input.contactId, input.amount, input.purchaseDate, input.note ?? "", kind, ts);
 
-  const updateParts = [
-    "total_spent = total_spent + ?",
-    "revenue = revenue + ?",
-    "last_purchase_date = MAX(COALESCE(last_purchase_date, ''), ?)",
-    "updated_at = ?",
-  ];
-  const updateArgs: (string | number)[] = [input.amount, input.amount, input.purchaseDate, ts];
-  if (kind === "ppv") {
-    updateParts.push("ppv_count = ppv_count + 1");
-  }
-  db.prepare(
-    `UPDATE contacts SET ${updateParts.join(", ")} WHERE id = ?`,
-  ).run(...updateArgs, input.contactId);
+    const updateParts = [
+      "total_spent = total_spent + ?",
+      "revenue = revenue + ?",
+      "last_purchase_date = MAX(COALESCE(last_purchase_date, ''), ?)",
+      "updated_at = ?",
+    ];
+    const updateArgs: (string | number)[] = [input.amount, input.amount, input.purchaseDate, ts];
+    if (kind === "ppv") {
+      updateParts.push("ppv_count = ppv_count + 1");
+    }
+    db.prepare(
+      `UPDATE contacts SET ${updateParts.join(", ")} WHERE id = ?`,
+    ).run(...updateArgs, input.contactId);
 
-  const row = db.prepare("SELECT * FROM purchases WHERE id = ?").get(result.lastInsertRowid) as import("./types").PurchaseRow;
+    return db.prepare("SELECT * FROM purchases WHERE id = ?").get(result.lastInsertRowid) as import("./types").PurchaseRow;
+  });
+
+  const row = insertAndUpdateStats();
   return mapPurchaseRow(row);
 }
 

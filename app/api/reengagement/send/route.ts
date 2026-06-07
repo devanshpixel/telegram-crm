@@ -1,7 +1,6 @@
 import {
   createBroadcastHistory,
   getFollowUpAudience,
-  getFollowUpAudienceCount,
 } from "@/lib/db/service";
 import { apiError, apiOk } from "@/lib/api-error";
 import { BROADCAST_TRIGGERS } from "@/lib/broadcast-filters";
@@ -9,6 +8,8 @@ import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 import type { BroadcastTrigger, ReengagementSendResult } from "@/types";
 
 const TOKEN_PATTERN = /\{([^{}]+)\}/g;
+
+const inflightReengagements = new Set<string>();
 
 function personalize(text: string, name: string): string {
   return text.replace(TOKEN_PATTERN, (match, token) => {
@@ -38,39 +39,48 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const count = getFollowUpAudienceCount(segmentKey);
-    const recipients = getFollowUpAudience(segmentKey);
-    let sentCount = 0;
-    const errors: string[] = [];
-
-    for (const recipient of recipients) {
-      try {
-        const personalized = personalize(message, recipient.name);
-        await sendTelegramMessage(recipient.id, personalized);
-        sentCount += 1;
-      } catch (e) {
-        const details = e instanceof Error ? e.message : "Unknown error";
-        errors.push(`${recipient.name}: ${details}`);
-      }
+    if (inflightReengagements.has(segmentKey)) {
+      return apiError("Campaign already in progress for this segment", 409);
     }
+    inflightReengagements.add(segmentKey);
 
-    const broadcast = createBroadcastHistory({
-      name,
-      message,
-      recipientCount: count,
-      sentCount,
-      trigger: segmentKey,
-    });
+    try {
+      const recipients = getFollowUpAudience(segmentKey);
+      const recipientCount = recipients.length;
+      let sentCount = 0;
+      const errors: string[] = [];
 
-    const result: ReengagementSendResult = {
-      count,
-      sentCount,
-      failedCount: count - sentCount,
-      errors,
-      broadcast,
-    };
+      for (const recipient of recipients) {
+        try {
+          const personalized = personalize(message, recipient.name);
+          await sendTelegramMessage(recipient.id, personalized);
+          sentCount += 1;
+        } catch (e) {
+          const details = e instanceof Error ? e.message : "Unknown error";
+          errors.push(`${recipient.name}: ${details}`);
+        }
+      }
 
-    return apiOk(result, 201);
+      const broadcast = createBroadcastHistory({
+        name,
+        message,
+        recipientCount,
+        sentCount,
+        trigger: segmentKey,
+      });
+
+      const result: ReengagementSendResult = {
+        count: recipientCount,
+        sentCount,
+        failedCount: recipientCount - sentCount,
+        errors,
+        broadcast,
+      };
+
+      return apiOk(result, 201);
+    } finally {
+      inflightReengagements.delete(segmentKey);
+    }
   } catch (e) {
     console.error(e);
     return apiError("Failed to send re-engagement campaign", 500);

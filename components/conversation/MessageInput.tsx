@@ -11,14 +11,18 @@ interface MessageInputProps {
 export function MessageInput({ contactName, onSend }: MessageInputProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSend = async () => {
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
+    setError("");
     try {
       await onSend(text);
       setDraft("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to send");
     } finally {
       setSending(false);
     }
@@ -33,6 +37,11 @@ export function MessageInput({ contactName, onSend }: MessageInputProps) {
 
   return (
     <div className="safe-bottom shrink-0 border-t border-border bg-surface-raised px-3 py-3 sm:px-4">
+      {error && (
+        <p className="mb-1.5 text-xs text-rose-400" role="alert">
+          {error}
+        </p>
+      )}
       <div className="mx-auto flex max-w-3xl items-end gap-1.5 rounded-2xl border border-border bg-surface-card px-2 py-1.5 focus-within:border-border-focus focus-within:ring-1 focus-within:ring-accent/20 sm:gap-2 sm:px-3 sm:py-2">
         <button
           type="button"
@@ -44,7 +53,10 @@ export function MessageInput({ contactName, onSend }: MessageInputProps) {
         <textarea
           rows={1}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            if (error) setError("");
+          }}
           onKeyDown={onKeyDown}
           placeholder={`Message ${contactName}...`}
           disabled={sending}

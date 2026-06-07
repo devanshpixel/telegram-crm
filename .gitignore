@@ -25,6 +25,8 @@
 # misc
 .DS_Store
 *.pem
+*.crx
+*.zip
 
 # debug
 npm-debug.log*
@@ -34,6 +36,7 @@ yarn-error.log*
 
 # env files
 .env*
+!.env.example
 
 # typescript
 *.tsbuildinfo

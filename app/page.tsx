@@ -3,9 +3,22 @@ import { getDashboardStats, listChats } from "@/lib/db/service";
 
 export const dynamic = "force-dynamic";
 
-export default function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ contact?: string }>;
+}) {
   const chats = listChats();
   const stats = getDashboardStats();
+  const params = await searchParams;
+  const requestedContactId =
+    typeof params.contact === "string" ? params.contact : undefined;
 
-  return <Dashboard initialChats={chats} initialStats={stats} />;
+  return (
+    <Dashboard
+      initialChats={chats}
+      initialStats={stats}
+      requestedContactId={requestedContactId}
+    />
+  );
 }

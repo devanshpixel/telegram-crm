@@ -7,6 +7,8 @@ import { apiError, apiOk } from "@/lib/api-error";
 import { normalizeFilters } from "@/lib/broadcast-filters";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 
+const inflightBroadcasts = new Set<string>();
+
 export async function GET() {
   try {
     return apiOk(listBroadcasts(20));
@@ -27,37 +29,47 @@ export async function POST(request: Request) {
     if (!message) return apiError("Broadcast message is required");
     if (typeof filters === "string") return apiError(filters);
 
-    const recipients = getBroadcastRecipients(filters);
-    const recipientCount = recipients.length;
-    let sentCount = 0;
-    const errors: string[] = [];
-
-    for (const recipient of recipients) {
-      try {
-        await sendTelegramMessage(recipient.id, message);
-        sentCount += 1;
-      } catch (e) {
-        const details = e instanceof Error ? e.message : "Unknown error";
-        errors.push(`${recipient.name}: ${details}`);
-      }
+    const lockKey = JSON.stringify(filters);
+    if (inflightBroadcasts.has(lockKey)) {
+      return apiError("Broadcast already in progress for this audience", 409);
     }
+    inflightBroadcasts.add(lockKey);
 
-    const broadcast = createBroadcastHistory({
-      name,
-      message,
-      recipientCount,
-      sentCount,
-    });
+    try {
+      const recipients = getBroadcastRecipients(filters);
+      const recipientCount = recipients.length;
+      let sentCount = 0;
+      const errors: string[] = [];
 
-    return apiOk(
-      {
-        broadcast,
+      for (const recipient of recipients) {
+        try {
+          await sendTelegramMessage(recipient.id, message);
+          sentCount += 1;
+        } catch (e) {
+          const details = e instanceof Error ? e.message : "Unknown error";
+          errors.push(`${recipient.name}: ${details}`);
+        }
+      }
+
+      const broadcast = createBroadcastHistory({
+        name,
+        message,
+        recipientCount,
         sentCount,
-        failedCount: recipientCount - sentCount,
-        errors,
-      },
-      201,
-    );
+      });
+
+      return apiOk(
+        {
+          broadcast,
+          sentCount,
+          failedCount: recipientCount - sentCount,
+          errors,
+        },
+        201,
+      );
+    } finally {
+      inflightBroadcasts.delete(lockKey);
+    }
   } catch (e) {
     console.error(e);
     return apiError("Failed to send broadcast", 500);

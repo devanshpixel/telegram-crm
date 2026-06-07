@@ -28,6 +28,7 @@ type MobilePanel = "list" | "chat" | "crm";
 interface DashboardProps {
   initialChats: Chat[];
   initialStats: DashboardStats;
+  requestedContactId?: string;
 }
 
 function reviveChats(chats: Chat[]): Chat[] {
@@ -37,12 +38,20 @@ function reviveChats(chats: Chat[]): Chat[] {
   }));
 }
 
-export function Dashboard({ initialChats, initialStats }: DashboardProps) {
+export function Dashboard({
+  initialChats,
+  initialStats,
+  requestedContactId,
+}: DashboardProps) {
   const [chats, setChats] = useState<Chat[]>(() => reviveChats(initialChats));
   const [stats, setStats] = useState<DashboardStats>(initialStats);
-  const [activeChatId, setActiveChatId] = useState<string>(
-    initialChats[0]?.id ?? "",
-  );
+  const [activeChatId, setActiveChatId] = useState<string>(() => {
+    if (requestedContactId) {
+      const match = initialChats.find((c) => c.id === requestedContactId);
+      if (match) return match.id;
+    }
+    return initialChats[0]?.id ?? "";
+  });
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("list");
   const [profiles, setProfiles] = useState<Record<string, ContactProfile>>({});
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
