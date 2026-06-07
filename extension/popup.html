@@ -59,6 +59,112 @@
     .followup-action-btn:hover { background: #15151a; border-color: #7c3aed; color: #e7e7ea; }
     .followup-action-btn.crm { color: #86efac; border-color: #14532d; }
     .followup-action-btn.crm:hover { background: #14532d; color: #fff; }
+    .history-section { margin-top: 8px; border-top: 1px solid #1f1f23; padding-top: 6px; }
+    .history-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 4px 0; user-select: none; }
+    .history-header:hover { color: #c4b5fd; }
+    .history-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8a93; }
+    .history-chevron { font-size: 9px; color: #8a8a93; transition: transform 0.2s; }
+    .history-chevron.open { transform: rotate(90deg); }
+    .history-body { display: none; }
+    .history-body.open { display: block; }
+    .history-search { width: 100%; box-sizing: border-box; background: #15151a; border: 1px solid #2a2a30; color: #e7e7ea; border-radius: 4px; padding: 4px 8px; font: inherit; font-size: 11px; margin: 4px 0; }
+    .history-search:focus { outline: none; border-color: #7c3aed; }
+    .history-list { max-height: 200px; overflow-y: auto; background: #0b0b0d; border: 1px solid #1f1f23; border-radius: 4px; }
+    .history-empty { padding: 12px; text-align: center; color: #6b6b75; font-size: 11px; }
+    .history-loading { padding: 12px; text-align: center; color: #6b6b75; font-size: 11px; }
+    .history-msg { padding: 6px 8px; border-bottom: 1px solid #1f1f23; font-size: 11px; }
+    .history-msg:last-child { border-bottom: 0; }
+    .history-msg.incoming { background: #0f172a; border-left: 2px solid #7c3aed; }
+    .history-msg.outgoing { background: #1a1a1a; border-left: 2px solid #86efac; text-align: right; }
+    .history-msg-meta { font-size: 9px; color: #6b6b75; margin-bottom: 2px; }
+    .history-msg-text { color: #e7e7ea; white-space: pre-wrap; word-break: break-word; }
+    .history-msg.highlight { background: #7c3aed33; }
+    .campaigns-section { border-top: 1px solid #1f1f23; }
+    .campaigns-header { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    .campaigns-header:hover { background: #15151a; }
+    .campaigns-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8a93; }
+    .campaigns-chevron { font-size: 10px; color: #8a8a93; transition: transform 0.2s; }
+    .campaigns-chevron.open { transform: rotate(90deg); }
+    .campaigns-body { background: #0b0b0d; padding: 8px 12px; }
+    .campaigns-body[hidden] { display: none; }
+    .campaigns-loading { padding: 12px; text-align: center; color: #6b6b75; font-size: 11px; }
+    .campaign-segment { padding: 6px 8px; margin-bottom: 4px; border-radius: 4px; border: 1px solid #2a2a30; background: #15151a; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .campaign-segment:hover { background: #1f1f23; }
+    .campaign-segment.selected { border-color: #7c3aed; background: #1e1b4b; }
+    .campaign-segment-title { font-size: 11px; color: #e7e7ea; }
+    .campaign-segment-count { background: #7c3aed; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px; min-width: 18px; text-align: center; }
+    .campaign-segment-count.zero { background: #2a2a30; color: #6b6b75; }
+    .campaign-composer { margin-top: 8px; padding: 8px; background: #15151a; border: 1px solid #2a2a30; border-radius: 4px; }
+    .campaign-composer[hidden] { display: none; }
+    .campaign-field { margin-bottom: 6px; }
+    .campaign-field label { display: block; font-size: 10px; color: #8a8a93; margin-bottom: 2px; }
+    .campaign-input { width: 100%; box-sizing: border-box; background: #0b0b0d; border: 1px solid #2a2a30; color: #e7e7ea; border-radius: 4px; padding: 5px 8px; font: inherit; font-size: 11px; }
+    .campaign-input:focus { outline: none; border-color: #7c3aed; }
+    .campaign-textarea { width: 100%; box-sizing: border-box; background: #0b0b0d; border: 1px solid #2a2a30; color: #e7e7ea; border-radius: 4px; padding: 5px 8px; font: inherit; font-size: 11px; resize: vertical; min-height: 60px; font-family: inherit; }
+    .campaign-textarea:focus { outline: none; border-color: #7c3aed; }
+    .campaign-preview { font-size: 10px; color: #8a8a93; margin: 4px 0; }
+    .campaign-preview strong { color: #c4b5fd; }
+    .campaign-confirm-box { background: #1e1b4b; border: 1px solid #7c3aed; border-radius: 4px; padding: 8px; margin-top: 6px; }
+    .campaign-confirm-box[hidden] { display: none; }
+    .campaign-confirm-text { font-size: 10px; color: #e7e7ea; margin-bottom: 6px; line-height: 1.4; }
+    .campaign-confirm-text strong { color: #fbbf24; }
+    .campaign-confirm-actions { display: flex; gap: 4px; }
+    .campaign-btn { background: transparent; border: 1px solid #2a2a30; color: #c4b5fd; border-radius: 4px; padding: 4px 10px; font-size: 11px; font-family: inherit; cursor: pointer; }
+    .campaign-btn:hover { background: #15151a; }
+    .campaign-btn.primary { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+    .campaign-btn.primary:hover { background: #6d28d9; }
+    .campaign-btn.primary:disabled { background: #2a2a30; color: #6b6b75; border-color: #2a2a30; cursor: not-allowed; }
+    .campaign-btn.danger { background: #7c2d12; color: #fff; border-color: #7c2d12; }
+    .campaign-btn.danger:hover { background: #991b1b; }
+    .campaign-status { font-size: 10px; margin-top: 4px; min-height: 12px; }
+    .campaign-status.ok { color: #86efac; }
+    .campaign-status.err { color: #fca5a5; }
+    .templates-section { border-top: 1px solid #1f1f23; }
+    .templates-header { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    .templates-header:hover { background: #15151a; }
+    .templates-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8a93; }
+    .templates-chevron { font-size: 10px; color: #8a8a93; transition: transform 0.2s; }
+    .templates-chevron.open { transform: rotate(90deg); }
+    .templates-body { background: #0b0b0d; }
+    .templates-body[hidden] { display: none; }
+    .tmpl-toolbar { padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1f1f23; }
+    .tmpl-cat-filter { background: #15151a; border: 1px solid #2a2a30; color: #e7e7ea; border-radius: 4px; padding: 2px 6px; font: inherit; font-size: 11px; }
+    .tmpl-new-btn { background: #7c3aed; color: #fff; border: 0; border-radius: 4px; padding: 3px 10px; font: inherit; font-size: 11px; cursor: pointer; }
+    .tmpl-new-btn:hover { background: #6d28d9; }
+    .tmpl-list { max-height: 220px; overflow-y: auto; }
+    .tmpl-item { padding: 7px 12px; border-bottom: 1px solid #1f1f23; display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+    .tmpl-item:hover { background: #15151a; }
+    .tmpl-item-info { flex: 1; min-width: 0; }
+    .tmpl-item-title { font-size: 11px; font-weight: 500; color: #e7e7ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tmpl-item-preview { font-size: 10px; color: #6b6b75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; margin-top: 1px; }
+    .tmpl-item-cat { font-size: 10px; color: #8a8a93; }
+    .tmpl-item-actions { display: flex; gap: 3px; flex-shrink: 0; }
+    .tmpl-use-btn { background: #7c3aed; color: #fff; border: 0; border-radius: 4px; padding: 2px 8px; font: inherit; font-size: 10px; cursor: pointer; }
+    .tmpl-use-btn:hover { background: #6d28d9; }
+    .tmpl-edit-btn { background: transparent; border: 1px solid #2a2a30; color: #c4b5fd; border-radius: 4px; padding: 2px 6px; font: inherit; font-size: 10px; cursor: pointer; }
+    .tmpl-edit-btn:hover { background: #15151a; border-color: #7c3aed; }
+    .tmpl-del-btn { background: transparent; border: 1px solid #2a2a30; color: #fca5a5; border-radius: 4px; padding: 2px 5px; font: inherit; font-size: 10px; cursor: pointer; }
+    .tmpl-del-btn:hover { background: #7f1d1d; border-color: #7f1d1d; color: #fff; }
+    .tmpl-empty { padding: 14px 12px; text-align: center; color: #6b6b75; font-size: 11px; }
+    .tmpl-form { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .tmpl-form-header { display: flex; justify-content: space-between; align-items: center; }
+    .tmpl-form-title { font-size: 11px; font-weight: 600; color: #e7e7ea; }
+    .tmpl-back-btn { background: transparent; border: 0; color: #8a8a93; font-size: 11px; cursor: pointer; padding: 0; }
+    .tmpl-back-btn:hover { color: #c4b5fd; }
+    .tmpl-field { display: flex; flex-direction: column; gap: 2px; }
+    .tmpl-field-label { font-size: 10px; color: #6b6b75; }
+    .tmpl-field-input { background: #15151a; border: 1px solid #2a2a30; color: #e7e7ea; border-radius: 4px; padding: 5px 8px; font: inherit; font-size: 11px; }
+    .tmpl-field-input:focus { outline: none; border-color: #7c3aed; }
+    .tmpl-field-select { background: #15151a; border: 1px solid #2a2a30; color: #e7e7ea; border-radius: 4px; padding: 5px 8px; font: inherit; font-size: 11px; }
+    .tmpl-field-select:focus { outline: none; border-color: #7c3aed; }
+    .tmpl-field-textarea { background: #15151a; border: 1px solid #2a2a30; color: #e7e7ea; border-radius: 4px; padding: 5px 8px; font: inherit; font-size: 11px; resize: vertical; min-height: 56px; }
+    .tmpl-field-textarea:focus { outline: none; border-color: #7c3aed; }
+    .tmpl-save-btn { background: #7c3aed; color: #fff; border: 0; border-radius: 4px; padding: 6px; font: inherit; font-size: 11px; cursor: pointer; }
+    .tmpl-save-btn:hover { background: #6d28d9; }
+    .tmpl-err { font-size: 10px; color: #fca5a5; min-height: 0; }
+    .tmpl-err:empty { display: none; }
+    .tmpl-vars-hint { font-size: 10px; color: #6b6b75; }
+    .tmpl-vars-hint code { color: #c4b5fd; background: #1f1f23; padding: 0 3px; border-radius: 3px; }
   </style>
 </head>
 <body>
@@ -79,6 +185,20 @@
       <span id="followupsChevron" class="followups-chevron">▸</span>
     </div>
     <div id="followupsBody" class="followups-body" style="display:none"></div>
+  </div>
+  <div class="campaigns-section">
+    <div id="campaignsHeader" class="campaigns-header">
+      <span class="campaigns-title">Campaigns</span>
+      <span id="campaignsChevron" class="campaigns-chevron">▸</span>
+    </div>
+    <div id="campaignsBody" class="campaigns-body" hidden></div>
+  </div>
+  <div class="templates-section">
+    <div id="templatesHeader" class="templates-header">
+      <span class="templates-title">Reply Templates</span>
+      <span id="templatesChevron" class="templates-chevron">▸</span>
+    </div>
+    <div id="templatesBody" class="templates-body" hidden></div>
   </div>
   <div id="content"><p class="empty">Loading...</p></div>
   <div id="selectedBar" class="selected" style="display:none"></div>

@@ -12,6 +12,41 @@ let followupsData = null;
 let followupsLoaded = false;
 let followupsOpen = false;
 
+let historyCache = {};
+let historyOpen = false;
+let historySearchTerm = "";
+
+let campaignsLoaded = false;
+let campaignCounts = null;
+let campaignSelectedKey = null;
+let campaignName = "";
+let campaignMessage = "";
+let campaignSending = false;
+let campaignConfirming = false;
+
+let templatesOpen = false;
+let templatesView = "list";
+let templatesEditId = null;
+
+const TEMPLATE_CATEGORIES = [
+  { key: "general",      label: "General" },
+  { key: "sales",        label: "Sales" },
+  { key: "followup",     label: "Follow-up" },
+  { key: "reengagement", label: "Re-engage" },
+  { key: "closing",      label: "Closing" },
+];
+
+const TEMPLATES_KEY = "crm_reply_templates";
+
+const CAMPAIGN_SEGMENTS = [
+  { key: "no_message_7d", title: "No Message 7d" },
+  { key: "no_purchase_30d", title: "No Purchase 30d" },
+  { key: "vip_inactive_14d", title: "VIP Inactive 14d" },
+  { key: "high_spender_inactive", title: "High Spender Inactive" },
+  { key: "no_ppv_30d", title: "No PPV 30d" },
+  { key: "never_purchased", title: "Never Purchased" },
+];
+
 const dom = {
   status: document.getElementById("status"),
   content: document.getElementById("content"),
@@ -30,6 +65,12 @@ const dom = {
   followupsHeader: document.getElementById("followupsHeader"),
   followupsBody: document.getElementById("followupsBody"),
   followupsChevron: document.getElementById("followupsChevron"),
+  campaignsHeader: document.getElementById("campaignsHeader"),
+  campaignsBody: document.getElementById("campaignsBody"),
+  campaignsChevron: document.getElementById("campaignsChevron"),
+  templatesHeader: document.getElementById("templatesHeader"),
+  templatesBody: document.getElementById("templatesBody"),
+  templatesChevron: document.getElementById("templatesChevron"),
 };
 
 function injectStyles() {
@@ -282,7 +323,51 @@ function renderDetailsPanel(profile) {
   });
   btnRow.appendChild(openBtn);
 
+  const historyBtn = document.createElement("button");
+  historyBtn.type = "button";
+  historyBtn.className = "details-edit-btn";
+  historyBtn.textContent = "History";
+  historyBtn.addEventListener("click", toggleHistorySection);
+  btnRow.appendChild(historyBtn);
+
   dom.detailsPanel.appendChild(btnRow);
+
+  const historySection = document.createElement("div");
+  historySection.className = "history-section";
+  const historyHeader = document.createElement("div");
+  historyHeader.className = "history-header";
+  historyHeader.id = "historyHeader";
+  const historyTitle = document.createElement("span");
+  historyTitle.className = "history-title";
+  historyTitle.textContent = "Conversation History";
+  const historyChevron = document.createElement("span");
+  historyChevron.className = "history-chevron";
+  historyChevron.id = "historyChevron";
+  historyChevron.textContent = "▸";
+  historyHeader.appendChild(historyTitle);
+  historyHeader.appendChild(historyChevron);
+  historyHeader.addEventListener("click", toggleHistorySection);
+  const historyBody = document.createElement("div");
+  historyBody.className = "history-body";
+  historyBody.id = "historyBody";
+  const historySearch = document.createElement("input");
+  historySearch.type = "text";
+  historySearch.className = "history-search";
+  historySearch.placeholder = "Search messages…";
+  historySearch.id = "historySearch";
+  historySearch.addEventListener("input", (e) => {
+    historySearchTerm = String(e.target.value || "");
+    renderHistoryMessages(getCachedHistory(currentDetailsId));
+  });
+  historySearch.addEventListener("click", (e) => e.stopPropagation());
+  const historyList = document.createElement("div");
+  historyList.className = "history-list";
+  historyList.id = "historyList";
+  historyBody.appendChild(historySearch);
+  historyBody.appendChild(historyList);
+  historySection.appendChild(historyHeader);
+  historySection.appendChild(historyBody);
+  dom.detailsPanel.appendChild(historySection);
 }
 
 function hideDetailsPanel() {
@@ -622,6 +707,8 @@ async function init() {
     bindCreateForm();
     bindSendForm();
     bindFollowups();
+    bindCampaigns();
+    bindTemplates();
     await loadContacts();
   } else {
     showOffline();
@@ -785,5 +872,685 @@ function renderFollowupItem(item) {
   });
   return row;
 }
+
+function getCachedHistory(contactId) {
+  const key = String(contactId || "");
+  if (!key) return null;
+  return historyCache[key] || null;
+}
+
+async function toggleHistorySection() {
+  const id = String(currentDetailsId || "");
+  if (!id) return;
+  const body = document.getElementById("historyBody");
+  const chevron = document.getElementById("historyChevron");
+  if (!body || !chevron) return;
+  historyOpen = !historyOpen;
+  if (historyOpen) {
+    body.classList.add("open");
+    chevron.classList.add("open");
+    const cached = getCachedHistory(id);
+    if (cached) {
+      renderHistoryMessages(cached);
+    } else {
+      await loadHistory(id);
+    }
+  } else {
+    body.classList.remove("open");
+    chevron.classList.remove("open");
+  }
+}
+
+async function loadHistory(contactId) {
+  const id = String(contactId || "");
+  if (!id) return;
+  const list = document.getElementById("historyList");
+  if (list) {
+    list.innerHTML = "";
+    const loading = document.createElement("div");
+    loading.className = "history-loading";
+    loading.textContent = "Loading messages…";
+    list.appendChild(loading);
+  }
+  const res = await send({ type: "GET_MESSAGES", body: { contactId: id } });
+  if (!res || !res.ok) {
+    if (list) {
+      list.innerHTML = "";
+      const err = document.createElement("div");
+      err.className = "history-empty";
+      err.textContent = "Failed to load messages";
+      list.appendChild(err);
+    }
+    return;
+  }
+  const messages = Array.isArray(res.data) ? res.data : [];
+  historyCache[id] = messages;
+  renderHistoryMessages(messages);
+}
+
+function renderHistoryMessages(messages) {
+  const list = document.getElementById("historyList");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!messages || messages.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "No messages yet";
+    list.appendChild(empty);
+    return;
+  }
+  const q = String(historySearchTerm || "").toLowerCase().trim();
+  const filtered = q
+    ? messages.filter((m) => String(m.text || "").toLowerCase().includes(q))
+    : messages;
+  if (filtered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "No matches for \"" + historySearchTerm + "\"";
+    list.appendChild(empty);
+    return;
+  }
+  for (const msg of filtered) {
+    list.appendChild(renderHistoryMessage(msg, q));
+  }
+}
+
+function renderHistoryMessage(msg, query) {
+  const row = document.createElement("div");
+  const dir = msg.direction === "outgoing" ? "outgoing" : "incoming";
+  row.className = "history-msg " + dir;
+  const meta = document.createElement("div");
+  meta.className = "history-msg-meta";
+  const ts = msg.timestamp ? new Date(msg.timestamp) : null;
+  const timeStr = ts && !isNaN(ts.getTime()) ? formatHistoryTime(ts) : "";
+  meta.textContent = (dir === "outgoing" ? "You" : "Fan") + " · " + timeStr;
+  const text = document.createElement("div");
+  text.className = "history-msg-text";
+  text.textContent = String(msg.text || "");
+  if (query && text.textContent.toLowerCase().includes(query)) {
+    row.classList.add("highlight");
+  }
+  row.appendChild(meta);
+  row.appendChild(text);
+  return row;
+}
+
+function formatHistoryTime(d) {
+  try {
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      d.getFullYear() +
+      "-" +
+      pad(d.getMonth() + 1) +
+      "-" +
+      pad(d.getDate()) +
+      " " +
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes())
+    );
+  } catch (e) {
+    return "";
+  }
+}
+
+function bindCampaigns() {
+  dom.campaignsHeader.addEventListener("click", toggleCampaigns);
+}
+
+async function toggleCampaigns() {
+  if (dom.campaignsBody.hidden) {
+    dom.campaignsBody.hidden = false;
+    dom.campaignsChevron.classList.add("open");
+    if (!campaignsLoaded) {
+      await loadCampaignCounts();
+    }
+  } else {
+    dom.campaignsBody.hidden = true;
+    dom.campaignsChevron.classList.remove("open");
+  }
+}
+
+async function loadCampaignCounts(force) {
+  if (campaignsLoaded && !force) return;
+  dom.campaignsBody.innerHTML = "";
+  const loading = document.createElement("div");
+  loading.className = "campaigns-loading";
+  loading.textContent = "Loading segments…";
+  dom.campaignsBody.appendChild(loading);
+  const res = await send({ type: "GET_REENGAGEMENT_COUNTS" });
+  dom.campaignsBody.innerHTML = "";
+  if (!res || !res.ok) {
+    const err = document.createElement("div");
+    err.className = "campaigns-loading";
+    err.textContent = "Failed to load segments";
+    dom.campaignsBody.appendChild(err);
+    return;
+  }
+  campaignCounts = (res.data && res.data.counts) || {};
+  campaignsLoaded = true;
+  renderCampaigns();
+}
+
+function renderCampaigns() {
+  dom.campaignsBody.innerHTML = "";
+  for (const seg of CAMPAIGN_SEGMENTS) {
+    dom.campaignsBody.appendChild(renderCampaignSegment(seg));
+  }
+  dom.campaignsBody.appendChild(renderCampaignComposer());
+  dom.campaignsBody.appendChild(renderCampaignStatus());
+}
+
+function renderCampaignSegment(seg) {
+  const row = document.createElement("div");
+  row.className = "campaign-segment";
+  if (campaignSelectedKey === seg.key) row.classList.add("selected");
+  const title = document.createElement("span");
+  title.className = "campaign-segment-title";
+  title.textContent = seg.title;
+  const count = document.createElement("span");
+  const c = campaignCounts && typeof campaignCounts[seg.key] === "number" ? campaignCounts[seg.key] : 0;
+  count.className = "campaign-segment-count" + (c === 0 ? " zero" : "");
+  count.textContent = String(c);
+  row.appendChild(title);
+  row.appendChild(count);
+  row.addEventListener("click", () => selectCampaignSegment(seg.key));
+  return row;
+}
+
+function selectCampaignSegment(key) {
+  campaignSelectedKey = key;
+  campaignConfirming = false;
+  renderCampaigns();
+}
+
+function getSelectedSegmentInfo() {
+  const seg = campaignSelectedKey
+    ? CAMPAIGN_SEGMENTS.find((s) => s.key === campaignSelectedKey) || null
+    : null;
+  const audienceCount = campaignSelectedKey && campaignCounts && typeof campaignCounts[campaignSelectedKey] === "number"
+    ? campaignCounts[campaignSelectedKey]
+    : 0;
+  return { seg, audienceCount };
+}
+
+function renderCampaignComposer() {
+  const wrap = document.createElement("div");
+  wrap.className = "campaign-composer";
+  if (!campaignSelectedKey) {
+    wrap.hidden = true;
+    return wrap;
+  }
+  const { seg, audienceCount } = getSelectedSegmentInfo();
+
+  const nameField = document.createElement("div");
+  nameField.className = "campaign-field";
+  const nameLabel = document.createElement("label");
+  nameLabel.textContent = "Campaign name";
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.className = "campaign-input";
+  nameInput.placeholder = "Win back inactive buyers";
+  nameInput.value = campaignName;
+  nameInput.addEventListener("input", (e) => {
+    campaignName = e.target.value;
+    updateConfirmBox();
+  });
+  nameField.appendChild(nameLabel);
+  nameField.appendChild(nameInput);
+
+  const msgField = document.createElement("div");
+  msgField.className = "campaign-field";
+  const msgLabel = document.createElement("label");
+  msgLabel.textContent = "Message (use {name} for personalization)";
+  const msgInput = document.createElement("textarea");
+  msgInput.className = "campaign-textarea";
+  msgInput.placeholder = "Hey {name}, we miss you…";
+  msgInput.value = campaignMessage;
+  msgInput.addEventListener("input", (e) => {
+    campaignMessage = e.target.value;
+    updateConfirmBox();
+  });
+  msgField.appendChild(msgLabel);
+  msgField.appendChild(msgInput);
+
+  const preview = document.createElement("div");
+  preview.className = "campaign-preview";
+  preview.innerHTML = "Segment: <strong>" + escapeHtml(seg ? seg.title : campaignSelectedKey) + "</strong> · Audience: <strong>" + audienceCount + "</strong>";
+
+  const sendBtn = document.createElement("button");
+  sendBtn.type = "button";
+  sendBtn.className = "campaign-btn primary";
+  sendBtn.textContent = audienceCount === 0 ? "Empty segment" : "Send campaign";
+  sendBtn.disabled = audienceCount === 0;
+  sendBtn.addEventListener("click", () => {
+    campaignConfirming = true;
+    updateConfirmBox();
+  });
+
+  wrap.appendChild(nameField);
+  wrap.appendChild(msgField);
+  wrap.appendChild(preview);
+  wrap.appendChild(sendBtn);
+  return wrap;
+}
+
+function renderCampaignStatus() {
+  const wrap = document.createElement("div");
+  wrap.id = "campaignStatus";
+  wrap.className = "campaign-status";
+  return wrap;
+}
+
+function setCampaignStatus(text, kind) {
+  const el = document.getElementById("campaignStatus");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "campaign-status" + (kind ? " " + kind : "");
+}
+
+function updateConfirmBox() {
+  const composer = dom.campaignsBody.querySelector(".campaign-composer");
+  if (!composer) return;
+  const old = document.getElementById("campaignConfirmBox");
+  if (old) old.remove();
+  if (!campaignConfirming) return;
+  const { seg, audienceCount } = getSelectedSegmentInfo();
+  const canSend = campaignName.trim() && campaignMessage.trim() && audienceCount > 0 && !campaignSending;
+  const box = document.createElement("div");
+  box.id = "campaignConfirmBox";
+  box.className = "campaign-confirm-box";
+  const text = document.createElement("div");
+  text.className = "campaign-confirm-text";
+  text.innerHTML =
+    "Send <strong>" + escapeHtml(campaignName.trim() || "(unnamed)") + "</strong> " +
+    "to <strong>" + audienceCount + "</strong> fans in " +
+    "<strong>" + escapeHtml(seg ? seg.title : campaignSelectedKey) + "</strong>?";
+  const actions = document.createElement("div");
+  actions.className = "campaign-confirm-actions";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "campaign-btn";
+  cancel.textContent = "Cancel";
+  cancel.disabled = campaignSending;
+  cancel.addEventListener("click", () => {
+    campaignConfirming = false;
+    updateConfirmBox();
+  });
+  const confirm = document.createElement("button");
+  confirm.type = "button";
+  confirm.className = "campaign-btn danger";
+  confirm.textContent = campaignSending ? "Sending…" : "Confirm send";
+  confirm.disabled = !canSend;
+  confirm.addEventListener("click", () => sendReengagementNow());
+  actions.appendChild(cancel);
+  actions.appendChild(confirm);
+  box.appendChild(text);
+  box.appendChild(actions);
+  composer.appendChild(box);
+}
+
+async function sendReengagementNow() {
+  if (campaignSending) return;
+  if (!campaignSelectedKey) return;
+  if (!campaignName.trim() || !campaignMessage.trim()) return;
+  const audienceCount = campaignCounts && typeof campaignCounts[campaignSelectedKey] === "number" ? campaignCounts[campaignSelectedKey] : 0;
+  if (audienceCount === 0) return;
+  campaignSending = true;
+  updateConfirmBox();
+  setCampaignStatus("Sending to " + audienceCount + " fans…", "");
+  const res = await send({
+    type: "SEND_REENGAGEMENT",
+    body: {
+      name: campaignName.trim(),
+      message: campaignMessage.trim(),
+      segmentKey: campaignSelectedKey,
+    },
+  });
+  campaignSending = false;
+  if (res && res.ok && res.data) {
+    const d = res.data;
+    setCampaignStatus("Sent " + d.sentCount + " of " + d.count + " fans.", "ok");
+    campaignConfirming = false;
+    campaignName = "";
+    campaignMessage = "";
+    await loadCampaignCounts(true);
+  } else {
+    const msg = (res && res.data && res.data.error) ? res.data.error : "Failed to send";
+    setCampaignStatus(msg, "err");
+    updateConfirmBox();
+  }
+}
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// ─── Templates (A1) ──────────────────────────────────────────────────────────
+
+function loadTemplates() {
+  try {
+    const raw = localStorage.getItem(TEMPLATES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveTemplates(list) {
+  localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list));
+}
+
+function generateTemplateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function applyTemplateVars(text, contact) {
+  if (!contact) return text;
+  const name      = String(contact.name || "");
+  const firstName = name.split(" ")[0] || name;
+  const username  = String(contact.username || "");
+  return text
+    .replace(/\{name\}/g,      name)
+    .replace(/\{firstName\}/g, firstName)
+    .replace(/\{username\}/g,  username);
+}
+
+function bindTemplates() {
+  dom.templatesHeader.addEventListener("click", toggleTemplates);
+}
+
+function toggleTemplates() {
+  if (!dom.templatesBody.hidden) {
+    dom.templatesBody.hidden = true;
+    dom.templatesChevron.classList.remove("open");
+    templatesOpen = false;
+  } else {
+    dom.templatesBody.hidden = false;
+    dom.templatesChevron.classList.add("open");
+    templatesOpen = true;
+    templatesView = "list";
+    renderTemplatesList();
+  }
+}
+
+function renderTemplatesList() {
+  const body = dom.templatesBody;
+  body.innerHTML = "";
+
+  // Toolbar: category filter + New button
+  const toolbar = document.createElement("div");
+  toolbar.className = "tmpl-toolbar";
+
+  const catFilter = document.createElement("select");
+  catFilter.id = "tmplCatFilter";
+  catFilter.className = "tmpl-cat-filter";
+  const allOpt = document.createElement("option");
+  allOpt.value = "";
+  allOpt.textContent = "All Categories";
+  catFilter.appendChild(allOpt);
+  for (const cat of TEMPLATE_CATEGORIES) {
+    const opt = document.createElement("option");
+    opt.value = cat.key;
+    opt.textContent = cat.label;
+    catFilter.appendChild(opt);
+  }
+  catFilter.addEventListener("change", renderTemplatesList);
+
+  const newBtn = document.createElement("button");
+  newBtn.type = "button";
+  newBtn.className = "tmpl-new-btn";
+  newBtn.textContent = "+ New";
+  newBtn.addEventListener("click", () => {
+    templatesView = "create";
+    templatesEditId = null;
+    renderTemplateForm();
+  });
+
+  toolbar.appendChild(catFilter);
+  toolbar.appendChild(newBtn);
+  body.appendChild(toolbar);
+
+  const templates = loadTemplates();
+  const filterVal = catFilter.value;
+  const filtered  = filterVal ? templates.filter((t) => t.category === filterVal) : templates;
+
+  if (filtered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "tmpl-empty";
+    empty.textContent = templates.length === 0
+      ? "No templates yet. Click + New to create one."
+      : "No templates in this category.";
+    body.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "tmpl-list";
+  for (const tpl of filtered) {
+    list.appendChild(renderTemplateItem(tpl));
+  }
+  body.appendChild(list);
+}
+
+function renderTemplateItem(tpl) {
+  const row = document.createElement("div");
+  row.className = "tmpl-item";
+
+  const info = document.createElement("div");
+  info.className = "tmpl-item-info";
+
+  const title = document.createElement("div");
+  title.className = "tmpl-item-title";
+  title.textContent = tpl.title;
+
+  const preview = document.createElement("div");
+  preview.className = "tmpl-item-preview";
+  preview.textContent = tpl.body;
+
+  const catObj = TEMPLATE_CATEGORIES.find((c) => c.key === tpl.category);
+  const catEl = document.createElement("div");
+  catEl.className = "tmpl-item-cat";
+  catEl.textContent = catObj ? catObj.label : tpl.category;
+
+  info.appendChild(title);
+  info.appendChild(preview);
+  info.appendChild(catEl);
+
+  const actions = document.createElement("div");
+  actions.className = "tmpl-item-actions";
+
+  const useBtn = document.createElement("button");
+  useBtn.type = "button";
+  useBtn.className = "tmpl-use-btn";
+  useBtn.textContent = "Use";
+  useBtn.title = "Insert into message box";
+  useBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    insertTemplate(tpl);
+  });
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "tmpl-edit-btn";
+  editBtn.textContent = "Edit";
+  editBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    templatesEditId = tpl.id;
+    templatesView = "edit";
+    renderTemplateForm();
+  });
+
+  const delBtn = document.createElement("button");
+  delBtn.type = "button";
+  delBtn.className = "tmpl-del-btn";
+  delBtn.textContent = "×";
+  delBtn.title = "Delete template";
+  delBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    deleteTemplate(tpl.id);
+  });
+
+  actions.appendChild(useBtn);
+  actions.appendChild(editBtn);
+  actions.appendChild(delBtn);
+
+  row.appendChild(info);
+  row.appendChild(actions);
+  return row;
+}
+
+function renderTemplateForm() {
+  const body = dom.templatesBody;
+  body.innerHTML = "";
+
+  const isEdit   = templatesView === "edit";
+  const existing = isEdit ? loadTemplates().find((t) => t.id === templatesEditId) : null;
+
+  const form = document.createElement("div");
+  form.className = "tmpl-form";
+
+  // Header row
+  const hdr = document.createElement("div");
+  hdr.className = "tmpl-form-header";
+  const heading = document.createElement("span");
+  heading.className = "tmpl-form-title";
+  heading.textContent = isEdit ? "Edit Template" : "New Template";
+  const backBtn = document.createElement("button");
+  backBtn.type = "button";
+  backBtn.className = "tmpl-back-btn";
+  backBtn.textContent = "← Back";
+  backBtn.addEventListener("click", () => {
+    templatesView = "list";
+    renderTemplatesList();
+  });
+  hdr.appendChild(heading);
+  hdr.appendChild(backBtn);
+  form.appendChild(hdr);
+
+  // Name field
+  const nameField = document.createElement("div");
+  nameField.className = "tmpl-field";
+  const nameLabel = document.createElement("label");
+  nameLabel.className = "tmpl-field-label";
+  nameLabel.textContent = "Template name";
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.id = "tmplNameInput";
+  nameInput.className = "tmpl-field-input";
+  nameInput.placeholder = "e.g. Warm Greeting";
+  nameInput.value = existing ? existing.title : "";
+  nameField.appendChild(nameLabel);
+  nameField.appendChild(nameInput);
+  form.appendChild(nameField);
+
+  // Category field
+  const catField = document.createElement("div");
+  catField.className = "tmpl-field";
+  const catLabel = document.createElement("label");
+  catLabel.className = "tmpl-field-label";
+  catLabel.textContent = "Category";
+  const catSelect = document.createElement("select");
+  catSelect.id = "tmplCatInput";
+  catSelect.className = "tmpl-field-select";
+  for (const cat of TEMPLATE_CATEGORIES) {
+    const opt = document.createElement("option");
+    opt.value = cat.key;
+    opt.textContent = cat.label;
+    if (existing && existing.category === cat.key) opt.selected = true;
+    catSelect.appendChild(opt);
+  }
+  catField.appendChild(catLabel);
+  catField.appendChild(catSelect);
+  form.appendChild(catField);
+
+  // Body field
+  const bodyField = document.createElement("div");
+  bodyField.className = "tmpl-field";
+  const bodyLabel = document.createElement("label");
+  bodyLabel.className = "tmpl-field-label";
+  bodyLabel.textContent = "Message body";
+  const bodyInput = document.createElement("textarea");
+  bodyInput.id = "tmplBodyInput";
+  bodyInput.className = "tmpl-field-textarea";
+  bodyInput.placeholder = "Hey {firstName}, just checking in 👋";
+  bodyInput.value = existing ? existing.body : "";
+  bodyInput.rows = 3;
+  bodyField.appendChild(bodyLabel);
+  bodyField.appendChild(bodyInput);
+  form.appendChild(bodyField);
+
+  // Variable hint
+  const hint = document.createElement("div");
+  hint.className = "tmpl-vars-hint";
+  hint.innerHTML = "Variables: <code>{name}</code> <code>{firstName}</code> <code>{username}</code>";
+  form.appendChild(hint);
+
+  // Error
+  const errEl = document.createElement("div");
+  errEl.id = "tmplFormErr";
+  errEl.className = "tmpl-err";
+  form.appendChild(errEl);
+
+  // Save button
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "tmpl-save-btn";
+  saveBtn.textContent = isEdit ? "Save Changes" : "Create Template";
+  saveBtn.addEventListener("click", () =>
+    saveTemplateForm(nameInput, catSelect, bodyInput, errEl)
+  );
+  form.appendChild(saveBtn);
+
+  body.appendChild(form);
+  nameInput.focus();
+}
+
+function saveTemplateForm(nameInput, catSelect, bodyInput, errEl) {
+  const title    = nameInput.value.trim();
+  const body     = bodyInput.value.trim();
+  const category = catSelect.value;
+
+  if (!title) { errEl.textContent = "Template name is required."; return; }
+  if (!body)  { errEl.textContent = "Message body is required.";  return; }
+  errEl.textContent = "";
+
+  const templates = loadTemplates();
+  if (templatesView === "edit" && templatesEditId) {
+    const idx = templates.findIndex((t) => t.id === templatesEditId);
+    if (idx !== -1) {
+      templates[idx] = { ...templates[idx], title, category, body };
+    }
+  } else {
+    templates.push({ id: generateTemplateId(), title, category, body });
+  }
+  saveTemplates(templates);
+  templatesView  = "list";
+  templatesEditId = null;
+  renderTemplatesList();
+}
+
+function deleteTemplate(id) {
+  const updated = loadTemplates().filter((t) => t.id !== id);
+  saveTemplates(updated);
+  renderTemplatesList();
+}
+
+function insertTemplate(tpl) {
+  const text = applyTemplateVars(tpl.body, selectedContact);
+  dom.sendText.value = text;
+  dom.sendText.focus();
+  // Collapse templates panel after inserting
+  dom.templatesBody.hidden = true;
+  dom.templatesChevron.classList.remove("open");
+  templatesOpen = false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 init();
