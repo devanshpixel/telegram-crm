@@ -3,11 +3,13 @@ const CRM_BASE = "http://localhost:3000";
 let allContacts = [];
 let searchTerm = "";
 let selectedContact = null;
+let currentDetailsId = null;
 
 const dom = {
   status: document.getElementById("status"),
   content: document.getElementById("content"),
   selectedBar: document.getElementById("selectedBar"),
+  detailsPanel: document.getElementById("detailsPanel"),
   sendForm: document.getElementById("sendForm"),
   sendText: document.getElementById("sendText"),
   sendBtn: document.getElementById("sendBtn"),
@@ -30,7 +32,14 @@ function injectStyles() {
     "li .main{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;}" +
     "li .top{display:flex;gap:6px;align-items:baseline;}" +
     "li .preview{color:#6b6b75;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;}" +
-    ".empty-list{margin:0;}";
+    ".empty-list{margin:0;}" +
+    ".details{padding:8px 12px;border-top:1px solid #1f1f23;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:11px;}" +
+    ".details .details-label{color:#6b6b75;}" +
+    ".details .details-value{color:#e7e7ea;word-break:break-word;}" +
+    ".details .details-tags{display:flex;flex-wrap:wrap;gap:4px;}" +
+    ".details .details-tag{background:#1f1f23;color:#c4b5fd;padding:1px 6px;border-radius:6px;font-size:10px;}" +
+    ".details .details-err{color:#fca5a5;grid-column:1/-1;}" +
+    ".details .details-empty{color:#6b6b75;grid-column:1/-1;}";
   document.head.appendChild(s);
 }
 
@@ -142,6 +151,84 @@ function render() {
   renderList();
 }
 
+function showDetailsPanel(contactId) {
+  const id = String(contactId);
+  if (currentDetailsId === id) {
+    dom.detailsPanel.style.display = "grid";
+    return;
+  }
+  currentDetailsId = id;
+  dom.detailsPanel.style.display = "grid";
+  renderDetailsPanel(null);
+  send({ type: "GET_CONTACT", body: { contactId: id } }).then((res) => {
+    if (currentDetailsId !== id) return;
+    if (res && res.ok && res.data) {
+      renderDetailsPanel(res.data);
+    } else {
+      renderDetailsPanel(null);
+    }
+  });
+}
+
+function renderDetailsPanel(profile) {
+  clear(dom.detailsPanel);
+  if (!profile) {
+    const err = document.createElement("div");
+    err.className = "details-err";
+    err.textContent = "Failed to load details";
+    dom.detailsPanel.appendChild(err);
+    return;
+  }
+
+  const rows = [
+    ["Name", profile.name || "(no name)"],
+    ["Username", profile.username || "—"],
+    ["Phone", profile.phone || "—"],
+    ["Revenue", "$" + Number(profile.revenue || 0).toFixed(2)],
+    ["Last activity", profile.lastActivity || "—"],
+  ];
+
+  for (const [label, value] of rows) {
+    const l = document.createElement("div");
+    l.className = "details-label";
+    l.textContent = label;
+    const v = document.createElement("div");
+    v.className = "details-value";
+    v.textContent = String(value);
+    dom.detailsPanel.appendChild(l);
+    dom.detailsPanel.appendChild(v);
+  }
+
+  const tagLabel = document.createElement("div");
+  tagLabel.className = "details-label";
+  tagLabel.textContent = "Tags";
+  dom.detailsPanel.appendChild(tagLabel);
+
+  const tagWrap = document.createElement("div");
+  tagWrap.className = "details-tags";
+  const tags = Array.isArray(profile.tags) ? profile.tags : [];
+  if (tags.length === 0) {
+    const none = document.createElement("span");
+    none.className = "details-empty";
+    none.textContent = "No tags";
+    tagWrap.appendChild(none);
+  } else {
+    for (const t of tags) {
+      const pill = document.createElement("span");
+      pill.className = "details-tag";
+      pill.textContent = String(t);
+      tagWrap.appendChild(pill);
+    }
+  }
+  dom.detailsPanel.appendChild(tagWrap);
+}
+
+function hideDetailsPanel() {
+  currentDetailsId = null;
+  clear(dom.detailsPanel);
+  dom.detailsPanel.style.display = "none";
+}
+
 function selectContact(c) {
   selectedContact = c;
   dom.selectedBar.textContent = "To: " + (c.name || c.username || c.id);
@@ -150,6 +237,7 @@ function selectContact(c) {
   dom.sendText.value = "";
   setMessage(dom.sendMsg, "");
   dom.sendText.focus();
+  showDetailsPanel(c.id);
 }
 
 function clearSelection() {
@@ -158,6 +246,7 @@ function clearSelection() {
   dom.sendForm.style.display = "none";
   dom.sendText.value = "";
   setMessage(dom.sendMsg, "");
+  hideDetailsPanel();
 }
 
 function bindCreateForm() {

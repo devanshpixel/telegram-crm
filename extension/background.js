@@ -28,6 +28,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+  if (msg?.type === "GET_CONTACT") {
+    const contactId = msg?.body?.contactId;
+    fetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)), {
+      method: "GET",
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, data: body };
+      })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
   if (msg?.type === "SEND_MESSAGE") {
     console.log("[BG] SEND_MESSAGE incoming", msg);
     const url = CRM_BASE + "/api/messages";
