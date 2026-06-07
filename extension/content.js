@@ -7,25 +7,40 @@
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const CRM_SIDEBAR_ID = "crm-sidebar-root";
-const SIDEBAR_WIDTH  = "300px";
-const DEBOUNCE_MS    = 400;
+const SIDEBAR_WIDTH = "300px";
+const DEBOUNCE_MS = 400;
 
 const LABELS = [
-  { key: "label:vip",          display: "VIP",          color: "#fbbf24", bg: "#3a2800" },
-  { key: "label:hot_lead",     display: "Hot Lead",     color: "#f87171", bg: "#3a0000" },
-  { key: "label:warm_lead",    display: "Warm Lead",    color: "#fb923c", bg: "#3a1200" },
-  { key: "label:buyer",        display: "Buyer",        color: "#34d399", bg: "#002a1a" },
-  { key: "label:repeat_buyer", display: "Repeat Buyer", color: "#60a5fa", bg: "#001a3a" },
+  { key: "label:vip", display: "VIP", color: "#fbbf24", bg: "#3a2800" },
+  {
+    key: "label:hot_lead",
+    display: "Hot Lead",
+    color: "#f87171",
+    bg: "#3a0000",
+  },
+  {
+    key: "label:warm_lead",
+    display: "Warm Lead",
+    color: "#fb923c",
+    bg: "#3a1200",
+  },
+  { key: "label:buyer", display: "Buyer", color: "#34d399", bg: "#002a1a" },
+  {
+    key: "label:repeat_buyer",
+    display: "Repeat Buyer",
+    color: "#60a5fa",
+    bg: "#001a3a",
+  },
 ];
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-let contactsCache   = [];          // cached contacts list from CRM
-let currentUsername = null;        // currently detected @username (lowercased, no @)
-let currentProfile  = null;        // currently displayed ContactProfile
-let sidebarVisible  = false;
-let debounceTimer   = null;
-let shadowRoot      = null;        // Shadow DOM root
+let contactsCache = []; // cached contacts list from CRM
+let currentUsername = null; // currently detected @username (lowercased, no @)
+let currentProfile = null; // currently displayed ContactProfile
+let sidebarVisible = false;
+let debounceTimer = null;
+let shadowRoot = null; // Shadow DOM root
 
 // ─── Background messaging ─────────────────────────────────────────────────────
 
@@ -33,7 +48,10 @@ function send(msg) {
   return new Promise((resolve) => {
     try {
       chrome.runtime.sendMessage(msg, (res) => {
-        if (chrome.runtime.lastError) { resolve(null); return; }
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
         resolve(res);
       });
     } catch (_) {
@@ -52,10 +70,10 @@ function send(msg) {
 function detectCurrentUsername() {
   // Strategy 1: subtitle element often shows "@username"
   const subtitleSelectors = [
-    ".chat-info .status",            // Web Z
-    ".chat-info-subtitle",           // Web Z alt
-    ".ChatInfo .status",             // Web K
-    ".peer-title + .status",         // Web K alt
+    ".chat-info .status", // Web Z
+    ".chat-info-subtitle", // Web Z alt
+    ".ChatInfo .status", // Web K
+    ".peer-title + .status", // Web K alt
     "[class*='ChatInfo'] .subtitle", // generic
     ".TopBar .subtitle",
     ".right-header .subtitle",
@@ -85,9 +103,9 @@ function detectCurrentUsername() {
  */
 function detectCurrentName() {
   const nameSelectors = [
-    ".chat-info .peer-title",        // Web Z
+    ".chat-info .peer-title", // Web Z
     ".chat-info h3",
-    ".ChatInfo .title",              // Web K
+    ".ChatInfo .title", // Web K
     ".chat-title .title",
     ".TopBar .title",
     "[class*='ChatInfo'] .title",
@@ -121,24 +139,33 @@ async function refreshContactsCache() {
 function findContactByUsername(username) {
   if (!username) return null;
   const clean = username.toLowerCase().replace(/^@/, "");
-  return contactsCache.find((c) => {
-    const u = String(c.username || "").toLowerCase().replace(/^@/, "");
-    return u === clean;
-  }) || null;
+  return (
+    contactsCache.find((c) => {
+      const u = String(c.username || "")
+        .toLowerCase()
+        .replace(/^@/, "");
+      return u === clean;
+    }) || null
+  );
 }
 
 function findContactByName(name) {
   if (!name) return null;
   const clean = name.toLowerCase().trim();
-  return contactsCache.find((c) =>
-    String(c.name || "").toLowerCase().trim() === clean
-  ) || null;
+  return (
+    contactsCache.find(
+      (c) =>
+        String(c.name || "")
+          .toLowerCase()
+          .trim() === clean,
+    ) || null
+  );
 }
 
 async function lookupCRMContact() {
   const username = detectCurrentUsername();
-  const name     = detectCurrentName();
-  const peerId   = detectPeerId();
+  const name = detectCurrentName();
+  const peerId = detectPeerId();
 
   // Skip if nothing changed
   const key = (username || "") + "|" + (name || "") + "|" + (peerId || "");
@@ -168,7 +195,10 @@ async function lookupCRMContact() {
   }
 
   // Fetch full profile
-  const res = await send({ type: "GET_CONTACT", body: { contactId: String(chat.id) } });
+  const res = await send({
+    type: "GET_CONTACT",
+    body: { contactId: String(chat.id) },
+  });
   if (res && res.ok && res.data) {
     currentProfile = res.data;
     renderSidebar(res.data, null);
@@ -238,7 +268,9 @@ function ensureToggleBtn() {
       wrap.style.display = sidebarVisible ? "flex" : "none";
     }
     btn.style.background = sidebarVisible ? "#6d28d9" : "#7c3aed";
-    btn.style.right = sidebarVisible ? (parseInt(SIDEBAR_WIDTH) + 8) + "px" : "8px";
+    btn.style.right = sidebarVisible
+      ? parseInt(SIDEBAR_WIDTH) + 8 + "px"
+      : "8px";
   });
   document.body.appendChild(btn);
 }
@@ -357,8 +389,14 @@ function formatDate(ts) {
   try {
     const d = new Date(ts);
     if (isNaN(d.getTime())) return ts;
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  } catch (_) { return String(ts); }
+    return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch (_) {
+    return String(ts);
+  }
 }
 
 function el(tag, cls, text) {
@@ -440,7 +478,7 @@ function renderLabelsSection(wrap, profile) {
   section.appendChild(el("div", "sb-section-title", "Labels"));
 
   const tags = Array.isArray(profile.tags) ? profile.tags : [];
-  const active   = LABELS.filter((l) => tags.includes(l.key));
+  const active = LABELS.filter((l) => tags.includes(l.key));
   const inactive = LABELS.filter((l) => !tags.includes(l.key));
 
   const badges = el("div", "label-badges");
@@ -489,8 +527,9 @@ function renderTagsSection(wrap, profile) {
   const section = el("div", "sb-section");
   section.appendChild(el("div", "sb-section-title", "Tags"));
 
-  const tags = (Array.isArray(profile.tags) ? profile.tags : [])
-    .filter((t) => !t.startsWith("label:"));
+  const tags = (Array.isArray(profile.tags) ? profile.tags : []).filter(
+    (t) => !t.startsWith("label:"),
+  );
 
   if (tags.length === 0) {
     section.appendChild(el("span", "sb-empty", "No tags"));
@@ -526,16 +565,23 @@ function renderRevenueSection(wrap, profile) {
   section.appendChild(el("div", "sb-section-title", "Revenue"));
 
   const rows = [
-    ["Total Spent",     "$" + Number(profile.totalSpent || 0).toFixed(2)],
-    ["Revenue",         "$" + Number(profile.revenue || 0).toFixed(2)],
-    ["Fan Status",      profile.fanStatus || "—"],
-    ["VIP Level",       profile.vipLevel || "—"],
-    ["Last Purchase",   profile.lastPurchaseDate ? formatDate(profile.lastPurchaseDate) : "—"],
+    ["Total Spent", "$" + Number(profile.totalSpent || 0).toFixed(2)],
+    ["Revenue", "$" + Number(profile.revenue || 0).toFixed(2)],
+    ["Fan Status", profile.fanStatus || "—"],
+    ["VIP Level", profile.vipLevel || "—"],
+    [
+      "Last Purchase",
+      profile.lastPurchaseDate ? formatDate(profile.lastPurchaseDate) : "—",
+    ],
   ];
 
   for (const [label, value] of rows) {
     const row = el("div", "sb-row");
-    row.innerHTML = `<span style="color:#6b6b75">${label}: </span>${value}`;
+    const labelSpan = document.createElement("span");
+    labelSpan.style.color = "#6b6b75";
+    labelSpan.textContent = `${label}: `;
+    row.appendChild(labelSpan);
+    row.appendChild(document.createTextNode(value));
     section.appendChild(row);
   }
   wrap.appendChild(section);
@@ -545,13 +591,21 @@ function renderPurchasesSection(wrap, profile) {
   const section = el("div", "sb-section");
   section.appendChild(el("div", "sb-section-title", "Purchases"));
 
-  const purchases = Array.isArray(profile.purchases) ? profile.purchases.slice(0, 5) : [];
+  const purchases = Array.isArray(profile.purchases)
+    ? profile.purchases.slice(0, 5)
+    : [];
   if (purchases.length === 0) {
     section.appendChild(el("span", "sb-empty", "No purchases"));
   } else {
     for (const p of purchases) {
       const row = el("div", "sb-purchase-row");
-      row.innerHTML = `<span>${formatDate(p.purchaseDate)}</span><span class="sb-purchase-amount">$${Number(p.amount).toFixed(2)}</span>`;
+      const dateSpan = document.createElement("span");
+      dateSpan.textContent = formatDate(p.purchaseDate);
+      const amountSpan = document.createElement("span");
+      amountSpan.className = "sb-purchase-amount";
+      amountSpan.textContent = "$" + Number(p.amount).toFixed(2);
+      row.appendChild(dateSpan);
+      row.appendChild(amountSpan);
       section.appendChild(row);
     }
   }
@@ -568,20 +622,37 @@ function renderRecentActivitySection(wrap, profile) {
   wrap.appendChild(section);
 
   // Async load
-  send({ type: "GET_TIMELINE", body: { contactId: String(profile.id), limit: 5 } }).then((res) => {
-    const events = (res && res.ok && Array.isArray(res.data)) ? res.data.slice(0, 5) : [];
+  send({
+    type: "GET_TIMELINE",
+    body: { contactId: String(profile.id), limit: 5 },
+  }).then((res) => {
+    const events =
+      res && res.ok && Array.isArray(res.data) ? res.data.slice(0, 5) : [];
     section.removeChild(loading);
     if (events.length === 0) {
       section.appendChild(el("span", "sb-empty", "No activity yet"));
     } else {
-      const TL_ICONS = { message_in: "📨", message_out: "📤", purchase: "💰", note: "📝", tag_added: "🏷️", tag_removed: "❌" };
+      const TL_ICONS = {
+        message_in: "📨",
+        message_out: "📤",
+        purchase: "💰",
+        note: "📝",
+        tag_added: "🏷️",
+        tag_removed: "❌",
+      };
       for (const ev of events) {
         const row = el("div", "tl-event");
         const icon = el("span", "tl-icon", TL_ICONS[ev.type] || "•");
         const body = el("div");
-        const meta = el("div", "tl-meta", (ev.type || "") + (ev.timestamp ? " · " + formatDate(ev.timestamp) : ""));
+        const meta = el(
+          "div",
+          "tl-meta",
+          (ev.type || "") +
+            (ev.timestamp ? " · " + formatDate(ev.timestamp) : ""),
+        );
         body.appendChild(meta);
-        if (ev.text) body.appendChild(el("div", "tl-text", String(ev.text).slice(0, 80)));
+        if (ev.text)
+          body.appendChild(el("div", "tl-text", String(ev.text).slice(0, 80)));
         row.appendChild(icon);
         row.appendChild(body);
         section.appendChild(row);
@@ -601,12 +672,19 @@ function renderQuickActions(wrap, profile) {
   section.appendChild(addNoteBtn);
 
   const addFollowupBtn = el("button", "sb-action-btn", "📅 Add Follow-up");
-  addFollowupBtn.addEventListener("click", () => renderAddFollowupForm(wrap, profile));
+  addFollowupBtn.addEventListener("click", () =>
+    renderAddFollowupForm(wrap, profile),
+  );
   section.appendChild(addFollowupBtn);
 
   const openBtn = el("button", "sb-action-btn primary", "↗ Open in CRM");
   openBtn.addEventListener("click", () => {
-    window.open("http://localhost:3000/?contact=" + encodeURIComponent(String(profile.id)), "_blank", "noopener");
+    window.open(
+      "http://localhost:3000/?contact=" +
+        encodeURIComponent(String(profile.id)),
+      "_blank",
+      "noopener",
+    );
   });
   section.appendChild(openBtn);
 
@@ -615,7 +693,10 @@ function renderQuickActions(wrap, profile) {
 
 function renderAddNoteForm(wrap, profile) {
   const existing = shadowRoot.getElementById("sb-add-note-form");
-  if (existing) { existing.remove(); return; }
+  if (existing) {
+    existing.remove();
+    return;
+  }
 
   const form = el("div", "sb-form");
   form.id = "sb-add-note-form";
@@ -626,8 +707,8 @@ function renderAddNoteForm(wrap, profile) {
   textarea.placeholder = "Write a note…";
   form.appendChild(textarea);
 
-  const errEl  = el("div", "sb-form-err");
-  const okEl   = el("div", "sb-form-ok");
+  const errEl = el("div", "sb-form-err");
+  const okEl = el("div", "sb-form-ok");
   form.appendChild(errEl);
   form.appendChild(okEl);
 
@@ -637,10 +718,16 @@ function renderAddNoteForm(wrap, profile) {
   cancel.addEventListener("click", () => form.remove());
   submit.addEventListener("click", async () => {
     const content = textarea.value.trim();
-    if (!content) { errEl.textContent = "Note cannot be empty."; return; }
+    if (!content) {
+      errEl.textContent = "Note cannot be empty.";
+      return;
+    }
     errEl.textContent = "";
     submit.disabled = true;
-    const res = await send({ type: "ADD_NOTE", body: { contactId: String(profile.id), content } });
+    const res = await send({
+      type: "ADD_NOTE",
+      body: { contactId: String(profile.id), content },
+    });
     submit.disabled = false;
     if (res && res.ok) {
       okEl.textContent = "Note saved!";
@@ -663,7 +750,10 @@ function renderAddNoteForm(wrap, profile) {
 
 function renderAddFollowupForm(wrap, profile) {
   const existing = shadowRoot.getElementById("sb-add-followup-form");
-  if (existing) { existing.remove(); return; }
+  if (existing) {
+    existing.remove();
+    return;
+  }
 
   const form = el("div", "sb-form");
   form.id = "sb-add-followup-form";
@@ -680,8 +770,8 @@ function renderAddFollowupForm(wrap, profile) {
   dateInput.value = new Date().toISOString().slice(0, 10);
   form.appendChild(dateInput);
 
-  const errEl  = el("div", "sb-form-err");
-  const okEl   = el("div", "sb-form-ok");
+  const errEl = el("div", "sb-form-err");
+  const okEl = el("div", "sb-form-ok");
   form.appendChild(errEl);
   form.appendChild(okEl);
 
@@ -690,13 +780,22 @@ function renderAddFollowupForm(wrap, profile) {
   const cancel = el("button", "sb-form-cancel", "Cancel");
   cancel.addEventListener("click", () => form.remove());
   submit.addEventListener("click", async () => {
-    const message     = msgInput.value.trim();
+    const message = msgInput.value.trim();
     const scheduledAt = dateInput.value;
-    if (!message) { errEl.textContent = "Message is required."; return; }
-    if (!scheduledAt) { errEl.textContent = "Date is required."; return; }
+    if (!message) {
+      errEl.textContent = "Message is required.";
+      return;
+    }
+    if (!scheduledAt) {
+      errEl.textContent = "Date is required.";
+      return;
+    }
     errEl.textContent = "";
     submit.disabled = true;
-    const res = await send({ type: "CREATE_FOLLOWUP", body: { contactId: String(profile.id), message, scheduledAt } });
+    const res = await send({
+      type: "CREATE_FOLLOWUP",
+      body: { contactId: String(profile.id), message, scheduledAt },
+    });
     submit.disabled = false;
     if (res && res.ok) {
       okEl.textContent = "Follow-up scheduled!";
@@ -719,10 +818,14 @@ function renderNotFound(wrap, info) {
   const section = el("div", "sb-not-found");
   section.appendChild(el("div", "sb-not-found-icon", "👤"));
   if (info && (info.name || info.username)) {
-    section.appendChild(el("div", "sb-not-found-name", info.name || ("@" + info.username)));
+    section.appendChild(
+      el("div", "sb-not-found-name", info.name || "@" + info.username),
+    );
     section.appendChild(el("div", "sb-not-found-sub", "Not found in CRM"));
   } else {
-    section.appendChild(el("div", "sb-not-found-sub", "Open a conversation to see CRM data"));
+    section.appendChild(
+      el("div", "sb-not-found-sub", "Open a conversation to see CRM data"),
+    );
   }
   wrap.appendChild(section);
 }
@@ -731,19 +834,28 @@ function renderNotFound(wrap, info) {
 
 async function sidebarToggleLabel(contactId, labelKey, add) {
   const type = add ? "ADD_TAG" : "DELETE_TAG";
-  const res = await send({ type, body: { contactId: String(contactId), name: labelKey } });
+  const res = await send({
+    type,
+    body: { contactId: String(contactId), name: labelKey },
+  });
   if (res && res.ok) {
     await refreshSidebarProfile(contactId);
   }
 }
 
 async function refreshSidebarProfile(contactId) {
-  const res = await send({ type: "GET_CONTACT", body: { contactId: String(contactId) } });
+  const res = await send({
+    type: "GET_CONTACT",
+    body: { contactId: String(contactId) },
+  });
   if (res && res.ok && res.data) {
     currentProfile = res.data;
     // Refresh contacts cache entry too
-    const idx = contactsCache.findIndex((c) => String(c.id) === String(contactId));
-    if (idx !== -1) contactsCache[idx] = { ...contactsCache[idx], tags: res.data.tags };
+    const idx = contactsCache.findIndex(
+      (c) => String(c.id) === String(contactId),
+    );
+    if (idx !== -1)
+      contactsCache[idx] = { ...contactsCache[idx], tags: res.data.tags };
     renderSidebar(res.data, null);
   }
 }
