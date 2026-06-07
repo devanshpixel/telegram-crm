@@ -8,6 +8,10 @@ let currentProfile = null;
 let editMode = false;
 let editFields = null;
 
+let followupsData = null;
+let followupsLoaded = false;
+let followupsOpen = false;
+
 const dom = {
   status: document.getElementById("status"),
   content: document.getElementById("content"),
@@ -23,6 +27,9 @@ const dom = {
   fPhone: document.getElementById("fPhone"),
   createBtn: document.getElementById("createBtn"),
   formMsg: document.getElementById("formMsg"),
+  followupsHeader: document.getElementById("followupsHeader"),
+  followupsBody: document.getElementById("followupsBody"),
+  followupsChevron: document.getElementById("followupsChevron"),
 };
 
 function injectStyles() {
@@ -252,12 +259,30 @@ function renderDetailsPanel(profile) {
   editMode = false;
   editFields = null;
 
+  const btnRow = document.createElement("div");
+  btnRow.style.display = "flex";
+  btnRow.style.gap = "6px";
+  btnRow.style.marginTop = "6px";
+
   const editBtn = document.createElement("button");
   editBtn.type = "button";
   editBtn.className = "details-edit-btn";
   editBtn.textContent = "Edit";
   editBtn.addEventListener("click", enterEditMode);
-  dom.detailsPanel.appendChild(editBtn);
+  btnRow.appendChild(editBtn);
+
+  const openBtn = document.createElement("button");
+  openBtn.type = "button";
+  openBtn.className = "details-edit-btn";
+  openBtn.textContent = "Open In CRM";
+  openBtn.addEventListener("click", () => {
+    const id = String(profile.id || currentDetailsId || "");
+    if (!id) return;
+    window.open(CRM_BASE + "/?contact=" + encodeURIComponent(id), "_blank", "noopener");
+  });
+  btnRow.appendChild(openBtn);
+
+  dom.detailsPanel.appendChild(btnRow);
 }
 
 function hideDetailsPanel() {
@@ -596,10 +621,169 @@ async function init() {
   if (ping && ping.ok) {
     bindCreateForm();
     bindSendForm();
+    bindFollowups();
     await loadContacts();
   } else {
     showOffline();
   }
+}
+
+function bindFollowups() {
+  dom.followupsHeader.addEventListener("click", toggleFollowups);
+}
+
+async function toggleFollowups() {
+  if (followupsOpen) {
+    followupsOpen = false;
+    dom.followupsBody.style.display = "none";
+    dom.followupsChevron.classList.remove("open");
+    return;
+  }
+  followupsOpen = true;
+  dom.followupsBody.style.display = "block";
+  dom.followupsChevron.classList.add("open");
+  if (!followupsLoaded) {
+    await loadFollowups();
+  }
+}
+
+async function loadFollowups(force) {
+  if (followupsLoaded && !force) return;
+  followupsBody_clear();
+  const loading = document.createElement("p");
+  loading.className = "followups-loading";
+  loading.textContent = "Loading follow-ups…";
+  dom.followupsBody.appendChild(loading);
+  const res = await send({ type: "GET_FOLLOWUPS" });
+  followupsBody_clear();
+  if (!res || !res.ok) {
+    const err = document.createElement("p");
+    err.className = "followups-loading";
+    err.textContent = "Failed to load follow-ups";
+    dom.followupsBody.appendChild(err);
+    return;
+  }
+  followupsData = (res.data && res.data.lists) || (Array.isArray(res.data) ? res.data : []);
+  followupsLoaded = true;
+  renderFollowups(followupsData);
+}
+
+function followupsBody_clear() {
+  while (dom.followupsBody.firstChild) {
+    dom.followupsBody.removeChild(dom.followupsBody.firstChild);
+  }
+}
+
+function renderFollowups(lists) {
+  followupsBody_clear();
+  if (!lists.length) {
+    const empty = document.createElement("p");
+    empty.className = "followups-loading";
+    empty.textContent = "No follow-up lists";
+    dom.followupsBody.appendChild(empty);
+    return;
+  }
+  for (const list of lists) {
+    dom.followupsBody.appendChild(renderFollowupGroup(list));
+  }
+  const refresh = document.createElement("div");
+  refresh.className = "followup-refresh";
+  refresh.textContent = "↻ Refresh";
+  refresh.addEventListener("click", (e) => {
+    e.stopPropagation();
+    loadFollowups(true);
+  });
+  dom.followupsBody.appendChild(refresh);
+}
+
+function renderFollowupGroup(list) {
+  const group = document.createElement("div");
+  group.className = "followup-group";
+  const header = document.createElement("div");
+  header.className = "followup-group-header";
+  const title = document.createElement("span");
+  title.className = "followup-group-title";
+  title.textContent = list.title || list.key;
+  const count = document.createElement("span");
+  count.className = "followup-group-count" + ((list.count || 0) === 0 ? " zero" : "");
+  count.textContent = String(list.count || 0);
+  header.appendChild(title);
+  header.appendChild(count);
+  const items = document.createElement("div");
+  items.className = "followup-items";
+  if ((list.items || []).length > 0) {
+    for (const item of list.items) {
+      items.appendChild(renderFollowupItem(item));
+    }
+  } else {
+    const none = document.createElement("div");
+    none.className = "followup-item";
+    none.style.color = "#6b6b75";
+    none.style.fontStyle = "italic";
+    none.textContent = "No fans in this list";
+    items.appendChild(none);
+  }
+  header.addEventListener("click", () => {
+    items.classList.toggle("open");
+  });
+  group.appendChild(header);
+  group.appendChild(items);
+  return group;
+}
+
+function renderFollowupItem(item) {
+  const row = document.createElement("div");
+  row.className = "followup-item";
+  const left = document.createElement("div");
+  left.style.display = "flex";
+  left.style.flexDirection = "column";
+  left.style.gap = "2px";
+  left.style.minWidth = "0";
+  left.style.flex = "1";
+  const name = document.createElement("span");
+  name.className = "followup-item-name";
+  name.textContent = item.name || "—";
+  const user = document.createElement("span");
+  user.className = "followup-item-user";
+  user.textContent = item.username ? "@" + String(item.username).replace(/^@/, "") : "";
+  left.appendChild(name);
+  left.appendChild(user);
+  const hint = document.createElement("span");
+  hint.className = "followup-item-hint";
+  hint.textContent = item.hint || "";
+  const actions = document.createElement("div");
+  actions.className = "followup-actions";
+  const openBtn = document.createElement("button");
+  openBtn.type = "button";
+  openBtn.className = "followup-action-btn";
+  openBtn.textContent = "Open";
+  openBtn.title = "Open in details panel";
+  openBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (item.id) showDetailsPanel(String(item.id));
+  });
+  const crmBtn = document.createElement("button");
+  crmBtn.type = "button";
+  crmBtn.className = "followup-action-btn crm";
+  crmBtn.textContent = "CRM";
+  crmBtn.title = "Open in CRM";
+  crmBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const id = String(item.id || "");
+    if (!id) return;
+    window.open(CRM_BASE + "/?contact=" + encodeURIComponent(id), "_blank", "noopener");
+  });
+  actions.appendChild(openBtn);
+  actions.appendChild(crmBtn);
+  row.appendChild(left);
+  row.appendChild(hint);
+  row.appendChild(actions);
+  row.addEventListener("click", (e) => {
+    if (e.target.tagName === "BUTTON") return;
+    e.stopPropagation();
+    if (item.id) showDetailsPanel(String(item.id));
+  });
+  return row;
 }
 
 init();

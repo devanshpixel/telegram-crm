@@ -31,6 +31,34 @@
     .send-form button { background: #7c3aed; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
     .send-form button:disabled { opacity: 0.5; cursor: not-allowed; }
     .selected { padding: 6px 12px; font-size: 11px; color: #8a8a93; border-top: 1px solid #1f1f23; }
+    .followups-section { border-top: 1px solid #1f1f23; }
+    .followups-header { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    .followups-header:hover { background: #15151a; }
+    .followups-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8a93; }
+    .followups-chevron { font-size: 10px; color: #8a8a93; transition: transform 0.2s; }
+    .followups-chevron.open { transform: rotate(90deg); }
+    .followups-body { background: #0b0b0d; }
+    .followups-loading { padding: 12px; text-align: center; color: #6b6b75; font-size: 11px; }
+    .followup-group { border-bottom: 1px solid #1f1f23; }
+    .followup-group-header { padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: #0b0b0d; }
+    .followup-group-header:hover { background: #15151a; }
+    .followup-group-title { font-size: 12px; font-weight: 500; color: #e7e7ea; }
+    .followup-group-count { background: #7c3aed; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 8px; }
+    .followup-group-count.zero { background: #2a2a30; color: #6b6b75; }
+    .followup-items { display: none; }
+    .followup-items.open { display: block; }
+    .followup-item { padding: 6px 12px 6px 24px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-top: 1px solid #15151a; }
+    .followup-item:hover { background: #15151a; }
+    .followup-item-name { font-size: 12px; color: #e7e7ea; }
+    .followup-item-user { font-size: 10px; color: #8a8a93; }
+    .followup-item-hint { font-size: 10px; color: #8a8a93; }
+    .followup-refresh { padding: 8px 12px; text-align: center; font-size: 11px; color: #7c3aed; cursor: pointer; border-top: 1px solid #1f1f23; }
+    .followup-refresh:hover { background: #15151a; }
+    .followup-actions { display: flex; gap: 4px; margin-left: 6px; }
+    .followup-action-btn { background: transparent; border: 1px solid #2a2a30; color: #c4b5fd; border-radius: 4px; padding: 2px 6px; font-size: 10px; font-family: inherit; cursor: pointer; }
+    .followup-action-btn:hover { background: #15151a; border-color: #7c3aed; color: #e7e7ea; }
+    .followup-action-btn.crm { color: #86efac; border-color: #14532d; }
+    .followup-action-btn.crm:hover { background: #14532d; color: #fff; }
   </style>
 </head>
 <body>
@@ -45,6 +73,13 @@
     <button id="createBtn" type="submit">Create Contact</button>
   </form>
   <div id="formMsg"></div>
+  <div class="followups-section">
+    <div id="followupsHeader" class="followups-header">
+      <span class="followups-title">Follow-ups</span>
+      <span id="followupsChevron" class="followups-chevron">▸</span>
+    </div>
+    <div id="followupsBody" class="followups-body" style="display:none"></div>
+  </div>
   <div id="content"><p class="empty">Loading...</p></div>
   <div id="selectedBar" class="selected" style="display:none"></div>
   <div id="detailsPanel" style="display:none"></div>
