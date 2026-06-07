@@ -38,6 +38,15 @@ const TEMPLATE_CATEGORIES = [
 
 const TEMPLATES_KEY = "crm_reply_templates";
 
+const SNIPPETS_KEY = "crm_snippets";
+
+let snippetsOpen = false;
+let snippetsView = "list";
+let snippetsEditId = null;
+let snippetDropdownVisible = false;
+let snippetDropdownIndex = -1;
+let snippetDropdownFiltered = [];
+
 const CAMPAIGN_SEGMENTS = [
   { key: "no_message_7d", title: "No Message 7d" },
   { key: "no_purchase_30d", title: "No Purchase 30d" },
@@ -71,6 +80,10 @@ const dom = {
   templatesHeader: document.getElementById("templatesHeader"),
   templatesBody: document.getElementById("templatesBody"),
   templatesChevron: document.getElementById("templatesChevron"),
+  snippetList: document.getElementById("snippetList"),
+  snippetsHeader: document.getElementById("snippetsHeader"),
+  snippetsBody: document.getElementById("snippetsBody"),
+  snippetsChevron: document.getElementById("snippetsChevron"),
 };
 
 function injectStyles() {
@@ -675,6 +688,9 @@ function bindSendForm() {
     }
     dom.sendBtn.disabled = false;
   });
+  // Snippet / trigger
+  dom.sendText.addEventListener("input", onSendTextInput);
+  dom.sendText.addEventListener("keydown", onSendTextKeydown);
 }
 
 async function loadContacts() {
@@ -709,6 +725,7 @@ async function init() {
     bindFollowups();
     bindCampaigns();
     bindTemplates();
+    bindSnippets();
     await loadContacts();
   } else {
     showOffline();
@@ -1549,6 +1566,373 @@ function insertTemplate(tpl) {
   dom.templatesBody.hidden = true;
   dom.templatesChevron.classList.remove("open");
   templatesOpen = false;
+}
+
+// ─── Snippets (A2) ───────────────────────────────────────────────────────────
+
+function loadSnippets() {
+  try {
+    const raw = localStorage.getItem(SNIPPETS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveSnippets(list) {
+  localStorage.setItem(SNIPPETS_KEY, JSON.stringify(list));
+}
+
+function generateSnippetId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// ── Dropdown (/ trigger in send box) ─────────────────────────────────────────
+
+function onSendTextInput() {
+  const val = dom.sendText.value;
+  if (!val.startsWith("/")) {
+    hideSnippetDropdown();
+    return;
+  }
+  const query    = val.toLowerCase();
+  const snippets = loadSnippets();
+  snippetDropdownFiltered = snippets.filter((s) =>
+    s.trigger.toLowerCase().startsWith(query)
+  );
+  if (snippetDropdownFiltered.length === 0) {
+    hideSnippetDropdown();
+    return;
+  }
+  snippetDropdownIndex = 0;
+  showSnippetDropdown();
+}
+
+function onSendTextKeydown(e) {
+  if (!snippetDropdownVisible) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    snippetDropdownIndex = Math.min(
+      snippetDropdownIndex + 1,
+      snippetDropdownFiltered.length - 1
+    );
+    highlightSnippetItem();
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    snippetDropdownIndex = Math.max(snippetDropdownIndex - 1, 0);
+    highlightSnippetItem();
+  } else if (e.key === "Enter") {
+    if (snippetDropdownFiltered[snippetDropdownIndex]) {
+      e.preventDefault();
+      selectSnippet(snippetDropdownFiltered[snippetDropdownIndex]);
+    }
+  } else if (e.key === "Escape") {
+    hideSnippetDropdown();
+  }
+}
+
+function showSnippetDropdown() {
+  const list = dom.snippetList;
+  list.innerHTML = "";
+  snippetDropdownVisible = true;
+
+  snippetDropdownFiltered.forEach((snip, i) => {
+    const item = document.createElement("div");
+    item.className = "snippet-item" + (i === snippetDropdownIndex ? " active" : "");
+    item.dataset.index = String(i);
+
+    const trigger = document.createElement("span");
+    trigger.className = "snippet-trigger";
+    trigger.textContent = snip.trigger;
+
+    const preview = document.createElement("span");
+    preview.className = "snippet-preview";
+    preview.textContent = snip.body;
+
+    item.appendChild(trigger);
+    item.appendChild(preview);
+    item.addEventListener("mousedown", (e) => {
+      e.preventDefault(); // prevent blur on sendText
+      selectSnippet(snip);
+    });
+    list.appendChild(item);
+  });
+
+  // Manage link at bottom
+  const manageLink = document.createElement("div");
+  manageLink.className = "snippets-manage-link";
+  manageLink.textContent = "Manage Snippets →";
+  manageLink.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    hideSnippetDropdown();
+    // Open snippets management panel
+    if (dom.snippetsBody.hidden) {
+      dom.snippetsBody.hidden = false;
+      dom.snippetsChevron.classList.add("open");
+      snippetsOpen = true;
+      snippetsView = "list";
+      renderSnippetsList();
+    }
+    dom.snippetsHeader.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  list.appendChild(manageLink);
+
+  list.hidden = false;
+}
+
+function hideSnippetDropdown() {
+  dom.snippetList.hidden = true;
+  dom.snippetList.innerHTML = "";
+  snippetDropdownVisible = false;
+  snippetDropdownIndex   = -1;
+  snippetDropdownFiltered = [];
+}
+
+function highlightSnippetItem() {
+  const items = dom.snippetList.querySelectorAll(".snippet-item");
+  items.forEach((el, i) => {
+    el.classList.toggle("active", i === snippetDropdownIndex);
+  });
+}
+
+function selectSnippet(snip) {
+  const text = applyTemplateVars(snip.body, selectedContact);
+  dom.sendText.value = text;
+  hideSnippetDropdown();
+  dom.sendText.focus();
+}
+
+// ── Snippets management panel ─────────────────────────────────────────────────
+
+function bindSnippets() {
+  dom.snippetsHeader.addEventListener("click", toggleSnippets);
+}
+
+function toggleSnippets() {
+  if (!dom.snippetsBody.hidden) {
+    dom.snippetsBody.hidden = true;
+    dom.snippetsChevron.classList.remove("open");
+    snippetsOpen = false;
+  } else {
+    dom.snippetsBody.hidden = false;
+    dom.snippetsChevron.classList.add("open");
+    snippetsOpen = true;
+    snippetsView = "list";
+    renderSnippetsList();
+  }
+}
+
+function renderSnippetsList() {
+  const body = dom.snippetsBody;
+  body.innerHTML = "";
+
+  // Toolbar
+  const toolbar = document.createElement("div");
+  toolbar.className = "tmpl-toolbar";
+  const label = document.createElement("span");
+  label.style.cssText = "font-size:11px;color:#8a8a93;";
+  label.textContent = "Type / in message to trigger";
+  const newBtn = document.createElement("button");
+  newBtn.type = "button";
+  newBtn.className = "tmpl-new-btn";
+  newBtn.textContent = "+ New";
+  newBtn.addEventListener("click", () => {
+    snippetsView = "create";
+    snippetsEditId = null;
+    renderSnippetForm();
+  });
+  toolbar.appendChild(label);
+  toolbar.appendChild(newBtn);
+  body.appendChild(toolbar);
+
+  const snippets = loadSnippets();
+  if (snippets.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "tmpl-empty";
+    empty.textContent = 'No snippets yet. Click + New to create one.';
+    body.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "tmpl-list";
+  for (const snip of snippets) {
+    list.appendChild(renderSnippetItem(snip));
+  }
+  body.appendChild(list);
+}
+
+function renderSnippetItem(snip) {
+  const row = document.createElement("div");
+  row.className = "tmpl-item";
+
+  const info = document.createElement("div");
+  info.className = "tmpl-item-info";
+
+  const trigger = document.createElement("div");
+  trigger.className = "tmpl-item-title";
+  trigger.style.color = "#c4b5fd";
+  trigger.textContent = snip.trigger;
+
+  const preview = document.createElement("div");
+  preview.className = "tmpl-item-preview";
+  preview.textContent = snip.body;
+
+  info.appendChild(trigger);
+  info.appendChild(preview);
+
+  const actions = document.createElement("div");
+  actions.className = "tmpl-item-actions";
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "tmpl-edit-btn";
+  editBtn.textContent = "Edit";
+  editBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    snippetsEditId = snip.id;
+    snippetsView = "edit";
+    renderSnippetForm();
+  });
+
+  const delBtn = document.createElement("button");
+  delBtn.type = "button";
+  delBtn.className = "tmpl-del-btn";
+  delBtn.textContent = "×";
+  delBtn.title = "Delete snippet";
+  delBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    deleteSnippet(snip.id);
+  });
+
+  actions.appendChild(editBtn);
+  actions.appendChild(delBtn);
+  row.appendChild(info);
+  row.appendChild(actions);
+  return row;
+}
+
+function renderSnippetForm() {
+  const body = dom.snippetsBody;
+  body.innerHTML = "";
+
+  const isEdit   = snippetsView === "edit";
+  const existing = isEdit ? loadSnippets().find((s) => s.id === snippetsEditId) : null;
+
+  const form = document.createElement("div");
+  form.className = "tmpl-form";
+
+  // Header
+  const hdr = document.createElement("div");
+  hdr.className = "tmpl-form-header";
+  const heading = document.createElement("span");
+  heading.className = "tmpl-form-title";
+  heading.textContent = isEdit ? "Edit Snippet" : "New Snippet";
+  const backBtn = document.createElement("button");
+  backBtn.type = "button";
+  backBtn.className = "tmpl-back-btn";
+  backBtn.textContent = "← Back";
+  backBtn.addEventListener("click", () => {
+    snippetsView = "list";
+    renderSnippetsList();
+  });
+  hdr.appendChild(heading);
+  hdr.appendChild(backBtn);
+  form.appendChild(hdr);
+
+  // Trigger field
+  const trigField = document.createElement("div");
+  trigField.className = "tmpl-field";
+  const trigLabel = document.createElement("label");
+  trigLabel.className = "tmpl-field-label";
+  trigLabel.textContent = "Trigger (e.g. /hi  /promo  /followup)";
+  const trigInput = document.createElement("input");
+  trigInput.type = "text";
+  trigInput.id = "snipTriggerInput";
+  trigInput.className = "tmpl-field-input";
+  trigInput.placeholder = "/greeting";
+  trigInput.value = existing ? existing.trigger : "/";
+  trigField.appendChild(trigLabel);
+  trigField.appendChild(trigInput);
+  form.appendChild(trigField);
+
+  // Body field
+  const bodyField = document.createElement("div");
+  bodyField.className = "tmpl-field";
+  const bodyLabel = document.createElement("label");
+  bodyLabel.className = "tmpl-field-label";
+  bodyLabel.textContent = "Expanded text";
+  const bodyInput = document.createElement("textarea");
+  bodyInput.id = "snipBodyInput";
+  bodyInput.className = "tmpl-field-textarea";
+  bodyInput.placeholder = "Hi {firstName}! 👋";
+  bodyInput.value = existing ? existing.body : "";
+  bodyInput.rows = 3;
+  bodyField.appendChild(bodyLabel);
+  bodyField.appendChild(bodyInput);
+  form.appendChild(bodyField);
+
+  // Variable hint
+  const hint = document.createElement("div");
+  hint.className = "tmpl-vars-hint";
+  hint.innerHTML = "Variables: <code>{name}</code> <code>{firstName}</code> <code>{username}</code>";
+  form.appendChild(hint);
+
+  // Error
+  const errEl = document.createElement("div");
+  errEl.id = "snipFormErr";
+  errEl.className = "tmpl-err";
+  form.appendChild(errEl);
+
+  // Save button
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "tmpl-save-btn";
+  saveBtn.textContent = isEdit ? "Save Changes" : "Create Snippet";
+  saveBtn.addEventListener("click", () =>
+    saveSnippetForm(trigInput, bodyInput, errEl)
+  );
+  form.appendChild(saveBtn);
+
+  body.appendChild(form);
+  trigInput.focus();
+  // Place cursor at end of trigger
+  trigInput.setSelectionRange(trigInput.value.length, trigInput.value.length);
+}
+
+function saveSnippetForm(trigInput, bodyInput, errEl) {
+  let trigger = trigInput.value.trim();
+  const body  = bodyInput.value.trim();
+
+  if (!trigger) { errEl.textContent = "Trigger is required."; return; }
+  // Ensure trigger starts with /
+  if (!trigger.startsWith("/")) trigger = "/" + trigger;
+  if (trigger.length < 2) { errEl.textContent = "Trigger must have at least one character after /."; return; }
+  if (!body) { errEl.textContent = "Expanded text is required."; return; }
+
+  // Check for duplicate trigger (on create, or on edit if trigger changed)
+  const snippets = loadSnippets();
+  const duplicate = snippets.find(
+    (s) => s.trigger.toLowerCase() === trigger.toLowerCase() && s.id !== snippetsEditId
+  );
+  if (duplicate) { errEl.textContent = "A snippet with this trigger already exists."; return; }
+  errEl.textContent = "";
+
+  if (snippetsView === "edit" && snippetsEditId) {
+    const idx = snippets.findIndex((s) => s.id === snippetsEditId);
+    if (idx !== -1) snippets[idx] = { ...snippets[idx], trigger, body };
+  } else {
+    snippets.push({ id: generateSnippetId(), trigger, body });
+  }
+  saveSnippets(snippets);
+  snippetsView  = "list";
+  snippetsEditId = null;
+  renderSnippetsList();
+}
+
+function deleteSnippet(id) {
+  saveSnippets(loadSnippets().filter((s) => s.id !== id));
+  renderSnippetsList();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

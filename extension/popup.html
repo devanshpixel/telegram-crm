@@ -165,6 +165,24 @@
     .tmpl-err:empty { display: none; }
     .tmpl-vars-hint { font-size: 10px; color: #6b6b75; }
     .tmpl-vars-hint code { color: #c4b5fd; background: #1f1f23; padding: 0 3px; border-radius: 3px; }
+    .snippet-dropdown { position: relative; }
+    .snippet-list { position: absolute; bottom: 100%; left: 0; right: 0; background: #15151a; border: 1px solid #7c3aed; border-radius: 6px; z-index: 999; max-height: 160px; overflow-y: auto; box-shadow: 0 -4px 16px rgba(124,58,237,0.2); }
+    .snippet-list[hidden] { display: none; }
+    .snippet-item { padding: 6px 10px; display: flex; flex-direction: column; gap: 1px; cursor: pointer; border-bottom: 1px solid #1f1f23; }
+    .snippet-item:last-child { border-bottom: 0; }
+    .snippet-item:hover, .snippet-item.active { background: #1e1b4b; }
+    .snippet-trigger { font-size: 11px; font-weight: 600; color: #c4b5fd; }
+    .snippet-preview { font-size: 10px; color: #6b6b75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .snippets-manage-link { padding: 5px 10px; text-align: center; font-size: 10px; color: #7c3aed; cursor: pointer; border-top: 1px solid #1f1f23; }
+    .snippets-manage-link:hover { background: #15151a; color: #c4b5fd; }
+    .snippets-section { border-top: 1px solid #1f1f23; }
+    .snippets-header { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    .snippets-header:hover { background: #15151a; }
+    .snippets-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8a93; }
+    .snippets-chevron { font-size: 10px; color: #8a8a93; transition: transform 0.2s; }
+    .snippets-chevron.open { transform: rotate(90deg); }
+    .snippets-body { background: #0b0b0d; }
+    .snippets-body[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -200,9 +218,19 @@
     </div>
     <div id="templatesBody" class="templates-body" hidden></div>
   </div>
+  <div class="snippets-section">
+    <div id="snippetsHeader" class="snippets-header">
+      <span class="snippets-title">Snippets</span>
+      <span id="snippetsChevron" class="snippets-chevron">▸</span>
+    </div>
+    <div id="snippetsBody" class="snippets-body" hidden></div>
+  </div>
   <div id="content"><p class="empty">Loading...</p></div>
   <div id="selectedBar" class="selected" style="display:none"></div>
   <div id="detailsPanel" style="display:none"></div>
+  <div class="snippet-dropdown" id="snippetDropdownWrap">
+    <div id="snippetList" class="snippet-list" hidden></div>
+  </div>
   <form id="sendForm" class="send-form" style="display:none">
     <input id="sendText" placeholder="Type a message..." required />
     <button id="sendBtn" type="submit">Send</button>
