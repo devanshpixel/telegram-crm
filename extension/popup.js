@@ -40,6 +40,14 @@ const TEMPLATES_KEY = "crm_reply_templates";
 
 const SNIPPETS_KEY = "crm_snippets";
 
+const LABELS = [
+  { key: "label:vip",          display: "VIP",          color: "#fbbf24", bg: "#3a2800" },
+  { key: "label:hot_lead",     display: "Hot Lead",     color: "#f87171", bg: "#3a0000" },
+  { key: "label:warm_lead",    display: "Warm Lead",    color: "#fb923c", bg: "#3a1200" },
+  { key: "label:buyer",        display: "Buyer",        color: "#34d399", bg: "#002a1a" },
+  { key: "label:repeat_buyer", display: "Repeat Buyer", color: "#60a5fa", bg: "#001a3a" },
+];
+
 let snippetsOpen = false;
 let snippetsView = "list";
 let snippetsEditId = null;
@@ -180,6 +188,21 @@ function renderContact(c) {
   }
   main.appendChild(top);
 
+  // Label badges (from label:* tags)
+  const assignedLabels = LABELS.filter((l) => (c.tags || []).includes(l.key));
+  if (assignedLabels.length > 0) {
+    const badges = document.createElement("div");
+    badges.className = "label-badges";
+    for (const lbl of assignedLabels) {
+      const badge = document.createElement("span");
+      badge.className = "label-pill";
+      badge.style.cssText = `color:${lbl.color};background:${lbl.bg};`;
+      badge.textContent = lbl.display;
+      badges.appendChild(badge);
+    }
+    main.appendChild(badges);
+  }
+
   if (c.lastMessage) {
     const preview = document.createElement("div");
     preview.className = "preview";
@@ -286,6 +309,63 @@ function renderDetailsPanel(profile) {
     dom.detailsPanel.appendChild(v);
   }
 
+  // Labels section (before tags — labels are stored as label:* prefixed tags)
+  const lblSectionLabel = document.createElement("div");
+  lblSectionLabel.className = "details-label";
+  lblSectionLabel.textContent = "Labels";
+  dom.detailsPanel.appendChild(lblSectionLabel);
+
+  const lblWrap = document.createElement("div");
+  lblWrap.className = "details-labels-wrap";
+  const currentTags    = Array.isArray(profile.tags) ? profile.tags : [];
+  const activeLabels   = LABELS.filter((l) => currentTags.includes(l.key));
+  const inactiveLabels = LABELS.filter((l) => !currentTags.includes(l.key));
+
+  if (activeLabels.length === 0 && inactiveLabels.length === 0) {
+    const none = document.createElement("span");
+    none.className = "details-empty";
+    none.textContent = "No labels";
+    lblWrap.appendChild(none);
+  } else {
+    // Active labels: colored pill with × to remove
+    for (const lbl of activeLabels) {
+      const pill = document.createElement("span");
+      pill.className = "label-pill";
+      pill.style.cssText = `color:${lbl.color};background:${lbl.bg};`;
+      const txt = document.createElement("span");
+      txt.textContent = lbl.display;
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "label-pill-x";
+      x.style.color = lbl.color;
+      x.textContent = "\u00d7";
+      x.title = "Remove " + lbl.display;
+      x.addEventListener("click", async () => {
+        x.disabled = true;
+        await toggleLabelOnContact(String(profile.id || currentDetailsId), lbl.key, false);
+      });
+      pill.appendChild(txt);
+      pill.appendChild(x);
+      lblWrap.appendChild(pill);
+    }
+    // Inactive labels: dashed add buttons
+    for (const lbl of inactiveLabels) {
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "label-add-btn";
+      addBtn.style.cssText = `color:${lbl.color};border-color:${lbl.color};`;
+      addBtn.textContent = "+ " + lbl.display;
+      addBtn.title = "Add label: " + lbl.display;
+      addBtn.addEventListener("click", async () => {
+        addBtn.disabled = true;
+        await toggleLabelOnContact(String(profile.id || currentDetailsId), lbl.key, true);
+      });
+      lblWrap.appendChild(addBtn);
+    }
+  }
+  dom.detailsPanel.appendChild(lblWrap);
+
+  // Tags section — non-label tags only
   const tagLabel = document.createElement("div");
   tagLabel.className = "details-label";
   tagLabel.textContent = "Tags";
@@ -293,7 +373,7 @@ function renderDetailsPanel(profile) {
 
   const tagWrap = document.createElement("div");
   tagWrap.className = "details-tags";
-  const tags = Array.isArray(profile.tags) ? profile.tags : [];
+  const tags = (Array.isArray(profile.tags) ? profile.tags : []).filter((t) => !t.startsWith("label:"));
   if (tags.length === 0) {
     const none = document.createElement("span");
     none.className = "details-empty";
@@ -396,7 +476,9 @@ function enterEditMode() {
     name: currentProfile.name || "",
     username: currentProfile.username || "",
     phone: currentProfile.phone || "",
-    tags: Array.isArray(currentProfile.tags) ? currentProfile.tags.slice() : [],
+    tags: Array.isArray(currentProfile.tags)
+      ? currentProfile.tags.filter((t) => !t.startsWith("label:")).slice()
+      : [],
   };
   renderEditForm();
 }
@@ -576,7 +658,9 @@ async function saveEdit(contactId) {
     username: editFields.username.trim(),
     phone: editFields.phone.trim(),
   };
-  const originalTags = Array.isArray(currentProfile?.tags) ? currentProfile.tags : [];
+  // Exclude label tags from the free-form tag diff — labels are managed separately
+  const originalTags = (Array.isArray(currentProfile?.tags) ? currentProfile.tags : [])
+    .filter((t) => !t.startsWith("label:"));
   const added = editFields.tags.filter((t) => !originalTags.some((o) => o.toLowerCase() === t.toLowerCase()));
   const removed = originalTags.filter((o) => !editFields.tags.some((t) => t.toLowerCase() === o.toLowerCase()));
 
@@ -1936,5 +2020,21 @@ function deleteSnippet(id) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ── Labels (A3) ─────────────────────────────────────────────────────────────
+
+async function toggleLabelOnContact(contactId, labelKey, add) {
+  const type = add ? "ADD_TAG" : "DELETE_TAG";
+  const res = await send({ type, body: { contactId: Number(contactId), name: labelKey } });
+  if (!res || !res.ok) return;
+  // Re-fetch and re-render the details panel
+  const fresh = await send({ type: "GET_CONTACT", body: { contactId } });
+  if (fresh && fresh.ok && fresh.data && currentDetailsId === String(contactId)) {
+    currentProfile = fresh.data;
+    renderDetailsPanel(fresh.data);
+    // Also refresh contacts list so label badge updates on list row
+    loadContacts();
+  }
+}
 
 init();
