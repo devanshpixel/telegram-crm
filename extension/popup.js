@@ -268,6 +268,10 @@ function showDetailsPanel(contactId) {
     return;
   }
   currentDetailsId = id;
+  // Reset per-contact section open state
+  historyOpen   = false;
+  timelineOpen  = false;
+  timelineFilter = "all";
   dom.detailsPanel.style.display = "grid";
   renderDetailsPanel(null);
   send({ type: "GET_CONTACT", body: { contactId: id } }).then((res) => {
@@ -423,6 +427,13 @@ function renderDetailsPanel(profile) {
   historyBtn.addEventListener("click", toggleHistorySection);
   btnRow.appendChild(historyBtn);
 
+  const activityBtn = document.createElement("button");
+  activityBtn.type = "button";
+  activityBtn.className = "details-edit-btn";
+  activityBtn.textContent = "Activity";
+  activityBtn.addEventListener("click", toggleTimelineSection);
+  btnRow.appendChild(activityBtn);
+
   dom.detailsPanel.appendChild(btnRow);
 
   const historySection = document.createElement("div");
@@ -436,7 +447,7 @@ function renderDetailsPanel(profile) {
   const historyChevron = document.createElement("span");
   historyChevron.className = "history-chevron";
   historyChevron.id = "historyChevron";
-  historyChevron.textContent = "▸";
+  historyChevron.textContent = "\u25b8";
   historyHeader.appendChild(historyTitle);
   historyHeader.appendChild(historyChevron);
   historyHeader.addEventListener("click", toggleHistorySection);
@@ -446,7 +457,7 @@ function renderDetailsPanel(profile) {
   const historySearch = document.createElement("input");
   historySearch.type = "text";
   historySearch.className = "history-search";
-  historySearch.placeholder = "Search messages…";
+  historySearch.placeholder = "Search messages\u2026";
   historySearch.id = "historySearch";
   historySearch.addEventListener("input", (e) => {
     historySearchTerm = String(e.target.value || "");
@@ -461,6 +472,33 @@ function renderDetailsPanel(profile) {
   historySection.appendChild(historyHeader);
   historySection.appendChild(historyBody);
   dom.detailsPanel.appendChild(historySection);
+
+  // Activity Timeline section (A4) — additive, separate from Conversation History
+  const timelineSection = document.createElement("div");
+  timelineSection.className = "timeline-section";
+  timelineSection.id = "timelineSection";
+
+  const tlHeader = document.createElement("div");
+  tlHeader.className = "timeline-header";
+  tlHeader.id = "timelineHeader";
+  const tlTitle = document.createElement("span");
+  tlTitle.className = "timeline-title";
+  tlTitle.textContent = "Activity Timeline";
+  const tlChevron = document.createElement("span");
+  tlChevron.className = "timeline-chevron";
+  tlChevron.id = "timelineChevron";
+  tlChevron.textContent = "\u25b8";
+  tlHeader.appendChild(tlTitle);
+  tlHeader.appendChild(tlChevron);
+  tlHeader.addEventListener("click", toggleTimelineSection);
+
+  const tlBody = document.createElement("div");
+  tlBody.className = "timeline-body";
+  tlBody.id = "timelineBody";
+
+  timelineSection.appendChild(tlHeader);
+  timelineSection.appendChild(tlBody);
+  dom.detailsPanel.appendChild(timelineSection);
 }
 
 function hideDetailsPanel() {
@@ -2035,6 +2073,174 @@ async function toggleLabelOnContact(contactId, labelKey, add) {
     // Also refresh contacts list so label badge updates on list row
     loadContacts();
   }
+}
+
+// ── Activity Timeline (A4) ────────────────────────────────────────────────────────
+
+let timelineOpen = false;
+let timelineCache = {};
+let timelineFilter = "all"; // "all" | "message" | "note" | "purchase" | "tag"
+
+const TL_FILTERS = [
+  { key: "all",      label: "All" },
+  { key: "message",  label: "Messages" },
+  { key: "note",     label: "Notes" },
+  { key: "purchase", label: "Purchases" },
+  { key: "tag",      label: "Tags" },
+];
+
+const TL_ICONS = {
+  message_in:  "\ud83d\udce8",
+  message_out: "\ud83d\udce4",
+  purchase:    "\ud83d\udcb0",
+  note:        "\ud83d\udcdd",
+  tag_added:   "\ud83c\udff7\ufe0f",
+  tag_removed: "\u274c",
+};
+
+function tlEventMatchesFilter(ev) {
+  if (timelineFilter === "all") return true;
+  if (timelineFilter === "message") return ev.type === "message_in" || ev.type === "message_out";
+  if (timelineFilter === "note")    return ev.type === "note";
+  if (timelineFilter === "purchase") return ev.type === "purchase";
+  if (timelineFilter === "tag")    return ev.type === "tag_added" || ev.type === "tag_removed";
+  return true;
+}
+
+function tlFormatTime(ts) {
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
+      + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  } catch (_) { return ""; }
+}
+
+function tlEventLabel(ev) {
+  switch (ev.type) {
+    case "message_in":  return "Fan";
+    case "message_out": return "You";
+    case "purchase":    return "Purchase $" + Number(ev.amount || 0).toFixed(2);
+    case "note":        return "Note";
+    case "tag_added":   return "Tag added";
+    case "tag_removed": return "Tag removed";
+    default:            return ev.type;
+  }
+}
+
+async function toggleTimelineSection() {
+  const id = String(currentDetailsId || "");
+  if (!id) return;
+  const body    = document.getElementById("timelineBody");
+  const chevron = document.getElementById("timelineChevron");
+  if (!body || !chevron) return;
+  timelineOpen = !timelineOpen;
+  if (timelineOpen) {
+    body.classList.add("open");
+    chevron.classList.add("open");
+    if (timelineCache[id]) {
+      renderTimelineBody(timelineCache[id]);
+    } else {
+      await loadTimeline(id);
+    }
+  } else {
+    body.classList.remove("open");
+    chevron.classList.remove("open");
+  }
+}
+
+async function loadTimeline(contactId) {
+  const id   = String(contactId || "");
+  if (!id) return;
+  const body = document.getElementById("timelineBody");
+  if (body) {
+    body.innerHTML = "";
+    const loading = document.createElement("div");
+    loading.className = "timeline-loading";
+    loading.textContent = "Loading activity\u2026";
+    body.appendChild(loading);
+  }
+  const res = await send({ type: "GET_TIMELINE", body: { contactId: id, limit: 60 } });
+  if (!res || !res.ok) {
+    if (body) {
+      body.innerHTML = "";
+      const err = document.createElement("div");
+      err.className = "timeline-empty";
+      err.textContent = "Failed to load activity";
+      body.appendChild(err);
+    }
+    return;
+  }
+  const events = Array.isArray(res.data) ? res.data : [];
+  timelineCache[id] = events;
+  renderTimelineBody(events);
+}
+
+function renderTimelineBody(events) {
+  const body = document.getElementById("timelineBody");
+  if (!body) return;
+  body.innerHTML = "";
+
+  // Filter buttons
+  const filterRow = document.createElement("div");
+  filterRow.className = "timeline-filter";
+  for (const f of TL_FILTERS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "timeline-filter-btn" + (timelineFilter === f.key ? " active" : "");
+    btn.textContent = f.label;
+    btn.addEventListener("click", () => {
+      timelineFilter = f.key;
+      renderTimelineBody(events);
+    });
+    filterRow.appendChild(btn);
+  }
+  body.appendChild(filterRow);
+
+  const filtered = events.filter(tlEventMatchesFilter);
+
+  const list = document.createElement("div");
+  list.className = "timeline-list";
+
+  if (filtered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "timeline-empty";
+    empty.textContent = timelineFilter === "all" ? "No activity yet" : "No events of this type";
+    list.appendChild(empty);
+  } else {
+    for (const ev of filtered) {
+      list.appendChild(renderTimelineEvent(ev));
+    }
+  }
+  body.appendChild(list);
+}
+
+function renderTimelineEvent(ev) {
+  const row = document.createElement("div");
+  row.className = "tl-event";
+
+  const icon = document.createElement("span");
+  icon.className = "tl-icon";
+  icon.textContent = TL_ICONS[ev.type] || "\u2022";
+
+  const content = document.createElement("div");
+  content.className = "tl-body";
+
+  const meta = document.createElement("div");
+  meta.className = "tl-meta";
+  meta.textContent = tlEventLabel(ev) + (ev.timestamp ? " \u00b7 " + tlFormatTime(ev.timestamp) : "");
+
+  const text = document.createElement("div");
+  text.className = "tl-text";
+  text.textContent = String(ev.text || "");
+
+  content.appendChild(meta);
+  if (ev.text) content.appendChild(text);
+
+  row.appendChild(icon);
+  row.appendChild(content);
+  return row;
 }
 
 init();

@@ -192,6 +192,26 @@
     .label-add-btn:hover { opacity: 0.8; }
     .label-add-btn:disabled { opacity: 0.35; cursor: not-allowed; }
     .details-labels-wrap { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .timeline-section { margin-top: 8px; border-top: 1px solid #1f1f23; padding-top: 6px; }
+    .timeline-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 4px 0; user-select: none; }
+    .timeline-header:hover { color: #c4b5fd; }
+    .timeline-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8a93; }
+    .timeline-chevron { font-size: 9px; color: #8a8a93; transition: transform 0.2s; }
+    .timeline-chevron.open { transform: rotate(90deg); }
+    .timeline-body { display: none; }
+    .timeline-body.open { display: block; }
+    .timeline-filter { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0; }
+    .timeline-filter-btn { background: transparent; border: 1px solid #2a2a30; color: #8a8a93; border-radius: 4px; padding: 2px 7px; font: inherit; font-size: 10px; cursor: pointer; }
+    .timeline-filter-btn.active { border-color: #7c3aed; color: #c4b5fd; background: #1e1b4b; }
+    .timeline-list { max-height: 240px; overflow-y: auto; background: #0b0b0d; border: 1px solid #1f1f23; border-radius: 4px; }
+    .timeline-empty { padding: 12px; text-align: center; color: #6b6b75; font-size: 11px; }
+    .timeline-loading { padding: 12px; text-align: center; color: #6b6b75; font-size: 11px; }
+    .tl-event { padding: 5px 8px; border-bottom: 1px solid #1f1f23; display: flex; gap: 8px; align-items: flex-start; }
+    .tl-event:last-child { border-bottom: 0; }
+    .tl-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+    .tl-body { flex: 1; min-width: 0; }
+    .tl-meta { font-size: 9px; color: #6b6b75; margin-bottom: 1px; }
+    .tl-text { font-size: 11px; color: #e7e7ea; white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body>
