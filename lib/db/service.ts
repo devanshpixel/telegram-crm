@@ -193,7 +193,7 @@ export function createContact(input: CreateContactInput): ContactProfile {
         joined_at, revenue, revenue_trend, lead_score, lead_status, is_online,
         ppv_count, telegram_id, telegram_access_hash, total_spent, vip_level,
         fan_status, fan_score, last_purchase_date, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,

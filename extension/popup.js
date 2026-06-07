@@ -1,9 +1,9 @@
 const statusEl = document.getElementById("status");
 const contentEl = document.getElementById("content");
 
-function send(type) {
+function send(message) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type }, (response) => resolve(response));
+    chrome.runtime.sendMessage(message, (response) => resolve(response));
   });
 }
 
@@ -66,7 +66,7 @@ function selectContact(c) {
 }
 
 async function init() {
-  const ping = await send("PING");
+  const ping = await send({ type: "PING" });
   setStatus(ping && ping.ok);
   if (ping && ping.ok) {
     await loadContacts();
@@ -93,6 +93,7 @@ function bindSendForm() {
     sendMsg.className = "msg";
     sendMsg.textContent = "Sending...";
     const res = await send({ type: "SEND_MESSAGE", body: { contactId: Number(selectedContact.id), text } });
+    console.log("[PU] SEND_MESSAGE response", res);
     if (res && res.ok) {
       sendMsg.className = "msg ok";
       sendMsg.textContent = "Sent";
@@ -108,7 +109,7 @@ function bindSendForm() {
 }
 
 async function loadContacts() {
-  const res = await send("GET_CONTACTS");
+  const res = await send({ type: "GET_CONTACTS" });
   if (res && res.ok && Array.isArray(res.data)) {
     render(res.data);
   } else {
