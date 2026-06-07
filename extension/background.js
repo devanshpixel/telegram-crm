@@ -41,6 +41,49 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+  if (msg?.type === "UPDATE_CONTACT") {
+    const contactId = msg?.body?.contactId;
+    fetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(msg.body.patch || {}),
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, data: body };
+      })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "ADD_TAG") {
+    fetch(CRM_BASE + "/api/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(msg.body),
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, data: body };
+      })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "DELETE_TAG") {
+    fetch(CRM_BASE + "/api/tags", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(msg.body),
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, data: body };
+      })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
   if (msg?.type === "SEND_MESSAGE") {
     console.log("[BG] SEND_MESSAGE incoming", msg);
     const url = CRM_BASE + "/api/messages";

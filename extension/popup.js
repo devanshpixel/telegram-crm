@@ -4,6 +4,9 @@ let allContacts = [];
 let searchTerm = "";
 let selectedContact = null;
 let currentDetailsId = null;
+let currentProfile = null;
+let editMode = false;
+let editFields = null;
 
 const dom = {
   status: document.getElementById("status"),
@@ -39,7 +42,30 @@ function injectStyles() {
     ".details .details-tags{display:flex;flex-wrap:wrap;gap:4px;}" +
     ".details .details-tag{background:#1f1f23;color:#c4b5fd;padding:1px 6px;border-radius:6px;font-size:10px;}" +
     ".details .details-err{color:#fca5a5;grid-column:1/-1;}" +
-    ".details .details-empty{color:#6b6b75;grid-column:1/-1;}";
+    ".details .details-empty{color:#6b6b75;grid-column:1/-1;}" +
+    ".details-edit-btn{background:transparent;border:1px solid #2a2a30;color:#c4b5fd;border-radius:6px;padding:4px 10px;font:inherit;cursor:pointer;margin-top:6px;}" +
+    ".details-edit-btn:hover{background:#15151a;}" +
+    ".details-edit-form{display:flex;flex-direction:column;gap:6px;}" +
+    ".details-edit-row{display:flex;flex-direction:column;gap:2px;}" +
+    ".details-edit-label{color:#6b6b75;font-size:10px;}" +
+    ".details-edit-input{background:#15151a;border:1px solid #2a2a30;color:#e7e7ea;border-radius:6px;padding:4px 8px;font:inherit;}" +
+    ".details-edit-input:focus{outline:none;border-color:#7c3aed;}" +
+    ".details-edit-tags{display:flex;flex-wrap:wrap;gap:4px;}" +
+    ".details-edit-tag-pill{background:#1f1f23;color:#c4b5fd;padding:1px 4px 1px 6px;border-radius:6px;font-size:10px;display:inline-flex;align-items:center;gap:2px;}" +
+    ".details-edit-tag-x{background:transparent;border:0;color:#8a8a93;cursor:pointer;font-size:11px;padding:0 2px;}" +
+    ".details-edit-tag-x:hover{color:#fca5a5;}" +
+    ".details-edit-add-row{display:flex;gap:4px;}" +
+    ".details-edit-add-input{flex:1;background:#15151a;border:1px solid #2a2a30;color:#e7e7ea;border-radius:6px;padding:3px 6px;font:inherit;}" +
+    ".details-edit-add-input:focus{outline:none;border-color:#7c3aed;}" +
+    ".details-edit-add-btn{background:#7c3aed;color:#fff;border:0;border-radius:6px;padding:3px 8px;font:inherit;cursor:pointer;}" +
+    ".details-edit-actions{display:flex;gap:6px;margin-top:4px;}" +
+    ".details-edit-save{background:#7c3aed;color:#fff;border:0;}" +
+    ".details-edit-save:hover{background:#6d28d9;}" +
+    ".details-edit-save:disabled{opacity:0.5;cursor:not-allowed;}" +
+    ".details-edit-cancel{background:transparent;color:#e7e7ea;border:1px solid #2a2a30;}" +
+    ".details-edit-cancel:hover{background:#15151a;}" +
+    ".details-edit-err{color:#fca5a5;font-size:10px;min-height:0;}" +
+    ".details-edit-err:empty{display:none;}";
   document.head.appendChild(s);
 }
 
@@ -221,12 +247,251 @@ function renderDetailsPanel(profile) {
     }
   }
   dom.detailsPanel.appendChild(tagWrap);
+
+  currentProfile = profile;
+  editMode = false;
+  editFields = null;
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "details-edit-btn";
+  editBtn.textContent = "Edit";
+  editBtn.addEventListener("click", enterEditMode);
+  dom.detailsPanel.appendChild(editBtn);
 }
 
 function hideDetailsPanel() {
   currentDetailsId = null;
   clear(dom.detailsPanel);
   dom.detailsPanel.style.display = "none";
+}
+
+function enterEditMode() {
+  if (!currentProfile) return;
+  editMode = true;
+  editFields = {
+    name: currentProfile.name || "",
+    username: currentProfile.username || "",
+    phone: currentProfile.phone || "",
+    tags: Array.isArray(currentProfile.tags) ? currentProfile.tags.slice() : [],
+  };
+  renderEditForm();
+}
+
+function exitEditMode() {
+  editMode = false;
+  editFields = null;
+  if (currentProfile) renderDetailsPanel(currentProfile);
+  else { clear(dom.detailsPanel); dom.detailsPanel.style.display = "none"; }
+}
+
+function renderEditForm() {
+  clear(dom.detailsPanel);
+
+  const form = document.createElement("div");
+  form.className = "details-edit-form";
+
+  const nameInput = makeEditInput("name", "Name", editFields.name);
+  const userInput = makeEditInput("username", "Username (with or without @)", editFields.username);
+  const phoneInput = makeEditInput("phone", "Phone", editFields.phone);
+
+  const tagsWrap = document.createElement("div");
+  tagsWrap.className = "details-edit-row";
+  const tagsLabel = document.createElement("div");
+  tagsLabel.className = "details-edit-label";
+  tagsLabel.textContent = "Tags";
+  tagsWrap.appendChild(tagsLabel);
+  const tagsBox = document.createElement("div");
+  tagsBox.id = "editTagsBox";
+  tagsBox.className = "details-edit-tags";
+  tagsWrap.appendChild(tagsBox);
+  renderEditTags();
+  const addRow = document.createElement("div");
+  addRow.className = "details-edit-add-row";
+  const addInput = document.createElement("input");
+  addInput.id = "editTagInput";
+  addInput.className = "details-edit-add-input";
+  addInput.type = "text";
+  addInput.placeholder = "Add tag...";
+  addInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const v = addInput.value.trim();
+      if (v) { addEditTag(v); addInput.value = ""; }
+    }
+  });
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "details-edit-add-btn";
+  addBtn.textContent = "Add";
+  addBtn.addEventListener("click", () => {
+    const v = addInput.value.trim();
+    if (v) { addEditTag(v); addInput.value = ""; }
+  });
+  addRow.appendChild(addInput);
+  addRow.appendChild(addBtn);
+  tagsWrap.appendChild(addRow);
+
+  const actions = document.createElement("div");
+  actions.className = "details-edit-actions";
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.id = "editSaveBtn";
+  saveBtn.className = "details-edit-btn details-edit-save";
+  saveBtn.textContent = "Save";
+  saveBtn.addEventListener("click", () => saveEdit(String(currentDetailsId)));
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "details-edit-btn details-edit-cancel";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", exitEditMode);
+  actions.appendChild(saveBtn);
+  actions.appendChild(cancelBtn);
+
+  const errEl = document.createElement("div");
+  errEl.id = "editErr";
+  errEl.className = "details-edit-err";
+
+  form.appendChild(nameInput.row);
+  form.appendChild(userInput.row);
+  form.appendChild(phoneInput.row);
+  form.appendChild(tagsWrap);
+  form.appendChild(actions);
+  form.appendChild(errEl);
+  dom.detailsPanel.appendChild(form);
+
+  const refreshSaveState = () => {
+    const nameEmpty = !nameInput.input.value.trim();
+    const userEmpty = !userInput.input.value.trim();
+    saveBtn.disabled = nameEmpty || userEmpty;
+  };
+  nameInput.input.addEventListener("input", () => {
+    editFields.name = nameInput.input.value;
+    refreshSaveState();
+  });
+  userInput.input.addEventListener("input", () => {
+    editFields.username = userInput.input.value;
+    refreshSaveState();
+  });
+  phoneInput.input.addEventListener("input", () => {
+    editFields.phone = phoneInput.input.value;
+  });
+  refreshSaveState();
+}
+
+function makeEditInput(field, label, value) {
+  const row = document.createElement("div");
+  row.className = "details-edit-row";
+  const l = document.createElement("div");
+  l.className = "details-edit-label";
+  l.textContent = label;
+  const i = document.createElement("input");
+  i.type = "text";
+  i.className = "details-edit-input";
+  i.value = value;
+  i.dataset.field = field;
+  row.appendChild(l);
+  row.appendChild(i);
+  return { row, input: i };
+}
+
+function renderEditTags() {
+  const box = document.getElementById("editTagsBox");
+  if (!box) return;
+  clear(box);
+  for (const t of editFields.tags) {
+    const pill = document.createElement("span");
+    pill.className = "details-edit-tag-pill";
+    pill.textContent = t;
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "details-edit-tag-x";
+    x.textContent = "×";
+    x.addEventListener("click", () => removeEditTag(t));
+    pill.appendChild(x);
+    box.appendChild(pill);
+  }
+}
+
+function addEditTag(name) {
+  const trimmed = String(name).trim();
+  if (!trimmed) return;
+  const exists = editFields.tags.some((t) => t.toLowerCase() === trimmed.toLowerCase());
+  if (exists) return;
+  editFields.tags.push(trimmed);
+  renderEditTags();
+}
+
+function removeEditTag(name) {
+  const lower = String(name).toLowerCase();
+  editFields.tags = editFields.tags.filter((t) => t.toLowerCase() !== lower);
+  renderEditTags();
+}
+
+function setEditError(text) {
+  const el = document.getElementById("editErr");
+  if (el) el.textContent = text || "";
+}
+
+async function saveEdit(contactId) {
+  const saveBtn = document.getElementById("editSaveBtn");
+  const targetId = String(contactId);
+  if (!editFields || !saveBtn) return;
+  if (!editFields.name.trim()) {
+    setEditError("Name is required");
+    return;
+  }
+  if (!editFields.username.trim()) {
+    setEditError("Username is required");
+    return;
+  }
+  saveBtn.disabled = true;
+  setEditError("");
+
+  const patch = {
+    name: editFields.name.trim(),
+    username: editFields.username.trim(),
+    phone: editFields.phone.trim(),
+  };
+  const originalTags = Array.isArray(currentProfile?.tags) ? currentProfile.tags : [];
+  const added = editFields.tags.filter((t) => !originalTags.some((o) => o.toLowerCase() === t.toLowerCase()));
+  const removed = originalTags.filter((o) => !editFields.tags.some((t) => t.toLowerCase() === o.toLowerCase()));
+
+  const patchRes = await send({ type: "UPDATE_CONTACT", body: { contactId: targetId, patch } });
+  if (currentDetailsId !== targetId) return;
+  if (!patchRes || !patchRes.ok) {
+    setEditError(((patchRes && patchRes.data && patchRes.data.error) || (patchRes && patchRes.error) || "Update failed"));
+    saveBtn.disabled = false;
+    return;
+  }
+
+  let partialTagFail = false;
+  for (const name of added) {
+    const r = await send({ type: "ADD_TAG", body: { contactId: targetId, name } });
+    if (!r || !r.ok) partialTagFail = true;
+  }
+  for (const name of removed) {
+    const r = await send({ type: "DELETE_TAG", body: { contactId: targetId, name } });
+    if (!r || !r.ok) partialTagFail = true;
+  }
+
+  const canon = await send({ type: "GET_CONTACT", body: { contactId: targetId } });
+  if (currentDetailsId !== targetId) return;
+  if (canon && canon.ok && canon.data) {
+    currentProfile = canon.data;
+    editMode = false;
+    editFields = null;
+    renderDetailsPanel(canon.data);
+    await loadContacts();
+  } else {
+    setEditError("Saved, but failed to refresh details");
+    saveBtn.disabled = false;
+    return;
+  }
+
+  if (partialTagFail) {
+    setEditError("Saved. Some tag changes failed.");
+  }
 }
 
 function selectContact(c) {
