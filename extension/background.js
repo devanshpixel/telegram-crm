@@ -165,4 +165,35 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+  if (msg?.type === "ADD_NOTE") {
+    fetch(CRM_BASE + "/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId: msg?.body?.contactId, content: msg?.body?.content }),
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, data: body };
+      })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "CREATE_FOLLOWUP") {
+    // No dedicated followup schedule table exists — store as a note with [FOLLOWUP] prefix.
+    const { contactId, message, scheduledAt } = msg?.body || {};
+    const content = "[FOLLOWUP " + (scheduledAt || "TBD") + "] " + (message || "");
+    fetch(CRM_BASE + "/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId, content }),
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, data: body };
+      })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
 });
