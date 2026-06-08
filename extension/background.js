@@ -127,7 +127,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg?.type === "SEND_MESSAGE") {
     console.log("[BG] SEND_MESSAGE incoming", msg);
-    const url = CRM_BASE + "/api/messages";
+    const url = CRM_BASE + "/api/telegram/send";
     const bodyStr = JSON.stringify(msg.body);
     console.log("[BG] SEND_MESSAGE request", { url, method: "POST", body: bodyStr });
     fetch(url, {

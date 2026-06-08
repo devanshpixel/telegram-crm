@@ -3,14 +3,8 @@ import { Api } from "telegram";
 import { getDb } from "@/lib/db";
 import { createMessage } from "@/lib/db/service";
 import type { ContactRow } from "@/lib/db/types";
+import type { Message } from "@/types";
 import { getTelegramClient } from "./client";
-
-export interface SendTelegramMessageResult {
-  contactId: number;
-  telegramMessageId: number;
-  text: string;
-  sentAt: string;
-}
 
 async function ensureConnected(): Promise<void> {
   const client = getTelegramClient();
@@ -35,7 +29,7 @@ function buildPeer(contact: ContactRow): Api.InputPeerUser {
 export async function sendTelegramMessage(
   contactId: number,
   text: string,
-): Promise<SendTelegramMessageResult> {
+): Promise<Message> {
   const trimmedText = text.trim();
   if (!trimmedText) {
     throw new Error("Message text cannot be empty");
@@ -66,10 +60,5 @@ export async function sendTelegramMessage(
     throw new Error(`No conversation found for contact ${contactId}`);
   }
 
-  return {
-    contactId,
-    telegramMessageId: sent.id,
-    text: trimmedText,
-    sentAt: saved.timestamp.toISOString(),
-  };
+  return saved;
 }

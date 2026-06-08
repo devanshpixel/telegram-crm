@@ -4,13 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   addNoteApi,
   addTagApi,
-  createMessageApi,
   deleteContactApi,
   deleteTagApi,
   fetchChats,
   fetchContact,
   fetchMessages,
   fetchStats,
+  sendTelegramMessageApi,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Chat, ContactProfile, DashboardStats, Message } from "@/types";
@@ -133,11 +133,9 @@ export function Dashboard({
   const handleSendMessage = useCallback(
     async (text: string) => {
       if (!activeChatId) return;
-      const message = await createMessageApi(activeChatId, text);
-      setMessages((prev) => ({
-        ...prev,
-        [activeChatId]: [...(prev[activeChatId] ?? []), message],
-      }));
+      await sendTelegramMessageApi(Number(activeChatId), text);
+      const msgs = await fetchMessages(activeChatId);
+      setMessages((prev) => ({ ...prev, [activeChatId]: msgs }));
       await refreshAll();
     },
     [activeChatId, refreshAll],
