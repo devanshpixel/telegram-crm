@@ -21,7 +21,7 @@ Completed:
 Known Issues:
 
 - ~~SEND_MESSAGE broken (DB write only)~~ **FIXED — S1**
-- Sidebar race condition
+- ~~Sidebar race condition~~ **FIXED — S2**
 - Cache invalidation pending
 
 Verified:
@@ -32,7 +32,8 @@ Verified:
 Completed Priorities:
 
 - **S1** Telegram sending architecture (DB write only) — Dashboard.tsx + background.js URLs changed to /api/telegram/send
+- **S2** Sidebar race condition — content.js generation protection for lookupCRMContact + stale check for refreshSidebarProfile
 
 Current Priority:
 
-S2 - Sidebar race condition
+S3 - Cache invalidation
