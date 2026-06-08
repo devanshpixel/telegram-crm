@@ -163,6 +163,7 @@ function findContactByName(name) {
 }
 
 async function lookupCRMContact() {
+  const gen = ++lookupCRMContact._generation;
   const username = detectCurrentUsername();
   const name = detectCurrentName();
   const peerId = detectPeerId();
@@ -183,6 +184,7 @@ async function lookupCRMContact() {
   // Refresh cache periodically — but only if it's stale
   if (contactsCache.length === 0) {
     await refreshContactsCache();
+    if (gen !== lookupCRMContact._generation) return;
   }
 
   // Try username first, then name
@@ -199,6 +201,7 @@ async function lookupCRMContact() {
     type: "GET_CONTACT",
     body: { contactId: String(chat.id) },
   });
+  if (gen !== lookupCRMContact._generation) return;
   if (res && res.ok && res.data) {
     currentProfile = res.data;
     renderSidebar(res.data, null);
@@ -207,6 +210,7 @@ async function lookupCRMContact() {
   }
 }
 lookupCRMContact._lastKey = "";
+lookupCRMContact._generation = 0;
 
 // ─── Sidebar Shell ────────────────────────────────────────────────────────────
 
@@ -844,10 +848,17 @@ async function sidebarToggleLabel(contactId, labelKey, add) {
 }
 
 async function refreshSidebarProfile(contactId) {
+  // Verify the current conversation still matches this contact
+  const curName = detectCurrentName();
+  const curUser = detectCurrentUsername();
+  const curPeerId = detectPeerId();
+  const curKey = (curUser || "") + "|" + (curName || "") + "|" + (curPeerId || "");
+  if (lookupCRMContact._lastKey && lookupCRMContact._lastKey !== curKey) return;
   const res = await send({
     type: "GET_CONTACT",
     body: { contactId: String(contactId) },
   });
+  if (lookupCRMContact._lastKey && lookupCRMContact._lastKey !== curKey) return;
   if (res && res.ok && res.data) {
     currentProfile = res.data;
     // Refresh contacts cache entry too
