@@ -206,6 +206,7 @@ async function lookupCRMContact() {
     currentProfile = res.data;
     renderSidebar(res.data, null);
   } else {
+    lookupCRMContact._lastKey = "";
     renderSidebar(null, { username, name, peerId });
   }
 }

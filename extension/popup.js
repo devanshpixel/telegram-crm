@@ -804,6 +804,7 @@ function bindSendForm() {
     if (res && res.ok) {
       setMessage(dom.sendMsg, "Sent", "ok");
       dom.sendText.value = "";
+      delete historyCache[selectedContact.id];
       await loadContacts();
       setTimeout(() => setMessage(dom.sendMsg, ""), 2000);
     } else {
@@ -2097,6 +2098,8 @@ async function toggleLabelOnContact(contactId, labelKey, add) {
   const type = add ? "ADD_TAG" : "DELETE_TAG";
   const res = await send({ type, body: { contactId: Number(contactId), name: labelKey } });
   if (!res || !res.ok) return;
+  delete historyCache[contactId];
+  delete timelineCache[contactId];
   // Re-fetch and re-render the details panel
   const fresh = await send({ type: "GET_CONTACT", body: { contactId } });
   if (fresh && fresh.ok && fresh.data && currentDetailsId === String(contactId)) {
