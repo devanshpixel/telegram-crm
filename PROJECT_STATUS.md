@@ -20,7 +20,7 @@ Completed:
 
 Known Issues:
 
-- SEND_MESSAGE broken (DB write only)
+- ~~SEND_MESSAGE broken (DB write only)~~ **FIXED — S1**
 - Sidebar race condition
 - Cache invalidation pending
 
@@ -29,6 +29,10 @@ Verified:
 - XSS issue fixed
 - DELETE body issue false alarm
 
+Completed Priorities:
+
+- **S1** Telegram sending architecture (DB write only) — Dashboard.tsx + background.js URLs changed to /api/telegram/send
+
 Current Priority:
 
-S1 - Telegram sending architecture
+S2 - Sidebar race condition
