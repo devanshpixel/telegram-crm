@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-123d6c3
+6b81b54
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -26,6 +26,8 @@ Completed:
 - C3 AI Reply CRM web UI
 - C4 AI Reply extension popup UI
 - BK1 Backup CLI
+- LG1 Auth library additions (getLoginStatus, signOut, checkPassword)
+- LG2 Login API routes (send-code, verify-code, status, sign-out)
 
 AI Reply MVP:
 COMPLETE
@@ -40,7 +42,7 @@ Known Issues:
 
 Release Status:
 BLOCKED by:
-- **Login UI** — server-side auth exists, no API routes, no UI
+- **Login UI** — auth library + API routes exist (LG1+LG2), no UI modal yet (LG3+LG4)
 - **Backup** — CLI exists (BK1), no API/UI yet
 - **Auth** — all 21 API routes completely unprotected
 
@@ -64,5 +66,7 @@ Completed Priorities:
 - **C3** CRM web UI: Sparkles Generate Reply button
 - **C4** Extension popup: ✨ AI Generate Reply button
 - **BK1** Backup CLI — scripts/backup.ts using db.backup(), WAL-safe, timestamped
+- **LG1** Auth library — getLoginStatus(), signOut(), checkPassword() in auth.ts
+- **LG2** Login API routes — send-code, verify-code, status, sign-out
 
 See V1_RELEASE_PLAN.md for full execution plan.
