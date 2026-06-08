@@ -276,3 +276,40 @@ export async function sendTelegramMessageApi(
     }),
   );
 }
+
+export async function telegramSendCode(
+  phone: string,
+): Promise<{ isCodeViaApp: boolean }> {
+  return parseJson<{ isCodeViaApp: boolean }>(
+    await fetch("/api/telegram/send-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone }),
+    }),
+  );
+}
+
+export async function telegramVerifyCode(
+  phone: string,
+  code: string,
+): Promise<{ success: true } | { needs2fa: true; error: string }> {
+  return parseJson<{ success: true } | { needs2fa: true; error: string }>(
+    await fetch("/api/telegram/verify-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, code }),
+    }),
+  );
+}
+
+export async function telegramStatus(): Promise<{ authenticated: boolean }> {
+  return parseJson<{ authenticated: boolean }>(
+    await fetch("/api/telegram/status"),
+  );
+}
+
+export async function telegramSignOut(): Promise<{ success: boolean }> {
+  return parseJson<{ success: boolean }>(
+    await fetch("/api/telegram/sign-out", { method: "POST" }),
+  );
+}
