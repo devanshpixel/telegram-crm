@@ -23,6 +23,26 @@ function tagVariant(
 
 export function TagsSection({ profile, onAddTag, onDeleteTag }: TagsSectionProps) {
   const [showForm, setShowForm] = useState(false);
+  const [tagError, setTagError] = useState("");
+
+  const handleDeleteTag = async (tag: string) => {
+    setTagError("");
+    try {
+      await onDeleteTag(tag);
+    } catch (e) {
+      setTagError(e instanceof Error ? e.message : "Failed to remove tag");
+    }
+  };
+
+  const handleAddTag = async (name: string) => {
+    setTagError("");
+    try {
+      await onAddTag(name);
+      setShowForm(false);
+    } catch (e) {
+      setTagError(e instanceof Error ? e.message : "Failed to add tag");
+    }
+  };
 
   return (
     <section className="border-b border-border px-5 py-5">
@@ -44,13 +64,14 @@ export function TagsSection({ profile, onAddTag, onDeleteTag }: TagsSectionProps
           </button>
         )}
       </div>
+      {tagError && <p className="mb-2 text-xs text-rose-400">{tagError}</p>}
       <div className="flex flex-wrap gap-2">
         {profile.tags.map((tag) => (
           <Badge key={tag} variant={tagVariant(tag)} className="group relative pr-6">
             {tag}
             <button
               type="button"
-              onClick={() => void onDeleteTag(tag)}
+              onClick={() => void handleDeleteTag(tag)}
               className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100"
               aria-label={`Remove ${tag} tag`}
             >
@@ -61,10 +82,7 @@ export function TagsSection({ profile, onAddTag, onDeleteTag }: TagsSectionProps
       </div>
       {showForm && (
         <AddTagForm
-          onSubmit={async (name) => {
-            await onAddTag(name);
-            setShowForm(false);
-          }}
+          onSubmit={handleAddTag}
           onCancel={() => setShowForm(false)}
         />
       )}

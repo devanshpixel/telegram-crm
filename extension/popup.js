@@ -2097,7 +2097,11 @@ function deleteSnippet(id) {
 async function toggleLabelOnContact(contactId, labelKey, add) {
   const type = add ? "ADD_TAG" : "DELETE_TAG";
   const res = await send({ type, body: { contactId: Number(contactId), name: labelKey } });
-  if (!res || !res.ok) return;
+  if (!res || !res.ok) {
+    setMessage(dom.sendMsg, "Failed to update label", "err");
+    setTimeout(() => setMessage(dom.sendMsg, ""), 3000);
+    return;
+  }
   delete historyCache[contactId];
   delete timelineCache[contactId];
   // Re-fetch and re-render the details panel

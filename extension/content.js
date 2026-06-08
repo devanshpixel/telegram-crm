@@ -845,6 +845,10 @@ async function sidebarToggleLabel(contactId, labelKey, add) {
   });
   if (res && res.ok) {
     await refreshSidebarProfile(contactId);
+  } else if (!res) {
+    console.error("[CRM] Label toggle failed: no response");
+  } else if (!res.ok) {
+    console.error("[CRM] Label toggle failed:", res.status, res.data);
   }
 }
 
@@ -894,16 +898,21 @@ function startObserver() {
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 async function boot() {
-  // Pre-load contacts cache
-  await refreshContactsCache();
+  try {
+    await refreshContactsCache();
+  } catch (e) {
+    console.error("[CRM] Failed to load contacts cache:", e);
+  }
 
   ensureSidebarRoot();
   ensureToggleBtn();
 
-  // Initial lookup
-  await lookupCRMContact();
+  try {
+    await lookupCRMContact();
+  } catch (e) {
+    console.error("[CRM] Failed initial sidebar lookup:", e);
+  }
 
-  // Watch for DOM changes (chat navigation)
   startObserver();
 }
 

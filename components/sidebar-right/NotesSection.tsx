@@ -13,6 +13,7 @@ export function NotesSection({ profile, onSaveNote }: NotesSectionProps) {
   const [notes, setNotes] = useState(profile.notes);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setNotes(profile.notes);
@@ -22,10 +23,13 @@ export function NotesSection({ profile, onSaveNote }: NotesSectionProps) {
     if (!notes.trim()) return;
     setSaving(true);
     setSaved(false);
+    setError("");
     try {
       await onSaveNote(notes);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save note");
     } finally {
       setSaving(false);
     }
@@ -49,6 +53,7 @@ export function NotesSection({ profile, onSaveNote }: NotesSectionProps) {
           {saving ? "Saving..." : saved ? "Saved" : "Save note"}
         </button>
       </div>
+      {error && <p className="mb-2 text-xs text-rose-400">{error}</p>}
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
