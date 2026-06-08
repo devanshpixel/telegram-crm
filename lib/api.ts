@@ -313,3 +313,15 @@ export async function telegramSignOut(): Promise<{ success: boolean }> {
     await fetch("/api/telegram/sign-out", { method: "POST" }),
   );
 }
+
+export async function telegramVerifyPassword(
+  password: string,
+): Promise<{ success: boolean }> {
+  return parseJson<{ success: boolean }>(
+    await fetch("/api/telegram/verify-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    }),
+  );
+}

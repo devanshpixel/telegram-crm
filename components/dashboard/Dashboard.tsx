@@ -11,6 +11,7 @@ import {
   fetchMessages,
   fetchStats,
   sendTelegramMessageApi,
+  telegramStatus,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Chat, ContactProfile, DashboardStats, Message } from "@/types";
@@ -22,6 +23,7 @@ import { AnalyticsModal } from "./AnalyticsModal";
 import { BroadcastModal } from "./BroadcastModal";
 import { ReengagementModal } from "./ReengagementModal";
 import { CreateContactModal } from "@/components/forms/CreateContactModal";
+import { TelegramLoginModal } from "@/components/forms/TelegramLoginModal";
 
 type MobilePanel = "list" | "chat" | "crm";
 
@@ -60,6 +62,8 @@ export function Dashboard({
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [showReengagement, setShowReengagement] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const activeChat = chats.find((c) => c.id === activeChatId);
   const activeProfile = profiles[activeChatId];
@@ -94,6 +98,12 @@ export function Dashboard({
     void loadProfile(activeChatId);
     void loadMessages(activeChatId);
   }, [activeChatId, loadProfile, loadMessages]);
+
+  useEffect(() => {
+    telegramStatus()
+      .then((result) => setAuthenticated(result.authenticated))
+      .catch(() => setAuthenticated(false));
+  }, []);
 
   const handleSelectChat = useCallback((id: string) => {
     setActiveChatId(id);
@@ -194,6 +204,8 @@ export function Dashboard({
       <div className="flex h-dvh flex-col bg-black">
         <TopStatsBar
           stats={stats}
+          authenticated={authenticated}
+          onConnectTelegram={() => setShowLoginModal(true)}
           onOpenAnalytics={() => setShowAnalytics(true)}
           onOpenBroadcast={() => setShowBroadcast(true)}
           onOpenReengagement={() => setShowReengagement(true)}
@@ -216,6 +228,14 @@ export function Dashboard({
           open={showCreateModal}
           onClose={() => setShowCreateModal(false)}
           onCreated={handleContactCreated}
+        />
+        <TelegramLoginModal
+          open={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onAuthenticated={() => {
+            setAuthenticated(true);
+            setShowLoginModal(false);
+          }}
         />
         <AnalyticsModal
           open={showAnalytics}
@@ -248,6 +268,8 @@ export function Dashboard({
     <div className="flex h-dvh min-h-dvh w-full flex-col overflow-hidden bg-black">
       <TopStatsBar
         stats={stats}
+        authenticated={authenticated}
+        onConnectTelegram={() => setShowLoginModal(true)}
         onOpenAnalytics={() => setShowAnalytics(true)}
         onOpenBroadcast={() => setShowBroadcast(true)}
         onOpenReengagement={() => setShowReengagement(true)}
@@ -330,6 +352,14 @@ export function Dashboard({
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreated={handleContactCreated}
+      />
+      <TelegramLoginModal
+        open={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onAuthenticated={() => {
+          setAuthenticated(true);
+          setShowLoginModal(false);
+        }}
       />
       <AnalyticsModal
         open={showAnalytics}

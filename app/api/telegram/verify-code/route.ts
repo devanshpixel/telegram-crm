@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Verification failed";
     if (message.toLowerCase().includes("two-factor") || message.toLowerCase().includes("password")) {
-      return NextResponse.json({ error: message, needs2fa: true }, { status: 400 });
+      return NextResponse.json({ error: message, needs2fa: true }, { status: 200 });
     }
     return NextResponse.json({ error: message, code: "VERIFY_CODE_FAILED" }, { status: 500 });
   }

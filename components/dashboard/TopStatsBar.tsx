@@ -8,6 +8,8 @@ import { BarChart3, Download, Loader2, MessageCircle, Radio, RefreshCw, Send, Sp
 
 interface TopStatsBarProps {
   stats: DashboardStats;
+  authenticated: boolean;
+  onConnectTelegram: () => void;
   onOpenAnalytics?: () => void;
   onOpenBroadcast?: () => void;
   onOpenReengagement?: () => void;
@@ -15,6 +17,8 @@ interface TopStatsBarProps {
 
 export function TopStatsBar({
   stats,
+  authenticated,
+  onConnectTelegram,
   onOpenAnalytics,
   onOpenBroadcast,
   onOpenReengagement,
@@ -89,14 +93,25 @@ export function TopStatsBar({
           highlight
           className="hidden sm:flex"
         />
-        <button
-          type="button"
-          onClick={handleImport}
-          disabled={importing}
-          aria-label="Import contacts from Telegram"
-          title={importStatus || "Import contacts from Telegram"}
-          className="flex items-center gap-1.5 rounded-xl border border-border bg-surface-card px-2.5 py-1.5 text-text-secondary hover:bg-surface-hover disabled:opacity-50 sm:px-3 sm:py-2"
-        >
+        {!authenticated ? (
+          <button
+            type="button"
+            onClick={onConnectTelegram}
+            className="flex items-center gap-1.5 rounded-xl border border-accent/50 bg-accent/10 px-2.5 py-1.5 text-accent hover:bg-accent/20 sm:px-3 sm:py-2"
+          >
+            <Send className="h-3.5 w-3.5" />
+            <span className="hidden text-xs font-medium sm:inline">Connect Telegram</span>
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleImport}
+              disabled={importing}
+              aria-label="Import contacts from Telegram"
+              title={importStatus || "Import contacts from Telegram"}
+              className="flex items-center gap-1.5 rounded-xl border border-border bg-surface-card px-2.5 py-1.5 text-text-secondary hover:bg-surface-hover disabled:opacity-50 sm:px-3 sm:py-2"
+            >
           {importing ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
@@ -145,7 +160,7 @@ export function TopStatsBar({
             <span className="hidden text-xs font-medium sm:inline">Campaigns</span>
           </button>
         )}
-        {onOpenAnalytics && (
+          {onOpenAnalytics && (
           <button
             type="button"
             onClick={onOpenAnalytics}
@@ -155,6 +170,8 @@ export function TopStatsBar({
             <BarChart3 className="h-3.5 w-3.5" />
             <span className="hidden text-xs font-medium sm:inline">Analytics</span>
           </button>
+        )}
+          </>
         )}
       </div>
     </header>
