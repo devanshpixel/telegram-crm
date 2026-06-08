@@ -1,17 +1,42 @@
 "use client";
 
-import { Mic, Paperclip, Send, Smile } from "lucide-react";
+import { Mic, Paperclip, Send, Smile, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 interface MessageInputProps {
   contactName: string;
+  contactId: string;
   onSend: (text: string) => Promise<void>;
 }
 
-export function MessageInput({ contactName, onSend }: MessageInputProps) {
+export function MessageInput({ contactName, contactId, onSend }: MessageInputProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+
+  const handleGenerate = async () => {
+    if (generating) return;
+    setGenerating(true);
+    setError("");
+    try {
+      const res = await fetch("/api/ai/suggest-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactId: Number(contactId) }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || "Failed to generate reply");
+      }
+      const { suggestion } = await res.json();
+      setDraft(suggestion);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to generate reply");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleSend = async () => {
     const text = draft.trim();
@@ -62,6 +87,15 @@ export function MessageInput({ contactName, onSend }: MessageInputProps) {
           disabled={sending}
           className="max-h-28 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[15px] text-text-primary placeholder:text-text-muted outline-none disabled:opacity-50"
         />
+        <button
+          type="button"
+          className="mb-0.5 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl text-text-muted transition hover:bg-surface-hover sm:flex disabled:opacity-40"
+          aria-label="Generate reply"
+          disabled={generating}
+          onClick={() => void handleGenerate()}
+        >
+          <Sparkles className={"h-5 w-5" + (generating ? " animate-pulse" : "")} />
+        </button>
         <button
           type="button"
           className="mb-0.5 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl text-text-muted transition hover:bg-surface-hover sm:flex"

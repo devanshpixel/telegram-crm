@@ -74,6 +74,7 @@ export function ConversationView({
 
       <MessageInput
         contactName={chat.name.split(" ")[0]}
+        contactId={chat.id}
         onSend={onSendMessage}
       />
     </main>
