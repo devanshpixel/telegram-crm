@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-6b81b54
+7a2c5ea
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -28,6 +28,7 @@ Completed:
 - BK1 Backup CLI
 - LG1 Auth library additions (getLoginStatus, signOut, checkPassword)
 - LG2 Login API routes (send-code, verify-code, status, sign-out)
+- LG3 API client functions + removed login stub
 
 AI Reply MVP:
 COMPLETE
@@ -42,7 +43,7 @@ Known Issues:
 
 Release Status:
 BLOCKED by:
-- **Login UI** — auth library + API routes exist (LG1+LG2), no UI modal yet (LG3+LG4)
+- **Login UI** — auth library + API routes + API client exist (LG1-3), no UI modal yet (LG4)
 - **Backup** — CLI exists (BK1), no API/UI yet
 - **Auth** — all 21 API routes completely unprotected
 
@@ -68,5 +69,6 @@ Completed Priorities:
 - **BK1** Backup CLI — scripts/backup.ts using db.backup(), WAL-safe, timestamped
 - **LG1** Auth library — getLoginStatus(), signOut(), checkPassword() in auth.ts
 - **LG2** Login API routes — send-code, verify-code, status, sign-out
+- **LG3** API client functions — telegramSendCode, telegramVerifyCode, telegramStatus, telegramSignOut
 
 See V1_RELEASE_PLAN.md for full execution plan.
