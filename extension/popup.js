@@ -23,6 +23,7 @@ let campaignName = "";
 let campaignMessage = "";
 let campaignSending = false;
 let campaignConfirming = false;
+let generating = false;
 
 let templatesOpen = false;
 let templatesView = "list";
@@ -72,6 +73,7 @@ const dom = {
   sendForm: document.getElementById("sendForm"),
   sendText: document.getElementById("sendText"),
   sendBtn: document.getElementById("sendBtn"),
+  genBtn: document.getElementById("genBtn"),
   sendMsg: document.getElementById("sendMsg"),
   newContact: document.getElementById("newContact"),
   fName: document.getElementById("fName"),
@@ -813,6 +815,36 @@ function bindSendForm() {
   // Snippet / trigger
   dom.sendText.addEventListener("input", onSendTextInput);
   dom.sendText.addEventListener("keydown", onSendTextKeydown);
+
+  dom.genBtn.addEventListener("click", async () => {
+    if (generating || !selectedContact) return;
+    generating = true;
+    dom.genBtn.disabled = true;
+    dom.genBtn.classList.add("generating");
+    dom.genBtn.textContent = "✨ ...";
+    setMessage(dom.sendMsg, "Generating...");
+    try {
+      const res = await send({
+        type: "GENERATE_REPLY",
+        body: { contactId: Number(selectedContact.id) },
+      });
+      if (res && res.ok && res.data && res.data.suggestion) {
+        dom.sendText.value = res.data.suggestion;
+        dom.sendText.focus();
+        setMessage(dom.sendMsg, "");
+      } else {
+        const err = (res && res.data && res.data.error) || (res && res.error) || "Generation failed";
+        setMessage(dom.sendMsg, err, "err");
+      }
+    } catch (e) {
+      setMessage(dom.sendMsg, "Generation failed", "err");
+    } finally {
+      generating = false;
+      dom.genBtn.disabled = false;
+      dom.genBtn.classList.remove("generating");
+      dom.genBtn.textContent = "✨ AI";
+    }
+  });
 }
 
 async function loadContacts() {

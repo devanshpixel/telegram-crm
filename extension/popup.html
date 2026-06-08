@@ -30,6 +30,9 @@
     .send-form input:focus { outline: none; border-color: #7c3aed; }
     .send-form button { background: #7c3aed; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
     .send-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .gen-btn { background: #2a2a30 !important; color: #c4b5fd !important; font-size: 11px; padding: 6px 8px !important; }
+    .gen-btn:hover:not(:disabled) { background: #3a3a42 !important; }
+    .gen-btn.generating { opacity: 0.5; pointer-events: none; }
     .selected { padding: 6px 12px; font-size: 11px; color: #8a8a93; border-top: 1px solid #1f1f23; }
     .followups-section { border-top: 1px solid #1f1f23; }
     .followups-header { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
@@ -262,6 +265,7 @@
   </div>
   <form id="sendForm" class="send-form" style="display:none">
     <input id="sendText" placeholder="Type a message..." required />
+    <button id="genBtn" type="button" class="gen-btn" title="Generate AI reply">✨ AI</button>
     <button id="sendBtn" type="submit">Send</button>
   </form>
   <div id="sendMsg"></div>

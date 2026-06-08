@@ -151,6 +151,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       });
     return true;
   }
+  if (msg?.type === "GENERATE_REPLY") {
+    const contactId = msg?.body?.contactId;
+    fetch(CRM_BASE + "/api/ai/suggest-reply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId }),
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, data: body };
+      })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
   if (msg?.type === "GET_TIMELINE") {
     const contactId = msg?.body?.contactId;
     const limit = msg?.body?.limit || 60;
