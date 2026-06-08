@@ -42,9 +42,10 @@ AI Reply MVP — Status:
   - Fetches last 20 messages via getMessagesByContactId
   - Builds transcript → OpenRouter (openrouter/free, native fetch)
   - Strict prompt: no quotes/prefixes/labels/explanations
-  - Pending: CRM web UI (MessageInput) and extension popup UI
+- **C3** CRM web UI: Sparkles button beside Send → calls API → populates draft
+  - handleGenerate: loading state, error display, pulse animation
+  - contactId threaded through ConversationView → MessageInput
 
 Current Priority:
 
-C3 - CRM web UI button (MessageInput.tsx)
 C4 - Extension popup UI (popup.js + background.js)
