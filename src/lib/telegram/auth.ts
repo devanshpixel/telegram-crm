@@ -1,4 +1,4 @@
-import { Api } from "telegram";
+import { Api, client as tgClient } from "telegram";
 import { getDb, nowIso } from "@/lib/db";
 import { getTelegramClient } from "./client";
 
@@ -102,5 +102,46 @@ export async function verifyCode(
     throw new Error("Failed to save Telegram session after sign-in");
   }
 
+  saveSessionString(sessionString);
+}
+
+export function getLoginStatus(): { authenticated: boolean } {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT id FROM telegram_sessions LIMIT 1")
+    .get() as { id: number } | undefined;
+  return { authenticated: !!row };
+}
+
+export async function signOut(): Promise<void> {
+  if (global.__telegramClient) {
+    try {
+      await global.__telegramClient.invoke(new Api.auth.LogOut());
+    } catch {
+      // Network error — still sign out locally
+    }
+    try {
+      await global.__telegramClient.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+  global.__telegramClient = undefined;
+  const db = getDb();
+  db.prepare("DELETE FROM telegram_sessions").run();
+}
+
+export async function checkPassword(password: string): Promise<void> {
+  await ensureConnected();
+  const client = getTelegramClient();
+  const { apiId, apiHash } = getApiCredentials();
+  await tgClient.auth.signInWithPassword(client, { apiId, apiHash }, {
+    password: async () => password,
+    onError: (err) => { throw err; },
+  });
+  const sessionString = client.session.save() as unknown as string;
+  if (!sessionString) {
+    throw new Error("Failed to save Telegram session after 2FA verification");
+  }
   saveSessionString(sessionString);
 }
