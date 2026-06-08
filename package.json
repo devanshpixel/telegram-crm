@@ -10,6 +10,7 @@
     "start:lan": "next start -H 0.0.0.0 -p 3000",
     "lint": "next lint",
     "db:seed": "tsx scripts/seed.ts",
+    "db:backup": "tsx scripts/backup.ts",
     "db:rebuild": "npm rebuild better-sqlite3",
     "telegram:login": "tsx scripts/telegram-login.ts",
     "postinstall": "node scripts/verify-sqlite.js"
