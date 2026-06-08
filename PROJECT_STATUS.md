@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-ed7e1e2
+123d6c3
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -25,6 +25,7 @@ Completed:
 - C2 AI Reply backend
 - C3 AI Reply CRM web UI
 - C4 AI Reply extension popup UI
+- BK1 Backup CLI
 
 AI Reply MVP:
 COMPLETE
@@ -40,7 +41,7 @@ Known Issues:
 Release Status:
 BLOCKED by:
 - **Login UI** — server-side auth exists, no API routes, no UI
-- **Backup** — zero backup code exists
+- **Backup** — CLI exists (BK1), no API/UI yet
 - **Auth** — all 21 API routes completely unprotected
 
 Other Known Issues:
@@ -62,5 +63,6 @@ Completed Priorities:
 - **C2** POST /api/ai/suggest-reply → OpenRouter (native fetch, strict prompt)
 - **C3** CRM web UI: Sparkles Generate Reply button
 - **C4** Extension popup: ✨ AI Generate Reply button
+- **BK1** Backup CLI — scripts/backup.ts using db.backup(), WAL-safe, timestamped
 
 See V1_RELEASE_PLAN.md for full execution plan.
