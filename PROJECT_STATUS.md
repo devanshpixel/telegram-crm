@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-a9f8578
+ed7e1e2
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -26,6 +26,9 @@ Completed:
 - C3 AI Reply CRM web UI
 - C4 AI Reply extension popup UI
 
+AI Reply MVP:
+COMPLETE
+
 Known Issues:
 
 - ~~SEND_MESSAGE broken~~ **FIXED — S1**
@@ -33,13 +36,21 @@ Known Issues:
 - ~~Cache invalidation~~ **FIXED — S3**
 - ~~AI Reply missing~~ **FIXED — C1..C4**
 - ~~Runtime error handling~~ **FIXED — S4**
-- No Telegram login UI (C30 CRITICAL — pre-dates this session)
-- No backup mechanism (C30 CRITICAL)
-- No auth middleware (C30 CRITICAL)
-- FLOOD_WAIT backoff missing (C30 HIGH)
+
+Release Status:
+BLOCKED by:
+- **Login UI** — server-side auth exists, no API routes, no UI
+- **Backup** — zero backup code exists
+- **Auth** — all 21 API routes completely unprotected
+
+Other Known Issues:
+
+- FLOOD_WAIT backoff missing (HIGH)
 - Placeholder extension icons (69 bytes)
 - Dashboard "Loading..." deadlock on stale activeChatId
 - No app/error.tsx boundary
+- No pagination on messages (C29 H7)
+- N+1 tags query in listChats (C29 H2)
 
 Completed Priorities:
 
@@ -52,19 +63,4 @@ Completed Priorities:
 - **C3** CRM web UI: Sparkles Generate Reply button
 - **C4** Extension popup: ✨ AI Generate Reply button
 
-Release Readiness:
-
-Tier 1 (blocking for v1.0):
-- [ ] Telegram login UI (phone/code/2FA form)
-- [ ] Backup mechanism (db.backup route or CLI)
-- [ ] Auth middleware (127.0.0.1 binding done, need CORS/auth for LAN)
-
-Tier 2 (should fix before v1.0):
-- [ ] FLOOD_WAIT backoff in broadcasts/reengagement
-- [ ] Real extension icons
-- [ ] Dashboard "Loading..." deadlock
-
-Tier 3 (nice to have):
-- [ ] app/error.tsx boundary
-- [ ] Pagination on messages (C29 H7)
-- [ ] Fix N+1 tags query in listChats (C29 H2)
+See V1_RELEASE_PLAN.md for full execution plan.
