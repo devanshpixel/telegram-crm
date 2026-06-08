@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-7a2c5ea
+e35de61
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -29,6 +29,8 @@ Completed:
 - LG1 Auth library additions (getLoginStatus, signOut, checkPassword)
 - LG2 Login API routes (send-code, verify-code, status, sign-out)
 - LG3 API client functions + removed login stub
+- LG4 Login modal component (3-step: phone → code → 2FA)
+- LG5 Dashboard integration + Connect button
 
 AI Reply MVP:
 COMPLETE
@@ -43,7 +45,7 @@ Known Issues:
 
 Release Status:
 BLOCKED by:
-- **Login UI** — auth library + API routes + API client exist (LG1-3), no UI modal yet (LG4)
+- **Login UI** — COMPLETE (LG1-5)
 - **Backup** — CLI exists (BK1), no API/UI yet
 - **Auth** — all 21 API routes completely unprotected
 
@@ -70,5 +72,7 @@ Completed Priorities:
 - **LG1** Auth library — getLoginStatus(), signOut(), checkPassword() in auth.ts
 - **LG2** Login API routes — send-code, verify-code, status, sign-out
 - **LG3** API client functions — telegramSendCode, telegramVerifyCode, telegramStatus, telegramSignOut
+- **LG4** Login modal — TelegramLoginModal.tsx with 3-step form
+- **LG5** Dashboard integration — status check on mount, Connect button, auth state
 
 See V1_RELEASE_PLAN.md for full execution plan.
