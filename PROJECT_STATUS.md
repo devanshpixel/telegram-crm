@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-e35de61
+fefae52
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -44,19 +44,19 @@ Known Issues:
 - ~~Runtime error handling~~ **FIXED — S4**
 
 Release Status:
-BLOCKED by:
-- **Login UI** — COMPLETE (LG1-5)
-- **Backup** — CLI exists (BK1), no API/UI yet
-- **Auth** — all 21 API routes completely unprotected
+**Near Release Candidate** — 15/16 checkpoints complete
+Remaining CRITICAL blocker:
+- **Auth** — all 25 API routes completely unprotected
 
 Other Known Issues:
 
-- FLOOD_WAIT backoff missing (HIGH)
-- Placeholder extension icons (69 bytes)
-- Dashboard "Loading..." deadlock on stale activeChatId
-- No app/error.tsx boundary
-- No pagination on messages (C29 H7)
-- N+1 tags query in listChats (C29 H2)
+- FLOOD_WAIT backoff missing (MEDIUM)
+- Backup API/UI (BK2) — CLI exists, no one-click backup (LOW)
+- Placeholder extension icons (69 bytes) (LOW)
+- Dashboard "Loading..." deadlock on stale activeChatId (LOW)
+- No app/error.tsx boundary (LOW)
+- No pagination on messages (C29 H7) (LOW)
+- N+1 tags query in listChats (C29 H2) (LOW)
 
 Completed Priorities:
 
