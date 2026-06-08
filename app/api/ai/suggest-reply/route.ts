@@ -19,7 +19,8 @@ export async function POST(request: Request) {
       return apiError("No messages found for this contact", 404);
     }
 
-    const suggestion = await suggestReply(messages);
+    const recent = messages.slice(-20);
+    const suggestion = await suggestReply(recent);
     return apiOk({ suggestion }, 200);
   } catch (e) {
     const message = e instanceof Error ? e.message : "AI reply generation failed";
