@@ -384,6 +384,14 @@ export async function fetchMedia(id: string): Promise<Media> {
   return parseJson<Media>(await crmFetch(`/api/media/${id}`));
 }
 
+export async function updateMediaPriceApi(id: string, price: number): Promise<Media> {
+  return parseJson<Media>(await crmFetch(`/api/media/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ price }),
+  }));
+}
+
 export async function deleteMediaApi(id: string): Promise<{ success: boolean }> {
   return parseJson<{ success: boolean }>(await crmFetch(`/api/media/${id}`, { method: "DELETE" }));
 }

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, Image, Loader2, Lock, Unlock } from "lucide-react";
-import { createMediaUnlockCheckoutSession, fetchContact, fetchContactMedia } from "@/lib/api";
+import { ExternalLink, Image, Loader2, Lock, Pencil, Unlock, X, Check } from "lucide-react";
+import { createMediaUnlockCheckoutSession, fetchContact, fetchContactMedia, updateMediaPriceApi } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import { PurchaseHistory } from "./PurchaseHistory";
 import type { Media, Purchase } from "@/types";
@@ -76,6 +76,9 @@ export function MediaGallery({ contactId }: MediaGalleryProps) {
 
 function MediaCard({ media, contactId }: { media: Media; contactId: number }) {
   const [checkingOut, setCheckingOut] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editPrice, setEditPrice] = useState(String(media.price));
+  const [currentPrice, setCurrentPrice] = useState(media.price);
 
   const isImage = media.mimeType.startsWith("image/");
   const date = new Date(media.createdAt);
@@ -84,11 +87,28 @@ function MediaCard({ media, contactId }: { media: Media; contactId: number }) {
   async function handleUnlock() {
     setCheckingOut(true);
     try {
-      const { sessionUrl } = await createMediaUnlockCheckoutSession(contactId, Number(media.id), media.price);
+      const { sessionUrl } = await createMediaUnlockCheckoutSession(contactId, Number(media.id), currentPrice);
       window.location.href = sessionUrl;
     } catch {
       setCheckingOut(false);
     }
+  }
+
+  async function handleSavePrice() {
+    const val = parseFloat(editPrice);
+    if (isNaN(val) || val < 0) return;
+    try {
+      await updateMediaPriceApi(media.id, val);
+      setCurrentPrice(val);
+      setEditing(false);
+    } catch {
+      // revert
+    }
+  }
+
+  function handleCancelPrice() {
+    setEditPrice(String(currentPrice));
+    setEditing(false);
   }
 
   return (
@@ -109,15 +129,42 @@ function MediaCard({ media, contactId }: { media: Media; contactId: number }) {
       </div>
       <div className="space-y-1 p-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold">{formatCurrency(media.price)}</span>
-          {media.price > 0 ? (
-            <Lock className="h-3 w-3 text-amber-400" />
+          {editing ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={editPrice}
+                onChange={(e) => setEditPrice(e.target.value)}
+                className="w-16 rounded border border-border bg-surface-card px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent"
+                autoFocus
+              />
+              <button onClick={() => void handleSavePrice()} className="text-emerald-400 hover:text-emerald-300">
+                <Check className="h-3 w-3" />
+              </button>
+              <button onClick={handleCancelPrice} className="text-rose-400 hover:text-rose-300">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
           ) : (
-            <Unlock className="h-3 w-3 text-emerald-400" />
+            <>
+              <span className="text-xs font-semibold">{formatCurrency(currentPrice)}</span>
+              <div className="flex items-center gap-1">
+                {currentPrice > 0 ? (
+                  <Lock className="h-3 w-3 text-amber-400" />
+                ) : (
+                  <Unlock className="h-3 w-3 text-emerald-400" />
+                )}
+                <button onClick={() => setEditing(true)} className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-text-primary transition-opacity">
+                  <Pencil className="h-3 w-3" />
+                </button>
+              </div>
+            </>
           )}
         </div>
         <p className="text-[10px] text-text-muted">{formattedDate}</p>
-        {media.price > 0 && (
+        {currentPrice > 0 && !editing && (
           <button
             onClick={() => void handleUnlock()}
             disabled={checkingOut}
@@ -128,7 +175,7 @@ function MediaCard({ media, contactId }: { media: Media; contactId: number }) {
             ) : (
               <ExternalLink className="h-3 w-3" />
             )}
-            Unlock for {formatCurrency(media.price)}
+            Unlock for {formatCurrency(currentPrice)}
           </button>
         )}
       </div>

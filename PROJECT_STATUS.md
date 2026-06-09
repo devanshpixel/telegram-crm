@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-(to be set after commit)
+a5e1fc1
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -49,6 +49,7 @@ Completed:
 - P4.3 Media Gallery UI component
 - P4.4 Unlock button + Stripe checkout redirect
 - P4.5 Purchase History UI component (extracted from SidebarRight)
+- P5.1 Mount MediaGallery in SidebarRight + UploadMediaForm + inline price edit + PATCH route
 
 AI Reply MVP:
 COMPLETE
@@ -113,5 +114,6 @@ Completed Priorities:
 - **P4.3** Media Gallery UI — `components/media/MediaGallery.tsx` displays thumbnails via preview endpoint, price, lock status, and upload date for a contact's media
 - **P4.4** Unlock button — each paid media card shows "Unlock for $X" button; calls `createMediaUnlockCheckoutSession()` and redirects to Stripe Checkout
 - **P4.5** Purchase History — extracted `PurchaseHistory` component from `SidebarRight` into `components/media/PurchaseHistory.tsx`; reused in `MediaGallery`
+- **P5.1** Media UI integration — `MediaGallery` and `UploadMediaForm` mounted in `SidebarRight`; `PATCH /api/media/[id]` route + `updateMediaPriceApi()` client; inline price editing in `MediaCard`
 
 See V1_RELEASE_PLAN.md for full execution plan.

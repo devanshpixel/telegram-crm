@@ -1,6 +1,8 @@
 import { X, Trash2 } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import type { ContactProfile } from "@/types";
+import { MediaGallery } from "@/components/media/MediaGallery";
+import { UploadMediaForm } from "@/components/media/UploadMediaForm";
 import { PurchaseHistory } from "@/components/media/PurchaseHistory";
 import { LeadScoreSection } from "./LeadScoreSection";
 import { NotesSection } from "./NotesSection";
@@ -52,6 +54,8 @@ export function SidebarRight({
         <RevenueSection profile={profile} />
         <PpvSection profile={profile} />
         <PurchaseHistory purchases={profile.purchases ?? []} />
+        <MediaGallery key={profile.id} contactId={Number(profile.id)} />
+        <UploadMediaForm contactId={Number(profile.id)} />
         <TagsSection profile={profile} onAddTag={onAddTag} onDeleteTag={onDeleteTag} />
         <NotesSection profile={profile} onSaveNote={onAddNote} />
         <LeadScoreSection profile={profile} />
