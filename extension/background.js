@@ -213,10 +213,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg?.type === "GENERATE_REPLY") {
     const contactId = msg?.body?.contactId;
+    const mode = msg?.body?.mode;
     crmFetch(CRM_BASE + "/api/ai/suggest-reply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contactId }),
+      body: JSON.stringify({ contactId, mode }),
     })
       .then(async (r) => {
         const body = await r.json().catch(() => null);

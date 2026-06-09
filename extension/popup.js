@@ -833,7 +833,7 @@ function bindSendForm() {
     try {
       const res = await send({
         type: "GENERATE_REPLY",
-        body: { contactId: Number(selectedContact.id) },
+        body: { contactId: Number(selectedContact.id), mode: "auto" },
       });
       if (res && res.ok && res.data && res.data.suggestion) {
         dom.sendText.value = res.data.suggestion;

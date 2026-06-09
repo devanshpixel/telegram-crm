@@ -456,6 +456,7 @@ function renderSidebar(profile, notFound) {
     renderPurchasesSection(wrap, profile);
     renderMediaUploadForm(wrap, profile);
     renderMediaSection(wrap, profile);
+    renderAIReplySection(wrap, profile);
     renderRecentActivitySection(wrap, profile);
     renderQuickActions(wrap, profile);
   } else {
@@ -791,6 +792,120 @@ function renderMediaSection(wrap, profile) {
       section.appendChild(grid);
     }
   });
+}
+
+function renderAIReplySection(wrap, profile) {
+  const section = el("div", "sb-section");
+  section.appendChild(el("div", "sb-section-title", "AI Reply Assistant"));
+
+  const modeSelect = document.createElement("select");
+  modeSelect.className = "sb-form-input";
+  modeSelect.style.marginBottom = "6px";
+  const modes = ["auto", "casual", "flirty", "sales", "reengagement"];
+  for (const m of modes) {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m.charAt(0).toUpperCase() + m.slice(1);
+    modeSelect.appendChild(opt);
+  }
+  section.appendChild(modeSelect);
+
+  const generateBtn = el("button", "sb-action-btn primary", "✨ Generate Reply");
+  generateBtn.style.marginBottom = "8px";
+  section.appendChild(generateBtn);
+
+  const resultContainer = el("div", "sb-form");
+  resultContainer.style.display = "none";
+  resultContainer.style.padding = "0";
+  resultContainer.style.border = "none";
+  resultContainer.style.background = "transparent";
+  
+  const textarea = document.createElement("textarea");
+  textarea.className = "sb-form-input sb-form-textarea";
+  textarea.style.marginBottom = "6px";
+  resultContainer.appendChild(textarea);
+
+  const actionsRow = el("div", "sb-form-row");
+  const copyBtn = el("button", "sb-action-btn", "Copy");
+  const insertBtn = el("button", "sb-action-btn primary", "Insert");
+  actionsRow.appendChild(copyBtn);
+  actionsRow.appendChild(insertBtn);
+  resultContainer.appendChild(actionsRow);
+
+  section.appendChild(resultContainer);
+
+  generateBtn.addEventListener("click", async () => {
+    generateBtn.disabled = true;
+    generateBtn.textContent = "Generating...";
+    resultContainer.style.display = "none";
+
+    const res = await send({
+      type: "GENERATE_REPLY",
+      body: { contactId: String(profile.id), mode: modeSelect.value }
+    });
+
+    generateBtn.disabled = false;
+    generateBtn.textContent = "✨ Generate Reply";
+
+    if (res && res.ok && res.data && res.data.suggestion) {
+      textarea.value = res.data.suggestion;
+      resultContainer.style.display = "block";
+    } else {
+      generateBtn.textContent = "Error: " + (res?.data?.error || res?.error || "Failed");
+      setTimeout(() => generateBtn.textContent = "✨ Generate Reply", 3000);
+    }
+  });
+
+  copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(textarea.value).then(() => {
+          const originalText = copyBtn.textContent;
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => copyBtn.textContent = originalText, 1500);
+        }).catch(() => {
+          copyBtn.textContent = "Copy failed";
+          setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+        });
+  });
+
+  insertBtn.addEventListener("click", () => {
+    const text = textarea.value;
+    if (!text) return;
+    
+    const composerSelectors = [
+      "#editable-message-text", 
+      ".chat-input-control .input-message-input",
+      ".chat-input div[contenteditable='true']",
+      ".input-message-input",
+      "[data-placeholder='Message']"
+    ];
+    
+    let composer = null;
+    for (const sel of composerSelectors) {
+      const el = document.querySelector(sel);
+      if (el && el.isContentEditable) {
+        composer = el;
+        break;
+      }
+    }
+
+    if (composer) {
+      composer.focus();
+      const success = document.execCommand('insertText', false, text);
+      if (!success) {
+        composer.textContent = text;
+        composer.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+      }
+      const originalText = insertBtn.textContent;
+      insertBtn.textContent = "Inserted!";
+      setTimeout(() => insertBtn.textContent = originalText, 1500);
+    } else {
+      const originalText = insertBtn.textContent;
+      insertBtn.textContent = "Input not found";
+      setTimeout(() => insertBtn.textContent = originalText, 3000);
+    }
+  });
+
+  wrap.appendChild(section);
 }
 
 function renderRecentActivitySection(wrap, profile) {
