@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-0ef89cb
+(to be set after commit)
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -47,6 +47,8 @@ Completed:
 - P4.1 Access control (preview route locked/unlocked logic)
 - P4.2 Access control (file route — contactId required + 403 if locked)
 - P4.3 Media Gallery UI component
+- P4.4 Unlock button + Stripe checkout redirect
+- P4.5 Purchase History UI component (extracted from SidebarRight)
 
 AI Reply MVP:
 COMPLETE
@@ -109,5 +111,7 @@ Completed Priorities:
 - **P4.1** Preview access control — `GET /api/media/[id]/preview` calls `isMediaUnlocked()`; locked or missing contactId returns blurred; unlocked returns original; non-images preserve existing behavior; file route unchanged
 - **P4.2** File access control — `GET /api/media/[id]/file` requires `contactId`; returns 403 if locked; serves original if unlocked
 - **P4.3** Media Gallery UI — `components/media/MediaGallery.tsx` displays thumbnails via preview endpoint, price, lock status, and upload date for a contact's media
+- **P4.4** Unlock button — each paid media card shows "Unlock for $X" button; calls `createMediaUnlockCheckoutSession()` and redirects to Stripe Checkout
+- **P4.5** Purchase History — extracted `PurchaseHistory` component from `SidebarRight` into `components/media/PurchaseHistory.tsx`; reused in `MediaGallery`
 
 See V1_RELEASE_PLAN.md for full execution plan.
