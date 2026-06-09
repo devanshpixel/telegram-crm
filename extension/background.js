@@ -1,35 +1,42 @@
 const CRM_BASE = "http://localhost:3000";
+const CRM_KEY = "16be7932a405cf8d";
+
+function crmFetch(url, options) {
+  const headers = new Headers(options?.headers);
+  headers.set("X-API-Key", CRM_KEY);
+  return fetch(url, { ...options, headers });
+}
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "PING") {
-    fetch(CRM_BASE + "/api/contacts", { method: "GET" })
+    crmFetch(CRM_BASE + "/api/contacts", { method: "GET" })
       .then((r) => sendResponse({ ok: r.ok, status: r.status }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "GET_CONTACTS") {
-    fetch(CRM_BASE + "/api/contacts", { method: "GET" })
+    crmFetch(CRM_BASE + "/api/contacts", { method: "GET" })
       .then((r) => r.json())
       .then((data) => sendResponse({ ok: true, data }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "GET_FOLLOWUPS") {
-    fetch(CRM_BASE + "/api/followups?limit=20")
+    crmFetch(CRM_BASE + "/api/followups?limit=20")
       .then((r) => r.json())
       .then((data) => sendResponse({ ok: true, data }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "GET_REENGAGEMENT_COUNTS") {
-    fetch(CRM_BASE + "/api/reengagement/audiences")
+    crmFetch(CRM_BASE + "/api/reengagement/audiences")
       .then((r) => r.json())
       .then((data) => sendResponse({ ok: true, data }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "SEND_REENGAGEMENT") {
-    fetch(CRM_BASE + "/api/reengagement/send", {
+    crmFetch(CRM_BASE + "/api/reengagement/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg.body),
@@ -43,7 +50,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "CREATE_CONTACT") {
-    fetch(CRM_BASE + "/api/contacts", {
+    crmFetch(CRM_BASE + "/api/contacts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg.body),
@@ -58,7 +65,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg?.type === "GET_CONTACT") {
     const contactId = msg?.body?.contactId;
-    fetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)), {
+    crmFetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)), {
       method: "GET",
     })
       .then(async (r) => {
@@ -71,7 +78,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg?.type === "GET_MESSAGES") {
     const contactId = msg?.body?.contactId;
-    fetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)) + "/messages", {
+    crmFetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)) + "/messages", {
       method: "GET",
     })
       .then(async (r) => {
@@ -84,7 +91,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg?.type === "UPDATE_CONTACT") {
     const contactId = msg?.body?.contactId;
-    fetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)), {
+    crmFetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg.body.patch || {}),
@@ -98,7 +105,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "ADD_TAG") {
-    fetch(CRM_BASE + "/api/tags", {
+    crmFetch(CRM_BASE + "/api/tags", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg.body),
@@ -112,7 +119,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "DELETE_TAG") {
-    fetch(CRM_BASE + "/api/tags", {
+    crmFetch(CRM_BASE + "/api/tags", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg.body),
@@ -153,7 +160,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg?.type === "GENERATE_REPLY") {
     const contactId = msg?.body?.contactId;
-    fetch(CRM_BASE + "/api/ai/suggest-reply", {
+    crmFetch(CRM_BASE + "/api/ai/suggest-reply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId }),
@@ -169,7 +176,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "GET_TIMELINE") {
     const contactId = msg?.body?.contactId;
     const limit = msg?.body?.limit || 60;
-    fetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)) + "/timeline?limit=" + limit, {
+    crmFetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)) + "/timeline?limit=" + limit, {
       method: "GET",
     })
       .then(async (r) => {
@@ -181,7 +188,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "ADD_NOTE") {
-    fetch(CRM_BASE + "/api/notes", {
+    crmFetch(CRM_BASE + "/api/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId: msg?.body?.contactId, content: msg?.body?.content }),
@@ -198,7 +205,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // No dedicated followup schedule table exists — store as a note with [FOLLOWUP] prefix.
     const { contactId, message, scheduledAt } = msg?.body || {};
     const content = "[FOLLOWUP " + (scheduledAt || "TBD") + "] " + (message || "");
-    fetch(CRM_BASE + "/api/notes", {
+    crmFetch(CRM_BASE + "/api/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId, content }),

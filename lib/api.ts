@@ -35,13 +35,22 @@ function reviveMessage(m: Message): Message {
   return { ...m, timestamp: new Date(m.timestamp) };
 }
 
+const _apiKey = process.env.NEXT_PUBLIC_CRM_API_KEY;
+
+async function crmFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (!_apiKey) return crmFetch(input, init);
+  const headers = new Headers(init?.headers);
+  headers.set("X-API-Key", _apiKey);
+  return crmFetch(input, { ...init, headers });
+}
+
 export async function fetchChats(): Promise<Chat[]> {
-  const data = await parseJson<Chat[]>(await fetch("/api/contacts"));
+  const data = await parseJson<Chat[]>(await crmFetch("/api/contacts"));
   return data.map(reviveChat);
 }
 
 export async function fetchStats(): Promise<DashboardStats> {
-  return parseJson<DashboardStats>(await fetch("/api/stats"));
+  return parseJson<DashboardStats>(await crmFetch("/api/stats"));
 }
 
 export async function fetchRevenue(
@@ -49,35 +58,35 @@ export async function fetchRevenue(
   limit: number = 10,
 ): Promise<RevenueData> {
   return parseJson<RevenueData>(
-    await fetch(`/api/revenue?months=${months}&limit=${limit}`),
+    await crmFetch(`/api/revenue?months=${months}&limit=${limit}`),
   );
 }
 
 export async function fetchAnalytics(): Promise<AnalyticsData> {
-  return parseJson<AnalyticsData>(await fetch("/api/analytics"));
+  return parseJson<AnalyticsData>(await crmFetch("/api/analytics"));
 }
 
 export async function fetchPpvStats(limit: number = 10): Promise<PpvStats> {
   return parseJson<PpvStats>(
-    await fetch(`/api/purchases/ppv?limit=${limit}`),
+    await crmFetch(`/api/purchases/ppv?limit=${limit}`),
   );
 }
 
 export async function fetchFollowUps(limit: number = 10): Promise<FollowUpData> {
   return parseJson<FollowUpData>(
-    await fetch(`/api/followups?limit=${limit}`),
+    await crmFetch(`/api/followups?limit=${limit}`),
   );
 }
 
 export async function fetchBroadcasts(): Promise<Broadcast[]> {
-  return parseJson<Broadcast[]>(await fetch("/api/broadcasts"));
+  return parseJson<Broadcast[]>(await crmFetch("/api/broadcasts"));
 }
 
 export async function previewBroadcastAudience(
   filters: BroadcastFilters,
 ): Promise<BroadcastAudiencePreview> {
   return parseJson<BroadcastAudiencePreview>(
-    await fetch("/api/broadcasts/audience", {
+    await crmFetch("/api/broadcasts/audience", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filters }),
@@ -89,7 +98,7 @@ export async function sendBroadcast(
   body: CreateBroadcastInput,
 ): Promise<CreateBroadcastResult> {
   return parseJson<CreateBroadcastResult>(
-    await fetch("/api/broadcasts", {
+    await crmFetch("/api/broadcasts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -101,7 +110,7 @@ export async function fetchReengagementAudiences(): Promise<{
   counts: ReengagementAudiences;
 }> {
   return parseJson<{ counts: ReengagementAudiences }>(
-    await fetch("/api/reengagement/audiences"),
+    await crmFetch("/api/reengagement/audiences"),
   );
 }
 
@@ -109,7 +118,7 @@ export async function sendReengagementCampaign(
   body: ReengagementSendInput,
 ): Promise<ReengagementSendResult> {
   return parseJson<ReengagementSendResult>(
-    await fetch("/api/reengagement/send", {
+    await crmFetch("/api/reengagement/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -118,12 +127,12 @@ export async function sendReengagementCampaign(
 }
 
 export async function fetchContact(id: string): Promise<ContactProfile> {
-  return parseJson<ContactProfile>(await fetch(`/api/contacts/${id}`));
+  return parseJson<ContactProfile>(await crmFetch(`/api/contacts/${id}`));
 }
 
 export async function fetchMessages(contactId: string): Promise<Message[]> {
   const data = await parseJson<Message[]>(
-    await fetch(`/api/contacts/${contactId}/messages`),
+    await crmFetch(`/api/contacts/${contactId}/messages`),
   );
   return data.map(reviveMessage);
 }
@@ -133,7 +142,7 @@ export async function fetchTimeline(
   limit: number = 100,
 ): Promise<TimelineEvent[]> {
   return parseJson<TimelineEvent[]>(
-    await fetch(`/api/contacts/${contactId}/timeline?limit=${limit}`),
+    await crmFetch(`/api/contacts/${contactId}/timeline?limit=${limit}`),
   );
 }
 
@@ -147,7 +156,7 @@ export async function createContactApi(body: {
   revenue?: number;
 }): Promise<ContactProfile> {
   return parseJson<ContactProfile>(
-    await fetch("/api/contacts", {
+    await crmFetch("/api/contacts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -160,7 +169,7 @@ export async function updateContactApi(
   body: Record<string, unknown>,
 ): Promise<ContactProfile> {
   return parseJson<ContactProfile>(
-    await fetch(`/api/contacts/${id}`, {
+    await crmFetch(`/api/contacts/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -170,7 +179,7 @@ export async function updateContactApi(
 
 export async function deleteContactApi(id: string): Promise<void> {
   await parseJson<{ success: boolean }>(
-    await fetch(`/api/contacts/${id}`, { method: "DELETE" }),
+    await crmFetch(`/api/contacts/${id}`, { method: "DELETE" }),
   );
 }
 
@@ -179,7 +188,7 @@ export async function addNoteApi(
   content: string,
 ): Promise<ContactProfile> {
   return parseJson<ContactProfile>(
-    await fetch("/api/notes", {
+    await crmFetch("/api/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId: Number(contactId), content }),
@@ -192,7 +201,7 @@ export async function addTagApi(
   name: string,
 ): Promise<ContactProfile> {
   return parseJson<ContactProfile>(
-    await fetch("/api/tags", {
+    await crmFetch("/api/tags", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId: Number(contactId), name }),
@@ -205,7 +214,7 @@ export async function deleteTagApi(
   name: string,
 ): Promise<ContactProfile> {
   return parseJson<ContactProfile>(
-    await fetch("/api/tags", {
+    await crmFetch("/api/tags", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId: Number(contactId), name }),
@@ -219,7 +228,7 @@ export async function createMessageApi(
   direction: MessageDirection = "outgoing",
 ): Promise<Message> {
   const data = await parseJson<Message>(
-    await fetch("/api/messages", {
+    await crmFetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -240,7 +249,7 @@ export interface ContactImportSummary {
 
 export async function importTelegramContacts(): Promise<ContactImportSummary> {
   return parseJson<ContactImportSummary>(
-    await fetch("/api/telegram/import/contacts", { method: "POST" }),
+    await crmFetch("/api/telegram/import/contacts", { method: "POST" }),
   );
 }
 
@@ -253,7 +262,7 @@ export interface MessageImportSummary {
 
 export async function importTelegramMessages(): Promise<MessageImportSummary> {
   return parseJson<MessageImportSummary>(
-    await fetch("/api/telegram/import/messages", { method: "POST" }),
+    await crmFetch("/api/telegram/import/messages", { method: "POST" }),
   );
 }
 
@@ -269,7 +278,7 @@ export async function sendTelegramMessageApi(
   text: string,
 ): Promise<SendTelegramMessageResult> {
   return parseJson<SendTelegramMessageResult>(
-    await fetch("/api/telegram/send", {
+    await crmFetch("/api/telegram/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId, text }),
@@ -281,7 +290,7 @@ export async function telegramSendCode(
   phone: string,
 ): Promise<{ isCodeViaApp: boolean }> {
   return parseJson<{ isCodeViaApp: boolean }>(
-    await fetch("/api/telegram/send-code", {
+    await crmFetch("/api/telegram/send-code", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone }),
@@ -294,7 +303,7 @@ export async function telegramVerifyCode(
   code: string,
 ): Promise<{ success: true } | { needs2fa: true; error: string }> {
   return parseJson<{ success: true } | { needs2fa: true; error: string }>(
-    await fetch("/api/telegram/verify-code", {
+    await crmFetch("/api/telegram/verify-code", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, code }),
@@ -304,13 +313,13 @@ export async function telegramVerifyCode(
 
 export async function telegramStatus(): Promise<{ authenticated: boolean }> {
   return parseJson<{ authenticated: boolean }>(
-    await fetch("/api/telegram/status"),
+    await crmFetch("/api/telegram/status"),
   );
 }
 
 export async function telegramSignOut(): Promise<{ success: boolean }> {
   return parseJson<{ success: boolean }>(
-    await fetch("/api/telegram/sign-out", { method: "POST" }),
+    await crmFetch("/api/telegram/sign-out", { method: "POST" }),
   );
 }
 
@@ -318,7 +327,7 @@ export async function telegramVerifyPassword(
   password: string,
 ): Promise<{ success: boolean }> {
   return parseJson<{ success: boolean }>(
-    await fetch("/api/telegram/verify-password", {
+    await crmFetch("/api/telegram/verify-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
