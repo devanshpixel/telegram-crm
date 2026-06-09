@@ -9,7 +9,12 @@ import type { BroadcastTrigger, ReengagementSendResult } from "@/types";
 
 const TOKEN_PATTERN = /\{([^{}]+)\}/g;
 
+const THROTTLE_MS = 1000;
 const inflightReengagements = new Set<string>();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function personalize(text: string, name: string): string {
   return text.replace(TOKEN_PATTERN, (match, token) => {
@@ -59,6 +64,7 @@ export async function POST(request: Request): Promise<Response> {
           const details = e instanceof Error ? e.message : "Unknown error";
           errors.push(`${recipient.name}: ${details}`);
         }
+        await sleep(THROTTLE_MS);
       }
 
       const broadcast = createBroadcastHistory({

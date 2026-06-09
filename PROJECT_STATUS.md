@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-9947490
+db04847
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -76,6 +76,9 @@ Other Known Issues:
 - ~~Media routes blocked when CRM_API_KEY set~~ **FIXED — B2**
 - ~~Preview route leaks original when no blurred file~~ **FIXED — B3**
 - ~~Extension popup can hang on chrome.runtime.sendMessage~~ **FIXED — B4**
+- ~~No server-side upload file size limit~~ **FIXED — P1**
+- ~~Sharp blur crash kills upload~~ **FIXED — P2**
+- ~~Broadcast timeout on large audiences~~ **FIXED — P3**
 - FLOOD_WAIT backoff missing (MEDIUM)
 - Backup API/UI (BK2) — CLI exists, no one-click backup (LOW)
 - Placeholder extension icons (69 bytes) (LOW)
@@ -125,5 +128,8 @@ Completed Priorities:
 - **B2** Middleware whitelist — `/api/media/` added to `PUBLIC_PATHS` so `<img>` tags and file downloads work with `CRM_API_KEY` enabled
 - **B3** Preview security — locked media no longer falls through to serve original; returns 403 when no blurred preview available
 - **B4** Extension hang fix — `send()` in popup.js now checks `chrome.runtime.lastError` to resolve `null` instead of hanging
+- **P1** Upload security — `MAX_UPLOAD_SIZE` (100MB default, configurable via `MAX_UPLOAD_SIZE` env var); oversized uploads rejected with 413
+- **P2** Sharp isolation — blur failure no longer crashes upload; logged and skipped
+- **P3** Broadcast throttling — 1-second `sleep()` between sends in broadcast + reengagement routes
 
 See V1_RELEASE_PLAN.md for full execution plan.

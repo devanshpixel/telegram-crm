@@ -7,7 +7,12 @@ import { apiError, apiOk } from "@/lib/api-error";
 import { normalizeFilters } from "@/lib/broadcast-filters";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 
+const THROTTLE_MS = 1000;
 const inflightBroadcasts = new Set<string>();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export async function GET() {
   try {
@@ -49,6 +54,7 @@ export async function POST(request: Request) {
           const details = e instanceof Error ? e.message : "Unknown error";
           errors.push(`${recipient.name}: ${details}`);
         }
+        await sleep(THROTTLE_MS);
       }
 
       const broadcast = createBroadcastHistory({
