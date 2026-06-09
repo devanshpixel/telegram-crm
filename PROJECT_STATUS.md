@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-490dd9e
+0ef89cb
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -45,6 +45,8 @@ Completed:
 - P3.3 isMediaUnlocked()
 - P3.4 Checkout wiring (mediaId in metadata + webhook)
 - P4.1 Access control (preview route locked/unlocked logic)
+- P4.2 Access control (file route — contactId required + 403 if locked)
+- P4.3 Media Gallery UI component
 
 AI Reply MVP:
 COMPLETE
@@ -105,5 +107,7 @@ Completed Priorities:
 - **P3.3** Unlock check — `isMediaUnlocked(mediaId, contactId)` queries purchases where `kind='ppv'` AND `note LIKE 'media_unlock:{mediaId}:%'` AND `contact_id=?`
 - **P3.4** Unlock checkout — checkout session accepts `mediaId`, adds to Stripe metadata; webhook creates purchase with `note="media_unlock:{mediaId}:stripe_checkout:{sessionId}"`; client `createMediaUnlockCheckoutSession(contactId, mediaId, amount)`
 - **P4.1** Preview access control — `GET /api/media/[id]/preview` calls `isMediaUnlocked()`; locked or missing contactId returns blurred; unlocked returns original; non-images preserve existing behavior; file route unchanged
+- **P4.2** File access control — `GET /api/media/[id]/file` requires `contactId`; returns 403 if locked; serves original if unlocked
+- **P4.3** Media Gallery UI — `components/media/MediaGallery.tsx` displays thumbnails via preview endpoint, price, lock status, and upload date for a contact's media
 
 See V1_RELEASE_PLAN.md for full execution plan.
