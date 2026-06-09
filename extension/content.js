@@ -384,6 +384,17 @@ function getSidebarCSS() {
     .sb-purchase-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; color: #c4c4cc; }
     .sb-purchase-amount { color: #34d399; font-weight: 600; }
     .sb-loading { padding: 20px 14px; text-align: center; color: #4b4b55; font-size: 12px; }
+    .sb-media-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .sb-media-item { position: relative; border-radius: 6px; overflow: hidden; background: #15151a; border: 1px solid #1f1f23; aspect-ratio: 1; }
+    .sb-media-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .sb-media-img.locked { filter: blur(5px); opacity: 0.6; }
+    .sb-media-meta { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); padding: 4px; display: flex; justify-content: space-between; align-items: center; }
+    .sb-media-price { font-size: 10px; font-weight: 700; color: #34d399; }
+    .sb-media-date { font-size: 9px; color: #8a8a93; }
+    .sb-media-lock { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+    .sb-media-unlock-btn { position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%); background: #7c3aed; color: #fff; border: 0; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 600; cursor: pointer; white-space: nowrap; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+    .sb-media-unlock-btn:hover { background: #6d28d9; }
+    .sb-media-unlock-btn:disabled { opacity: 0.7; cursor: not-allowed; }
   `;
 }
 
@@ -443,6 +454,8 @@ function renderSidebar(profile, notFound) {
     renderNotesSection(wrap, profile);
     renderRevenueSection(wrap, profile);
     renderPurchasesSection(wrap, profile);
+    renderMediaUploadForm(wrap, profile);
+    renderMediaSection(wrap, profile);
     renderRecentActivitySection(wrap, profile);
     renderQuickActions(wrap, profile);
   } else {
@@ -618,6 +631,166 @@ function renderPurchasesSection(wrap, profile) {
     }
   }
   wrap.appendChild(section);
+}
+
+function renderMediaUploadForm(wrap, profile) {
+  const section = el("div", "sb-section");
+  section.appendChild(el("div", "sb-section-title", "Upload Media"));
+
+  const form = el("div", "sb-form");
+  form.style.borderBottom = "none";
+  form.style.padding = "0";
+  form.style.background = "transparent";
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.className = "sb-form-input";
+  fileInput.accept = "image/*,video/*";
+  form.appendChild(fileInput);
+
+  const priceInput = document.createElement("input");
+  priceInput.type = "number";
+  priceInput.className = "sb-form-input";
+  priceInput.placeholder = "Price (e.g. 10.00)";
+  priceInput.min = "0";
+  priceInput.step = "0.01";
+  form.appendChild(priceInput);
+
+  const errEl = el("div", "sb-form-err");
+  const okEl = el("div", "sb-form-ok");
+  form.appendChild(errEl);
+  form.appendChild(okEl);
+
+  const submit = el("button", "sb-form-submit", "Upload");
+  submit.style.width = "100%";
+  
+  submit.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    const price = priceInput.value.trim();
+    
+    if (!file) {
+      errEl.textContent = "Please select a file.";
+      return;
+    }
+    
+    errEl.textContent = "";
+    okEl.textContent = "Uploading...";
+    submit.disabled = true;
+
+    try {
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const fileData = e.target.result; // Data URL
+        
+        const res = await send({
+          type: "UPLOAD_MEDIA",
+          body: {
+            contactId: String(profile.id),
+            price: price || "0",
+            fileName: file.name,
+            fileType: file.type,
+            fileData: fileData
+          }
+        });
+        
+        submit.disabled = false;
+        if (res && res.ok) {
+          okEl.textContent = "Upload successful!";
+          fileInput.value = "";
+          priceInput.value = "";
+          setTimeout(() => refreshSidebarProfile(profile.id), 1000);
+        } else {
+          okEl.textContent = "";
+          errEl.textContent = res?.error || "Upload failed.";
+        }
+      };
+      reader.onerror = () => {
+        submit.disabled = false;
+        okEl.textContent = "";
+        errEl.textContent = "Error reading file.";
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      submit.disabled = false;
+      okEl.textContent = "";
+      errEl.textContent = "Upload error.";
+    }
+  });
+
+  form.appendChild(submit);
+  section.appendChild(form);
+  wrap.appendChild(section);
+}
+
+function renderMediaSection(wrap, profile) {
+  const section = el("div", "sb-section");
+  section.appendChild(el("div", "sb-section-title", "Media"));
+
+  const loading = el("div", "sb-loading", "Loading…");
+  section.appendChild(loading);
+  wrap.appendChild(section);
+
+  send({
+    type: "GET_CONTACT_MEDIA",
+    body: { contactId: String(profile.id) },
+  }).then((res) => {
+    const mediaList = res && res.ok && Array.isArray(res.data) ? res.data : [];
+    section.removeChild(loading);
+    if (mediaList.length === 0) {
+      section.appendChild(el("span", "sb-empty", "No media yet"));
+    } else {
+      const grid = el("div", "sb-media-grid");
+      for (const m of mediaList) {
+        const item = el("div", "sb-media-item");
+        
+        const img = document.createElement("img");
+        img.className = m.isUnlocked ? "sb-media-img" : "sb-media-img locked";
+        img.src = `http://localhost:3000/api/media/${m.id}/preview?contactId=${profile.id}`;
+        item.appendChild(img);
+
+        if (!m.isUnlocked) {
+          const lock = el("div", "sb-media-lock", "🔒");
+          item.appendChild(lock);
+
+          const unlockBtn = el("button", "sb-media-unlock-btn", "Unlock $" + Number(m.price || 0).toFixed(2));
+          unlockBtn.addEventListener("click", async () => {
+            unlockBtn.disabled = true;
+            unlockBtn.textContent = "Loading...";
+            const res = await send({
+              type: "CREATE_MEDIA_UNLOCK_CHECKOUT",
+              body: {
+                contactId: Number(profile.id),
+                mediaId: Number(m.id),
+                amount: Number(m.price || 0)
+              }
+            });
+            if (res && res.ok && res.data && res.data.sessionUrl) {
+              window.open(res.data.sessionUrl, "_blank");
+              unlockBtn.textContent = "Refresh to check";
+              unlockBtn.disabled = false;
+              unlockBtn.addEventListener("click", () => refreshSidebarProfile(profile.id), { once: true });
+            } else {
+              unlockBtn.textContent = "Error";
+              setTimeout(() => {
+                unlockBtn.textContent = "Unlock $" + Number(m.price || 0).toFixed(2);
+                unlockBtn.disabled = false;
+              }, 2000);
+            }
+          });
+          item.appendChild(unlockBtn);
+        }
+
+        const meta = el("div", "sb-media-meta");
+        meta.appendChild(el("span", "sb-media-price", "$" + Number(m.price || 0).toFixed(2)));
+        meta.appendChild(el("span", "sb-media-date", formatDate(m.createdAt || m.uploadDate || m.timestamp)));
+        item.appendChild(meta);
+
+        grid.appendChild(item);
+      }
+      section.appendChild(grid);
+    }
+  });
 }
 
 function renderRecentActivitySection(wrap, profile) {

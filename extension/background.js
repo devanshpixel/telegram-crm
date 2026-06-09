@@ -76,6 +76,59 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+  if (msg?.type === "GET_CONTACT_MEDIA") {
+    const contactId = msg?.body?.contactId;
+    crmFetch(CRM_BASE + "/api/media?contactId=" + encodeURIComponent(String(contactId)), {
+      method: "GET",
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, data: body };
+      })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "CREATE_MEDIA_UNLOCK_CHECKOUT") {
+    crmFetch(CRM_BASE + "/api/checkout/create-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(msg.body),
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        return { ok: r.ok, status: r.status, data: body };
+      })
+      .then((res) => sendResponse(res))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "UPLOAD_MEDIA") {
+    (async () => {
+      try {
+        const { contactId, price, fileName, fileData } = msg.body;
+        // Convert base64 Data URL to Blob
+        const fetchRes = await fetch(fileData);
+        const blob = await fetchRes.blob();
+        
+        const formData = new FormData();
+        formData.append("contactId", contactId);
+        formData.append("price", price);
+        formData.append("file", blob, fileName);
+
+        const r = await crmFetch(CRM_BASE + "/api/media/upload", {
+          method: "POST",
+          body: formData, // fetch will set multipart/form-data with boundary
+        });
+        
+        const body = await r.json().catch(() => null);
+        sendResponse({ ok: r.ok, status: r.status, data: body });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+      }
+    })();
+    return true;
+  }
   if (msg?.type === "GET_MESSAGES") {
     const contactId = msg?.body?.contactId;
     crmFetch(CRM_BASE + "/api/contacts/" + encodeURIComponent(String(contactId)) + "/messages", {
