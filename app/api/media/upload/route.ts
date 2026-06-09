@@ -5,7 +5,17 @@ import sharp from "sharp";
 import { createMedia } from "@/lib/db/service";
 import { apiError, apiOk } from "@/lib/api-error";
 
-const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/tiff", "image/gif"];
+const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "video/mp4",
+  "video/webm",
+]);
+
+const BLURABLE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
 const MAX_UPLOAD_SIZE = Number(process.env.MAX_UPLOAD_SIZE) || 100 * 1024 * 1024;
 
 export async function POST(request: Request) {
@@ -15,12 +25,24 @@ export async function POST(request: Request) {
     const contactId = Number(formData.get("contactId"));
     const price = Number(formData.get("price") || 0);
 
-    if (!file) return apiError("File is required");
-    if (!Number.isInteger(contactId) || contactId <= 0) return apiError("Valid contactId is required");
-    if (price < 0) return apiError("Price cannot be negative");
+    if (!Number.isInteger(contactId) || contactId <= 0) {
+      return apiError("Valid contactId is required");
+    }
+
+    if (!file) {
+      return apiError("File is required");
+    }
+
+    if (!ALLOWED_MIME_TYPES.has(file.type)) {
+      return apiError(`Unsupported media type: ${file.type}`, 415);
+    }
 
     if (file.size > MAX_UPLOAD_SIZE) {
       return apiError(`File exceeds maximum size of ${Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)}MB`, 413);
+    }
+
+    if (price < 0) {
+      return apiError("Price cannot be negative");
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -31,12 +53,12 @@ export async function POST(request: Request) {
     fs.mkdirSync(uploadDir, { recursive: true });
     fs.writeFileSync(path.join(uploadDir, filename), buffer);
 
-    if (IMAGE_MIME_TYPES.includes(file.type)) {
+    if (BLURABLE_TYPES.has(file.type)) {
       try {
         const blurredFilename = `${filename}_blurred.${ext}`;
         await sharp(buffer).blur(20).toFile(path.join(uploadDir, blurredFilename));
       } catch (blurError) {
-        console.error("Blur generation failed, continuing without preview:", blurError);
+        console.warn("Blur generation failed, continuing without preview:", blurError);
       }
     }
 
@@ -44,7 +66,7 @@ export async function POST(request: Request) {
       contactId,
       filename,
       originalName: file.name,
-      mimeType: file.type || "application/octet-stream",
+      mimeType: file.type,
       fileSize: buffer.length,
       price,
     });
