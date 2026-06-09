@@ -462,13 +462,16 @@ function renderContactCard(wrap, profile) {
   const stats = el("div", "sb-stats");
 
   const revStat = el("div", "sb-stat");
-  revStat.innerHTML = `<div class="sb-stat-val">$${Number(profile.revenue || 0).toFixed(0)}</div><div class="sb-stat-label">Revenue</div>`;
+  revStat.appendChild(el("div", "sb-stat-val", "$" + Number(profile.revenue || 0).toFixed(0)));
+  revStat.appendChild(el("div", "sb-stat-label", "Revenue"));
 
   const ppvStat = el("div", "sb-stat");
-  ppvStat.innerHTML = `<div class="sb-stat-val">${profile.ppvCount || 0}</div><div class="sb-stat-label">PPV</div>`;
+  ppvStat.appendChild(el("div", "sb-stat-val", String(profile.ppvCount || 0)));
+  ppvStat.appendChild(el("div", "sb-stat-label", "PPV"));
 
   const scoreStat = el("div", "sb-stat");
-  scoreStat.innerHTML = `<div class="sb-stat-val">${profile.fanScore || 0}</div><div class="sb-stat-label">Score</div>`;
+  scoreStat.appendChild(el("div", "sb-stat-val", String(profile.fanScore || 0)));
+  scoreStat.appendChild(el("div", "sb-stat-label", "Score"));
 
   stats.appendChild(revStat);
   stats.appendChild(ppvStat);

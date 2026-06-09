@@ -1,10 +1,13 @@
 import bigInt from "big-integer";
 import { Api } from "telegram";
+import { FloodWaitError } from "telegram/errors/RPCErrorList";
 import { getDb } from "@/lib/db";
 import { createMessage } from "@/lib/db/service";
 import type { ContactRow } from "@/lib/db/types";
 import type { Message } from "@/types";
 import { getTelegramClient } from "./client";
+
+const FLOOD_RETRY_MAX = 3;
 
 async function ensureConnected(): Promise<void> {
   const client = getTelegramClient();
@@ -50,15 +53,35 @@ export async function sendTelegramMessage(
   const client = getTelegramClient();
   const peer = buildPeer(contact);
 
-  const sent = await client.sendMessage(peer, { message: trimmedText });
-  if (!(sent instanceof Api.Message) || !sent.id) {
-    throw new Error("Failed to send Telegram message");
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= FLOOD_RETRY_MAX; attempt++) {
+    try {
+      const sent = await client.sendMessage(peer, { message: trimmedText });
+
+      if (!(sent instanceof Api.Message) || !sent.id) {
+        throw new Error("Failed to send Telegram message");
+      }
+
+      const saved = createMessage(contactId, trimmedText, "outgoing", sent.id);
+      if (!saved) {
+        throw new Error(`No conversation found for contact ${contactId}`);
+      }
+
+      return saved;
+    } catch (e) {
+      if (e instanceof FloodWaitError) {
+        lastError = e;
+        console.warn(
+          `[FloodWait] sleeping ${e.seconds}s for contact ${contactId} (attempt ${attempt}/${FLOOD_RETRY_MAX})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, e.seconds * 1000));
+        await ensureConnected();
+        continue;
+      }
+      throw e;
+    }
   }
 
-  const saved = createMessage(contactId, trimmedText, "outgoing", sent.id);
-  if (!saved) {
-    throw new Error(`No conversation found for contact ${contactId}`);
-  }
-
-  return saved;
+  throw lastError ?? new Error("Failed to send message after retries");
 }
