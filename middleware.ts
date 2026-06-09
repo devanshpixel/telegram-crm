@@ -6,6 +6,7 @@ const PUBLIC_PATHS = [
   "/api/telegram/verify-code",
   "/api/telegram/verify-password",
   "/api/telegram/status",
+  "/api/webhooks/stripe",
 ];
 
 export function middleware(request: NextRequest) {

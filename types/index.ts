@@ -304,3 +304,8 @@ export interface TimelineEvent {
   text?: string;
   amount?: number;
 }
+
+export interface CheckoutSessionResponse {
+  sessionUrl: string;
+  sessionId: string;
+}

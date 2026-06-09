@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-cc3e270
+ce5d7c2
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -33,6 +33,10 @@ Completed:
 - LG5 Dashboard integration + Connect button
 - AU1 Auth middleware
 - AU2 Extension API key
+- P1.1 Stripe deps + env + lib/stripe.ts
+- P1.2 POST /api/checkout/create-session
+- P1.3 POST /api/webhooks/stripe + middleware whitelist
+- P1.4 Client createCheckoutSession + CheckoutSessionResponse type
 
 AI Reply MVP:
 COMPLETE
@@ -46,7 +50,11 @@ Known Issues:
 - ~~Runtime error handling~~ **FIXED — S4**
 
 Release Status:
-**RELEASE CANDIDATE** — 17/17 checkpoints complete
+**RELEASE CANDIDATE** — 17/17 checkpoints complete + P1.1–P1.4 (Stripe Checkout + Webhook)
+
+Fixed:
+
+- ~~crmFetch recursion bug~~ **FIXED** — both branches called crmFetch() instead of fetch(), causing stack overflow on every client API call
 
 Other Known Issues:
 
@@ -76,5 +84,9 @@ Completed Priorities:
 - **LG5** Dashboard integration — status check on mount, Connect button, auth state
 - **AU1** Auth middleware — middleware.ts with X-API-Key check, login route whitelist, dev bypass
 - **AU2** Extension API key — crmFetch() wrapper in background.js, CRM_KEY constant
+- **P1.1** Stripe — npm install stripe, .env vars, lib/stripe.ts with server-side Stripe client
+- **P1.2** Checkout — POST /api/checkout/create-session creates Stripe Checkout Session with contactId metadata
+- **P1.3** Webhook — POST /api/webhooks/stripe handles checkout.session.completed, calls createPurchase(); whitelisted in middleware
+- **P1.4** Client — createCheckoutSession() in lib/api.ts, CheckoutSessionResponse type
 
 See V1_RELEASE_PLAN.md for full execution plan.

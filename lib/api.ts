@@ -4,6 +4,7 @@ import type {
   BroadcastAudiencePreview,
   BroadcastFilters,
   Chat,
+  CheckoutSessionResponse,
   ContactProfile,
   CreateBroadcastInput,
   CreateBroadcastResult,
@@ -331,6 +332,19 @@ export async function telegramVerifyPassword(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
+    }),
+  );
+}
+
+export async function createCheckoutSession(
+  contactId: number,
+  amount: number,
+): Promise<CheckoutSessionResponse> {
+  return parseJson<CheckoutSessionResponse>(
+    await crmFetch("/api/checkout/create-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId, amount }),
     }),
   );
 }
