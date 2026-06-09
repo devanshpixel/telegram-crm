@@ -43,6 +43,7 @@ export async function GET(
           },
         });
       }
+      return NextResponse.json({ error: "Locked" }, { status: 403 });
     }
 
     const filePath = path.join(uploadDir, media.filename);

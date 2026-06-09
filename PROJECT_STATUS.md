@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-d45d9b2
+9947490
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -72,6 +72,10 @@ Fixed:
 
 Other Known Issues:
 
+- ~~Extension SEND_MESSAGE missing X-API-Key~~ **FIXED — B1**
+- ~~Media routes blocked when CRM_API_KEY set~~ **FIXED — B2**
+- ~~Preview route leaks original when no blurred file~~ **FIXED — B3**
+- ~~Extension popup can hang on chrome.runtime.sendMessage~~ **FIXED — B4**
 - FLOOD_WAIT backoff missing (MEDIUM)
 - Backup API/UI (BK2) — CLI exists, no one-click backup (LOW)
 - Placeholder extension icons (69 bytes) (LOW)
@@ -117,5 +121,9 @@ Completed Priorities:
 - **P5.1** Media UI integration — `MediaGallery` and `UploadMediaForm` mounted in `SidebarRight`; `PATCH /api/media/[id]` route + `updateMediaPriceApi()` client; inline price editing in `MediaCard`
 - **C2.2** Reply modes backend — `ReplyMode` type; mode→prompt map (`casual`, `flirty`, `sales`, `reengagement`, `auto`); `detectMode()` heuristic for Auto; mode param in API route
 - **C3.2** Reply modes CRM UI — mode dropdown (`Auto`/`Casual`/`Flirty`/`Sales`/`Re-engage`) in `MessageInput`; passed in POST body
+- **B1** Extension send auth — `SEND_MESSAGE` handler uses `crmFetch()` instead of `fetch()` (was missing `X-API-Key` header)
+- **B2** Middleware whitelist — `/api/media/` added to `PUBLIC_PATHS` so `<img>` tags and file downloads work with `CRM_API_KEY` enabled
+- **B3** Preview security — locked media no longer falls through to serve original; returns 403 when no blurred preview available
+- **B4** Extension hang fix — `send()` in popup.js now checks `chrome.runtime.lastError` to resolve `null` instead of hanging
 
 See V1_RELEASE_PLAN.md for full execution plan.
