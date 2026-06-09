@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReplyMode } from "@/types";
 import { Mic, Paperclip, Send, Smile, Sparkles } from "lucide-react";
 import { useState } from "react";
 
@@ -9,11 +10,20 @@ interface MessageInputProps {
   onSend: (text: string) => Promise<void>;
 }
 
+const MODE_OPTIONS: { value: ReplyMode; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "casual", label: "Casual" },
+  { value: "flirty", label: "Flirty" },
+  { value: "sales", label: "Sales" },
+  { value: "reengagement", label: "Re-engage" },
+];
+
 export function MessageInput({ contactName, contactId, onSend }: MessageInputProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState<ReplyMode>("auto");
 
   const handleGenerate = async () => {
     if (generating) return;
@@ -23,7 +33,7 @@ export function MessageInput({ contactName, contactId, onSend }: MessageInputPro
       const res = await fetch("/api/ai/suggest-reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactId: Number(contactId) }),
+        body: JSON.stringify({ contactId: Number(contactId), mode }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -87,15 +97,28 @@ export function MessageInput({ contactName, contactId, onSend }: MessageInputPro
           disabled={sending}
           className="max-h-28 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[15px] text-text-primary placeholder:text-text-muted outline-none disabled:opacity-50"
         />
-        <button
-          type="button"
-          className="mb-0.5 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl text-text-muted transition hover:bg-surface-hover sm:flex disabled:opacity-40"
-          aria-label="Generate reply"
-          disabled={generating}
-          onClick={() => void handleGenerate()}
-        >
-          <Sparkles className={"h-5 w-5" + (generating ? " animate-pulse" : "")} />
-        </button>
+        <div className="mb-0.5 hidden items-center gap-0.5 sm:flex">
+          <button
+            type="button"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-text-muted transition hover:bg-surface-hover disabled:opacity-40"
+            aria-label="Generate reply"
+            disabled={generating}
+            onClick={() => void handleGenerate()}
+          >
+            <Sparkles className={"h-5 w-5" + (generating ? " animate-pulse" : "")} />
+          </button>
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as ReplyMode)}
+            className="h-6 rounded border border-border bg-surface-card px-1 text-[11px] text-text-secondary outline-none"
+          >
+            {MODE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
           type="button"
           className="mb-0.5 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl text-text-muted transition hover:bg-surface-hover sm:flex"

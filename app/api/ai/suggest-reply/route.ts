@@ -1,3 +1,4 @@
+import type { ReplyMode } from "@/types";
 import { getMessagesByContactId } from "@/lib/db/service";
 import { apiError, apiOk } from "@/lib/api-error";
 import { suggestReply } from "@/lib/ai/suggest-reply";
@@ -14,13 +15,16 @@ export async function POST(request: Request) {
       return apiError("OPENROUTER_API_KEY is not configured", 500);
     }
 
+    const validModes: ReplyMode[] = ["casual", "flirty", "sales", "reengagement", "auto"];
+    const mode: ReplyMode = validModes.includes(body.mode) ? body.mode : "auto";
+
     const messages = getMessagesByContactId(contactId);
     if (messages.length === 0) {
       return apiError("No messages found for this contact", 404);
     }
 
     const recent = messages.slice(-20);
-    const suggestion = await suggestReply(recent);
+    const suggestion = await suggestReply(recent, mode);
     return apiOk({ suggestion }, 200);
   } catch (e) {
     const message = e instanceof Error ? e.message : "AI reply generation failed";

@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-a5e1fc1
+d45d9b2
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -115,5 +115,7 @@ Completed Priorities:
 - **P4.4** Unlock button — each paid media card shows "Unlock for $X" button; calls `createMediaUnlockCheckoutSession()` and redirects to Stripe Checkout
 - **P4.5** Purchase History — extracted `PurchaseHistory` component from `SidebarRight` into `components/media/PurchaseHistory.tsx`; reused in `MediaGallery`
 - **P5.1** Media UI integration — `MediaGallery` and `UploadMediaForm` mounted in `SidebarRight`; `PATCH /api/media/[id]` route + `updateMediaPriceApi()` client; inline price editing in `MediaCard`
+- **C2.2** Reply modes backend — `ReplyMode` type; mode→prompt map (`casual`, `flirty`, `sales`, `reengagement`, `auto`); `detectMode()` heuristic for Auto; mode param in API route
+- **C3.2** Reply modes CRM UI — mode dropdown (`Auto`/`Casual`/`Flirty`/`Sales`/`Re-engage`) in `MessageInput`; passed in POST body
 
 See V1_RELEASE_PLAN.md for full execution plan.

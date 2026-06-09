@@ -320,3 +320,5 @@ export interface CheckoutSessionResponse {
   sessionUrl: string;
   sessionId: string;
 }
+
+export type ReplyMode = "casual" | "flirty" | "sales" | "reengagement" | "auto";
