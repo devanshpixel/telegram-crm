@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-fefae52
+71cdadb
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -31,6 +31,8 @@ Completed:
 - LG3 API client functions + removed login stub
 - LG4 Login modal component (3-step: phone → code → 2FA)
 - LG5 Dashboard integration + Connect button
+- AU1 Auth middleware
+- AU2 Extension API key
 
 AI Reply MVP:
 COMPLETE
@@ -44,9 +46,7 @@ Known Issues:
 - ~~Runtime error handling~~ **FIXED — S4**
 
 Release Status:
-**Near Release Candidate** — 15/16 checkpoints complete
-Remaining CRITICAL blocker:
-- **Auth** — all 25 API routes completely unprotected
+**RELEASE CANDIDATE** — 17/17 checkpoints complete
 
 Other Known Issues:
 
@@ -74,5 +74,7 @@ Completed Priorities:
 - **LG3** API client functions — telegramSendCode, telegramVerifyCode, telegramStatus, telegramSignOut
 - **LG4** Login modal — TelegramLoginModal.tsx with 3-step form
 - **LG5** Dashboard integration — status check on mount, Connect button, auth state
+- **AU1** Auth middleware — middleware.ts with X-API-Key check, login route whitelist, dev bypass
+- **AU2** Extension API key — crmFetch() wrapper in background.js, CRM_KEY constant
 
 See V1_RELEASE_PLAN.md for full execution plan.
