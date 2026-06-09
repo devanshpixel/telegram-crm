@@ -21,6 +21,7 @@ import { SidebarRight } from "@/components/sidebar-right/SidebarRight";
 import { TopStatsBar } from "./TopStatsBar";
 import { AnalyticsModal } from "./AnalyticsModal";
 import { BroadcastModal } from "./BroadcastModal";
+import { RevenueChart } from "./RevenueChart";
 import { ReengagementModal } from "./ReengagementModal";
 import { CreateContactModal } from "@/components/forms/CreateContactModal";
 import { TelegramLoginModal } from "@/components/forms/TelegramLoginModal";
@@ -210,6 +211,9 @@ export function Dashboard({
           onOpenBroadcast={() => setShowBroadcast(true)}
           onOpenReengagement={() => setShowReengagement(true)}
         />
+
+        <RevenueChart className="mx-3 mb-2 shrink-0" />
+
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
           <p className="text-text-secondary">No contacts yet.</p>
           <p className="text-sm text-text-muted">
@@ -266,16 +270,18 @@ export function Dashboard({
 
   return (
     <div className="flex h-dvh min-h-dvh w-full flex-col overflow-hidden bg-black">
-      <TopStatsBar
-        stats={stats}
-        authenticated={authenticated}
-        onConnectTelegram={() => setShowLoginModal(true)}
-        onOpenAnalytics={() => setShowAnalytics(true)}
-        onOpenBroadcast={() => setShowBroadcast(true)}
-        onOpenReengagement={() => setShowReengagement(true)}
-      />
+        <TopStatsBar
+          stats={stats}
+          authenticated={authenticated}
+          onConnectTelegram={() => setShowLoginModal(true)}
+          onOpenAnalytics={() => setShowAnalytics(true)}
+          onOpenBroadcast={() => setShowBroadcast(true)}
+          onOpenReengagement={() => setShowReengagement(true)}
+        />
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <RevenueChart className="mx-3 mb-2 shrink-0" />
+
+        <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
           className={cn(
             "h-full shrink-0 transition-transform duration-200",
