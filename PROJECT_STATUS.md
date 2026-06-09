@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-237462f
+faba096
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -95,5 +95,7 @@ Completed Priorities:
 - **P2.1** Media schema — media table (contact_id, filename, original_name, mime_type, file_size, price) in schema.ts + migration + MediaRow + Media type
 - **P2.2** Media service — createMedia, getMediaById, getContactMedia, updateMediaPrice, deleteMedia in lib/db/service.ts
 - **P2.3** Media routes — POST /api/media/upload (multipart), GET /api/media?contactId=N, GET /api/media/[id], DELETE /api/media/[id], GET /api/media/[id]/file
+- **P3.1** Sharp blur — npm install sharp, blurred `{filename}_blurred.{ext}` generated on upload for known image types
+- **P3.2** Preview endpoint — GET /api/media/[id]/preview returns blurred preview (unlock checks not yet implemented)
 
 See V1_RELEASE_PLAN.md for full execution plan.

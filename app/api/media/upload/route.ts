@@ -1,8 +1,11 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import sharp from "sharp";
 import { createMedia } from "@/lib/db/service";
 import { apiError, apiOk } from "@/lib/api-error";
+
+const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/tiff", "image/gif"];
 
 export async function POST(request: Request) {
   try {
@@ -22,6 +25,11 @@ export async function POST(request: Request) {
 
     fs.mkdirSync(uploadDir, { recursive: true });
     fs.writeFileSync(path.join(uploadDir, filename), buffer);
+
+    if (IMAGE_MIME_TYPES.includes(file.type)) {
+      const blurredFilename = `${filename}_blurred.${ext}`;
+      await sharp(buffer).blur(20).toFile(path.join(uploadDir, blurredFilename));
+    }
 
     const media = createMedia({
       contactId,
