@@ -13,6 +13,7 @@ import type {
   FollowUpList,
   FollowUpListItem,
   InactiveContact,
+  Media,
   Message,
   MessageDirection,
   MonthlyRevenue,
@@ -25,16 +26,19 @@ import type {
   TopSpender,
   VipLevelBreakdown,
 } from "@/types";
+import fs from "fs";
+import path from "path";
 import { getDb, nowIso } from "./index";
 import {
   initialsFromName,
   mapChatRow,
   mapContactToProfile,
   mapDashboardStats,
+  mapMediaRow,
   mapMessageRow,
   mapPurchaseRow,
 } from "./mappers";
-import type { BroadcastRow, ChatListRow, ContactRow } from "./types";
+import type { BroadcastRow, ChatListRow, ContactRow, MediaRow } from "./types";
 
 const AVATAR_COLORS = [
   "from-violet-500 to-purple-600",
@@ -1556,4 +1560,59 @@ export function getFollowUps(limit: number = 10): FollowUpData {
     list.count = list.items.length;
   }
   return { lists };
+}
+
+export interface CreateMediaInput {
+  contactId: number;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  fileSize: number;
+  price?: number;
+}
+
+export function createMedia(input: CreateMediaInput): Media {
+  const db = getDb();
+  const ts = nowIso();
+  const result = db
+    .prepare(
+      `INSERT INTO media (contact_id, filename, original_name, mime_type, file_size, price, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(input.contactId, input.filename, input.originalName, input.mimeType, input.fileSize, input.price ?? 0, ts);
+  const row = db.prepare("SELECT * FROM media WHERE id = ?").get(result.lastInsertRowid) as MediaRow;
+  return mapMediaRow(row);
+}
+
+export function getMediaById(id: number): Media | null {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM media WHERE id = ?").get(id) as MediaRow | undefined;
+  return row ? mapMediaRow(row) : null;
+}
+
+export function getContactMedia(contactId: number): Media[] {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT * FROM media WHERE contact_id = ? ORDER BY created_at DESC")
+    .all(contactId) as MediaRow[];
+  return rows.map(mapMediaRow);
+}
+
+export function updateMediaPrice(id: number, price: number): Media | null {
+  const db = getDb();
+  db.prepare("UPDATE media SET price = ? WHERE id = ?").run(price, id);
+  return getMediaById(id);
+}
+
+export function deleteMedia(id: number): boolean {
+  const db = getDb();
+  const row = db.prepare("SELECT filename FROM media WHERE id = ?").get(id) as { filename: string } | undefined;
+  if (!row) return false;
+  db.prepare("DELETE FROM media WHERE id = ?").run(id);
+  try {
+    fs.unlinkSync(path.join(process.cwd(), "uploads", "media", row.filename));
+  } catch {
+    // file may not exist on disk
+  }
+  return true;
 }

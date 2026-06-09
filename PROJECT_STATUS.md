@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-c038f7b
+237462f
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -38,6 +38,8 @@ Completed:
 - P1.3 POST /api/webhooks/stripe + middleware whitelist
 - P1.4 Client createCheckoutSession + CheckoutSessionResponse type
 - P2.1 Media table schema + migration + types
+- P2.2 Media service functions (CRUD)
+- P2.3 Media upload/list/get/delete API + file serve
 
 AI Reply MVP:
 COMPLETE
@@ -91,5 +93,7 @@ Completed Priorities:
 - **P1.3** Webhook — POST /api/webhooks/stripe handles checkout.session.completed, calls createPurchase(); whitelisted in middleware
 - **P1.4** Client — createCheckoutSession() in lib/api.ts, CheckoutSessionResponse type
 - **P2.1** Media schema — media table (contact_id, filename, original_name, mime_type, file_size, price) in schema.ts + migration + MediaRow + Media type
+- **P2.2** Media service — createMedia, getMediaById, getContactMedia, updateMediaPrice, deleteMedia in lib/db/service.ts
+- **P2.3** Media routes — POST /api/media/upload (multipart), GET /api/media?contactId=N, GET /api/media/[id], DELETE /api/media/[id], GET /api/media/[id]/file
 
 See V1_RELEASE_PLAN.md for full execution plan.

@@ -10,6 +10,7 @@ import type {
   CreateBroadcastResult,
   DashboardStats,
   FollowUpData,
+  Media,
   Message,
   MessageDirection,
   PpvStats,
@@ -347,4 +348,28 @@ export async function createCheckoutSession(
       body: JSON.stringify({ contactId, amount }),
     }),
   );
+}
+
+export async function uploadMedia(
+  contactId: number,
+  file: File,
+  price?: number,
+): Promise<Media> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("contactId", String(contactId));
+  if (price !== undefined) formData.append("price", String(price));
+  return parseJson<Media>(await crmFetch("/api/media/upload", { method: "POST", body: formData }));
+}
+
+export async function fetchContactMedia(contactId: number): Promise<Media[]> {
+  return parseJson<Media[]>(await crmFetch(`/api/media?contactId=${contactId}`));
+}
+
+export async function fetchMedia(id: string): Promise<Media> {
+  return parseJson<Media>(await crmFetch(`/api/media/${id}`));
+}
+
+export async function deleteMediaApi(id: string): Promise<{ success: boolean }> {
+  return parseJson<{ success: boolean }>(await crmFetch(`/api/media/${id}`, { method: "DELETE" }));
 }

@@ -2,10 +2,11 @@ import type {
   Chat,
   ContactProfile,
   DashboardStats,
+  Media,
   Message,
   Purchase,
 } from "@/types";
-import type { ChatListRow, ContactRow, MessageRow, PurchaseRow } from "./types";
+import type { ChatListRow, ContactRow, MediaRow, MessageRow, PurchaseRow } from "./types";
 
 export function mapChatRow(row: ChatListRow, tags: string[]): Chat {
   return {
@@ -84,6 +85,19 @@ export function mapPurchaseRow(row: PurchaseRow): Purchase {
     purchaseDate: row.purchase_date,
     note: row.note,
     kind: row.kind,
+  };
+}
+
+export function mapMediaRow(row: MediaRow): Media {
+  return {
+    id: String(row.id),
+    contactId: String(row.contact_id),
+    filename: row.filename,
+    originalName: row.original_name,
+    mimeType: row.mime_type,
+    fileSize: row.file_size,
+    price: row.price,
+    createdAt: row.created_at,
   };
 }
 
