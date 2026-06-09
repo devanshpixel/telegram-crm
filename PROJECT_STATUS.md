@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-1d811b1
+6d2c0bd
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -99,5 +99,6 @@ Completed Priorities:
 - **P3.2** Preview endpoint — GET /api/media/[id]/preview returns blurred preview (unlock checks not yet implemented)
 - **P3.3** Unlock check — `isMediaUnlocked(mediaId, contactId)` queries purchases where `kind='ppv'` AND `note LIKE 'media_unlock:{mediaId}:%'` AND `contact_id=?`
 - **P3.4** Unlock checkout — checkout session accepts `mediaId`, adds to Stripe metadata; webhook creates purchase with `note="media_unlock:{mediaId}:stripe_checkout:{sessionId}"`; client `createMediaUnlockCheckoutSession(contactId, mediaId, amount)`
+- **P4.1** Access control — preview and file routes wired to `isMediaUnlocked()`; locked contacts get blurred preview + 403 on file; admin bypass when no contactId
 
 See V1_RELEASE_PLAN.md for full execution plan.

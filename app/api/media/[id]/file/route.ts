@@ -1,10 +1,10 @@
 import path from "path";
 import fs from "fs";
-import { getMediaById } from "@/lib/db/service";
+import { getMediaById, isMediaUnlocked } from "@/lib/db/service";
 import { NextResponse } from "next/server";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -17,6 +17,18 @@ export async function GET(
     const media = getMediaById(mediaId);
     if (!media) {
       return NextResponse.json({ error: "Media not found" }, { status: 404 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const contactIdParam = searchParams.get("contactId");
+    const contactId = contactIdParam ? Number(contactIdParam) : undefined;
+
+    const isUnlocked = contactId && Number.isInteger(contactId) && contactId > 0
+      ? isMediaUnlocked(mediaId, contactId)
+      : true;
+
+    if (!isUnlocked) {
+      return NextResponse.json({ error: "Media not unlocked" }, { status: 403 });
     }
 
     const filePath = path.join(process.cwd(), "uploads", "media", media.filename);
