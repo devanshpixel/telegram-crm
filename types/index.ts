@@ -305,6 +305,17 @@ export interface TimelineEvent {
   amount?: number;
 }
 
+export interface Media {
+  id: string;
+  contactId: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  fileSize: number;
+  price: number;
+  createdAt: string;
+}
+
 export interface CheckoutSessionResponse {
   sessionUrl: string;
   sessionId: string;

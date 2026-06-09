@@ -152,6 +152,25 @@ function migrateDatabase(database: Database.Database): void {
   database.exec(
     "CREATE INDEX IF NOT EXISTS idx_contacts_last_purchase_date ON contacts(last_purchase_date)",
   );
+  const mediaTables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='media'")
+    .all() as { name: string }[];
+  if (mediaTables.length === 0) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS media (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_id INTEGER NOT NULL,
+        filename TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_size INTEGER NOT NULL DEFAULT 0,
+        price REAL NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_media_contact ON media(contact_id);
+    `);
+  }
 }
 
 function createDatabase(): Database.Database {

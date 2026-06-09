@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-ce5d7c2
+c038f7b
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -37,6 +37,7 @@ Completed:
 - P1.2 POST /api/checkout/create-session
 - P1.3 POST /api/webhooks/stripe + middleware whitelist
 - P1.4 Client createCheckoutSession + CheckoutSessionResponse type
+- P2.1 Media table schema + migration + types
 
 AI Reply MVP:
 COMPLETE
@@ -55,6 +56,7 @@ Release Status:
 Fixed:
 
 - ~~crmFetch recursion bug~~ **FIXED** — both branches called crmFetch() instead of fetch(), causing stack overflow on every client API call
+- ~~Webhook idempotency~~ **FIXED** — Stripe checkout.session.completed events processed at-least-once; now deduplicated via stripe_checkout:{sessionId} note lookup before createPurchase()
 
 Other Known Issues:
 
@@ -88,5 +90,6 @@ Completed Priorities:
 - **P1.2** Checkout — POST /api/checkout/create-session creates Stripe Checkout Session with contactId metadata
 - **P1.3** Webhook — POST /api/webhooks/stripe handles checkout.session.completed, calls createPurchase(); whitelisted in middleware
 - **P1.4** Client — createCheckoutSession() in lib/api.ts, CheckoutSessionResponse type
+- **P2.1** Media schema — media table (contact_id, filename, original_name, mime_type, file_size, price) in schema.ts + migration + MediaRow + Media type
 
 See V1_RELEASE_PLAN.md for full execution plan.

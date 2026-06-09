@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
+import { getDb } from "@/lib/db";
 import { createPurchase } from "@/lib/db/service";
 
 export async function POST(request: Request) {
@@ -18,18 +19,23 @@ export async function POST(request: Request) {
     const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as { metadata?: Record<string, string>; amount_total?: number };
+      const session = event.data.object as { id: string; metadata?: Record<string, string>; amount_total?: number };
+      const sessionId = session.id;
       const contactId = session.metadata?.contactId;
       const amountTotal = session.amount_total;
 
-      if (contactId && amountTotal) {
-        createPurchase({
-          contactId: Number(contactId),
-          amount: amountTotal / 100,
-          purchaseDate: new Date().toISOString().split("T")[0],
-          kind: "ppv",
-          note: "stripe_checkout",
-        });
+      if (contactId && amountTotal && sessionId) {
+        const note = `stripe_checkout:${sessionId}`;
+        const existing = getDb().prepare("SELECT id FROM purchases WHERE note = ?").get(note);
+        if (!existing) {
+          createPurchase({
+            contactId: Number(contactId),
+            amount: amountTotal / 100,
+            purchaseDate: new Date().toISOString().split("T")[0],
+            kind: "ppv",
+            note,
+          });
+        }
       }
     }
 

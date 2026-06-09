@@ -87,6 +87,18 @@ CREATE TABLE IF NOT EXISTS purchases (
   FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS media (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id INTEGER NOT NULL,
+  filename TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  file_size INTEGER NOT NULL DEFAULT 0,
+  price REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS tag_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   contact_id INTEGER NOT NULL,
@@ -110,6 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_tags_contact ON tags(contact_id);
 CREATE INDEX IF NOT EXISTS idx_notes_contact ON notes(contact_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_contact ON purchases(contact_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_contact_kind ON purchases(contact_id, kind);
+CREATE INDEX IF NOT EXISTS idx_media_contact ON media(contact_id);
 CREATE INDEX IF NOT EXISTS idx_tag_events_contact ON tag_events(contact_id);
 CREATE INDEX IF NOT EXISTS idx_broadcasts_created_at ON broadcasts(created_at);
 `;

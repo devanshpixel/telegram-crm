@@ -73,6 +73,17 @@ export interface PurchaseRow {
   created_at: string;
 }
 
+export interface MediaRow {
+  id: number;
+  contact_id: number;
+  filename: string;
+  original_name: string;
+  mime_type: string;
+  file_size: number;
+  price: number;
+  created_at: string;
+}
+
 export interface BroadcastRow {
   id: number;
   name: string;
