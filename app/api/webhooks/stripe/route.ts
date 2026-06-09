@@ -23,10 +23,14 @@ export async function POST(request: Request) {
       const sessionId = session.id;
       const contactId = session.metadata?.contactId;
       const amountTotal = session.amount_total;
+      const mediaId = session.metadata?.mediaId;
 
       if (contactId && amountTotal && sessionId) {
-        const note = `stripe_checkout:${sessionId}`;
-        const existing = getDb().prepare("SELECT id FROM purchases WHERE note = ?").get(note);
+        const note = mediaId
+          ? `media_unlock:${mediaId}:stripe_checkout:${sessionId}`
+          : `stripe_checkout:${sessionId}`;
+
+        const existing = getDb().prepare("SELECT id FROM purchases WHERE note LIKE ?").get(`%stripe_checkout:${sessionId}%`);
         if (!existing) {
           createPurchase({
             contactId: Number(contactId),

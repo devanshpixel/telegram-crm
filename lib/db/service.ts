@@ -1604,6 +1604,14 @@ export function updateMediaPrice(id: number, price: number): Media | null {
   return getMediaById(id);
 }
 
+export function isMediaUnlocked(mediaId: number, contactId: number): boolean {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT id FROM purchases WHERE kind = 'ppv' AND note LIKE ? AND contact_id = ?")
+    .get(`media_unlock:${mediaId}:%`, contactId) as { id: number } | undefined;
+  return !!row;
+}
+
 export function deleteMedia(id: number): boolean {
   const db = getDb();
   const row = db.prepare("SELECT filename FROM media WHERE id = ?").get(id) as { filename: string } | undefined;

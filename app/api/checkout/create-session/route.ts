@@ -6,6 +6,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const contactId = Number(body.contactId);
     const amount = Number(body.amount);
+    const mediaId = body.mediaId ? Number(body.mediaId) : undefined;
 
     if (!Number.isInteger(contactId) || contactId <= 0) {
       return NextResponse.json({ error: "Valid contactId is required" }, { status: 400 });
@@ -13,9 +14,15 @@ export async function POST(request: Request) {
     if (typeof amount !== "number" || amount <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
+    if (mediaId !== undefined && (!Number.isInteger(mediaId) || mediaId <= 0)) {
+      return NextResponse.json({ error: "Valid mediaId is required" }, { status: 400 });
+    }
     if (!stripe) {
       return NextResponse.json({ error: "Stripe is not configured" }, { status: 500 });
     }
+
+    const metadata: Record<string, string> = { contactId: String(contactId) };
+    if (mediaId) metadata.mediaId = String(mediaId);
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -29,7 +36,7 @@ export async function POST(request: Request) {
           quantity: 1,
         },
       ],
-      metadata: { contactId: String(contactId) },
+      metadata,
       success_url: `${request.headers.get("origin") || "http://localhost:3000"}?checkout=success`,
       cancel_url: `${request.headers.get("origin") || "http://localhost:3000"}?checkout=cancelled`,
     });

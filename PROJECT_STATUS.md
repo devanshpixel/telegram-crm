@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-faba096
+1d811b1
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -97,5 +97,7 @@ Completed Priorities:
 - **P2.3** Media routes — POST /api/media/upload (multipart), GET /api/media?contactId=N, GET /api/media/[id], DELETE /api/media/[id], GET /api/media/[id]/file
 - **P3.1** Sharp blur — npm install sharp, blurred `{filename}_blurred.{ext}` generated on upload for known image types
 - **P3.2** Preview endpoint — GET /api/media/[id]/preview returns blurred preview (unlock checks not yet implemented)
+- **P3.3** Unlock check — `isMediaUnlocked(mediaId, contactId)` queries purchases where `kind='ppv'` AND `note LIKE 'media_unlock:{mediaId}:%'` AND `contact_id=?`
+- **P3.4** Unlock checkout — checkout session accepts `mediaId`, adds to Stripe metadata; webhook creates purchase with `note="media_unlock:{mediaId}:stripe_checkout:{sessionId}"`; client `createMediaUnlockCheckoutSession(contactId, mediaId, amount)`
 
 See V1_RELEASE_PLAN.md for full execution plan.
