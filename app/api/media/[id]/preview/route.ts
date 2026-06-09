@@ -25,9 +25,7 @@ export async function GET(
     const contactIdParam = searchParams.get("contactId");
     const contactId = contactIdParam ? Number(contactIdParam) : undefined;
 
-    const isUnlocked = contactId && Number.isInteger(contactId) && contactId > 0
-      ? isMediaUnlocked(mediaId, contactId)
-      : true;
+    const isUnlocked = typeof contactId === "number" && Number.isInteger(contactId) && contactId > 0 && isMediaUnlocked(mediaId, contactId);
 
     const uploadDir = path.join(process.cwd(), "uploads", "media");
 
