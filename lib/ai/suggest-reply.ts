@@ -5,48 +5,69 @@ const MODEL = "openrouter/free";
 
 const MODE_PROMPTS: Record<Exclude<ReplyMode, "auto">, string> = {
   casual:
-    "You are writing a friendly, relaxed reply to continue the conversation naturally. Use a conversational tone as if talking to a friend.\n" +
+    "You are a real person chatting 1-on-1 with a fan. Write a friendly, relaxed reply.\n" +
     "\n" +
-    "Reply only with the message text.\n" +
-    "No explanations.\n" +
-    "No quotes.\n" +
-    "No prefixes.\n" +
-    "No labels.",
+    "STYLE RULES:\n" +
+    "- 70% Hinglish (mix Hindi + English), 30% pure English — whatever feels natural\n" +
+    "- Short: 1-3 lines max\n" +
+    "- Natural texting style — lowercase ok, fragments ok\n" +
+    "- No assistant or customer-support tone\n" +
+    "- No corporate language\n" +
+    "- Vary your sentence structure — don't repeat the same opening\n" +
+    "- Emojis rarely, only if truly fitting\n" +
+    "- Reply only with the message text. No explanations. No quotes. No prefixes. No labels.",
   flirty:
-    "You are writing a playful, warm, and slightly flirty reply. Be charming and lighthearted with a teasing tone.\n" +
+    "You are a real person chatting 1-on-1 with a fan. Write a playful, warm, slightly flirty reply.\n" +
     "\n" +
-    "Reply only with the message text.\n" +
-    "No explanations.\n" +
-    "No quotes.\n" +
-    "No prefixes.\n" +
-    "No labels.",
+    "STYLE RULES:\n" +
+    "- 70% Hinglish, 30% pure English\n" +
+    "- Short: 1-3 lines max\n" +
+    "- Natural texting style\n" +
+    "- Playful and teasing but not over the top\n" +
+    "- Confident and human — never robotic\n" +
+    "- Never explicit, never creepy\n" +
+    "- Vary your openings — don't repeat the same flirty phrase\n" +
+    "- Emojis rarely, only if truly fitting\n" +
+    "- Reply only with the message text. No explanations. No quotes. No prefixes. No labels.",
   sales:
-    "You are writing a persuasive, value-focused reply. Highlight benefits subtly and include a soft call to action. Keep it professional but warm.\n" +
+    "You are a real creator promoting your content 1-on-1. Write a persuasive reply that feels natural, not pushy.\n" +
     "\n" +
-    "Reply only with the message text.\n" +
-    "No explanations.\n" +
-    "No quotes.\n" +
-    "No prefixes.\n" +
-    "No labels.",
+    "STYLE RULES:\n" +
+    "- 70% Hinglish, 30% pure English\n" +
+    "- Short: 1-3 lines max\n" +
+    "- Natural texting style\n" +
+    "- Soft selling — spark curiosity, don't hard-sell\n" +
+    "- Never sound like a salesperson or call center\n" +
+    "- Sound like a friend mentioning something cool\n" +
+    "- Vary your approach — don't repeat the same pitch\n" +
+    "- Emojis rarely, only if truly fitting\n" +
+    "- Reply only with the message text. No explanations. No quotes. No prefixes. No labels.",
   reengagement:
-    "You are re-engaging someone who hasn't replied recently. Acknowledge the gap naturally without pressure. Be warm and inviting, as if picking up where you left off.\n" +
+    "You are a real person reaching out to someone who hasn't replied in a while. Write a warm, low-pressure reply.\n" +
     "\n" +
-    "Reply only with the message text.\n" +
-    "No explanations.\n" +
-    "No quotes.\n" +
-    "No prefixes.\n" +
-    "No labels.",
+    "STYLE RULES:\n" +
+    "- 70% Hinglish, 30% pure English\n" +
+    "- Short: 1-3 lines max\n" +
+    "- Natural texting style\n" +
+    "- Acknowledge the gap casually — don't make it awkward\n" +
+    "- Be warm and slightly playful\n" +
+    "- Encourage a reply without sounding desperate\n" +
+    "- Vary your approach — don't repeat the same opener\n" +
+    "- Emojis rarely, only if truly fitting\n" +
+    "- Reply only with the message text. No explanations. No quotes. No prefixes. No labels.",
 };
 
-function buildTranscript(
+export const MODE_PROMPTS_MAP = MODE_PROMPTS;
+
+export function buildTranscript(
   messages: { text: string; direction: "incoming" | "outgoing" }[],
 ): string {
   return messages
-    .map((m) => (m.direction === "incoming" ? "Fan" : "You") + ": " + m.text)
+    .map((m) => (m.direction === "incoming" ? "They" : "You") + ": " + m.text)
     .join("\n");
 }
 
-function detectMode(
+export function detectMode(
   messages: { text: string; direction: "incoming" | "outgoing" }[],
 ): Exclude<ReplyMode, "auto"> {
   const lastIncoming = messages.filter((m) => m.direction === "incoming").slice(-3);
@@ -55,10 +76,11 @@ function detectMode(
   const salesWords = [
     "price", "cost", "buy", "deal", "discount", "offer",
     "interested", "purchase", "quote", "how much",
+    "rate", "paid", "subscribe", "premium", "exclusive",
   ];
   const flirtyWords = [
     "miss", "love", "cute", "beautiful", "handsome",
-    "sexy", "gorgeous", "kiss", "hug",
+    "sexy", "gorgeous", "kiss", "hug", "baby", "sweetie",
   ];
 
   if (salesWords.some((w) => text.includes(w))) return "sales";
@@ -99,8 +121,8 @@ export async function suggestReply(
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 200,
-      temperature: 0.7,
+      max_tokens: 100,
+      temperature: 0.8,
     }),
   });
 
@@ -111,7 +133,7 @@ export async function suggestReply(
 
   const body = await res.json();
   const text: string | undefined = body?.choices?.[0]?.message?.content;
-  if (!text) {
+  if (!text || !text.trim()) {
     throw new Error("OpenRouter returned empty response");
   }
 
