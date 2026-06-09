@@ -17,6 +17,7 @@ import type {
   ReengagementAudiences,
   ReengagementSendInput,
   ReengagementSendResult,
+  ReplyMode,
   RevenueData,
   TimelineEvent,
 } from "@/types";
@@ -394,4 +395,17 @@ export async function updateMediaPriceApi(id: string, price: number): Promise<Me
 
 export async function deleteMediaApi(id: string): Promise<{ success: boolean }> {
   return parseJson<{ success: boolean }>(await crmFetch(`/api/media/${id}`, { method: "DELETE" }));
+}
+
+export async function suggestReplyApi(
+  contactId: number,
+  mode: ReplyMode = "auto",
+): Promise<{ suggestion: string }> {
+  return parseJson<{ suggestion: string }>(
+    await crmFetch("/api/ai/suggest-reply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId, mode }),
+    }),
+  );
 }

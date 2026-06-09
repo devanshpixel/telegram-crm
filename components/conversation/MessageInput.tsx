@@ -3,6 +3,7 @@
 import type { ReplyMode } from "@/types";
 import { Mic, Paperclip, Send, Smile, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { suggestReplyApi } from "@/lib/api";
 
 interface MessageInputProps {
   contactName: string;
@@ -30,16 +31,7 @@ export function MessageInput({ contactName, contactId, onSend }: MessageInputPro
     setGenerating(true);
     setError("");
     try {
-      const res = await fetch("/api/ai/suggest-reply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactId: Number(contactId), mode }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error || "Failed to generate reply");
-      }
-      const { suggestion } = await res.json();
+      const { suggestion } = await suggestReplyApi(Number(contactId), mode);
       setDraft(suggestion);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate reply");

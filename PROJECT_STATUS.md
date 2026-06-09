@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-db04847
+5a09dab
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -131,5 +131,6 @@ Completed Priorities:
 - **P1** Upload security — `MAX_UPLOAD_SIZE` (100MB default, configurable via `MAX_UPLOAD_SIZE` env var); oversized uploads rejected with 413
 - **P2** Sharp isolation — blur failure no longer crashes upload; logged and skipped
 - **P3** Broadcast throttling — 1-second `sleep()` between sends in broadcast + reengagement routes
+- **AI Reply auth fix** — `MessageInput.tsx` now calls `suggestReplyApi()` from `lib/api.ts` (uses `crmFetch()` with `X-API-Key`) instead of raw `fetch()`; added `suggestReplyApi()` to `lib/api.ts`; added `OPENROUTER_API_KEY` to `.env.local`
 
 See V1_RELEASE_PLAN.md for full execution plan.
