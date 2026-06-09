@@ -17,6 +17,7 @@ async function main() {
       const pct = totalPages > 0 ? ((done / totalPages) * 100).toFixed(0) : "0";
       process.stdout.write(`\rProgress: ${pct}% (${done}/${totalPages})`);
       if (remainingPages === 0) process.stdout.write("\n");
+      return 100;
     },
   });
   if (result.remainingPages === 0) {

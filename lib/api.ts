@@ -38,10 +38,10 @@ function reviveMessage(m: Message): Message {
 const _apiKey = process.env.NEXT_PUBLIC_CRM_API_KEY;
 
 async function crmFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  if (!_apiKey) return crmFetch(input, init);
+  if (!_apiKey) return fetch(input, init);
   const headers = new Headers(init?.headers);
   headers.set("X-API-Key", _apiKey);
-  return crmFetch(input, { ...init, headers });
+  return fetch(input, { ...init, headers });
 }
 
 export async function fetchChats(): Promise<Chat[]> {
