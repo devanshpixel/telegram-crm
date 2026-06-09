@@ -1,7 +1,7 @@
 # Project Status
 
 Current HEAD:
-71cdadb
+cc3e270
 
 Base Release:
 checkpoint-23b (d563b89)
@@ -68,7 +68,7 @@ Completed Priorities:
 - **C2** POST /api/ai/suggest-reply → OpenRouter (native fetch, strict prompt)
 - **C3** CRM web UI: Sparkles Generate Reply button
 - **C4** Extension popup: ✨ AI Generate Reply button
-- **BK1** Backup CLI — scripts/backup.ts using db.backup(), WAL-safe, timestamped
+- **BK1** Backup CLI — scripts/backup.ts using db.backup(), WAL-safe, timestamped. Progress callback return value bug fixed (returned -1, setting rate=0 → infinite loop; now returns undefined → default rate=100)
 - **LG1** Auth library — getLoginStatus(), signOut(), checkPassword() in auth.ts
 - **LG2** Login API routes — send-code, verify-code, status, sign-out
 - **LG3** API client functions — telegramSendCode, telegramVerifyCode, telegramStatus, telegramSignOut
