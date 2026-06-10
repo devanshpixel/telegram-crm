@@ -766,8 +766,8 @@ function renderMediaSection(wrap, profile) {
                 amount: Number(m.price || 0)
               }
             });
-            if (res && res.ok && res.data && res.data.sessionUrl) {
-              window.open(res.data.sessionUrl, "_blank");
+            if (res && res.ok && res.data && res.data.paymentLinkUrl) {
+              window.open(res.data.paymentLinkUrl, "_blank");
               unlockBtn.textContent = "Refresh to check";
               unlockBtn.disabled = false;
               unlockBtn.addEventListener("click", () => refreshSidebarProfile(profile.id), { once: true });

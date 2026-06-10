@@ -90,7 +90,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg?.type === "CREATE_MEDIA_UNLOCK_CHECKOUT") {
-    crmFetch(CRM_BASE + "/api/checkout/create-session", {
+    crmFetch(CRM_BASE + "/api/razorpay/create-order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg.body),

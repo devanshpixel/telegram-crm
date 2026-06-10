@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Image, Loader2, Lock, Pencil, Unlock, X, Check } from "lucide-react";
-import { createMediaUnlockCheckoutSession, fetchContact, fetchContactMedia, updateMediaPriceApi } from "@/lib/api";
+import { createMediaUnlockRazorpayOrder, fetchContact, fetchContactMedia, updateMediaPriceApi } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import { PurchaseHistory } from "./PurchaseHistory";
 import type { Media, Purchase } from "@/types";
@@ -87,8 +87,8 @@ function MediaCard({ media, contactId }: { media: Media; contactId: number }) {
   async function handleUnlock() {
     setCheckingOut(true);
     try {
-      const { sessionUrl } = await createMediaUnlockCheckoutSession(contactId, Number(media.id), currentPrice);
-      window.location.href = sessionUrl;
+      const { paymentLinkUrl } = await createMediaUnlockRazorpayOrder(contactId, Number(media.id), currentPrice);
+      window.location.href = paymentLinkUrl;
     } catch {
       setCheckingOut(false);
     }

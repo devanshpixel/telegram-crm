@@ -14,6 +14,7 @@ import type {
   Message,
   MessageDirection,
   PpvStats,
+  RazorpayOrderResponse,
   ReengagementAudiences,
   ReengagementSendInput,
   ReengagementSendResult,
@@ -358,6 +359,33 @@ export async function createMediaUnlockCheckoutSession(
 ): Promise<CheckoutSessionResponse> {
   return parseJson<CheckoutSessionResponse>(
     await crmFetch("/api/checkout/create-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId, amount, mediaId }),
+    }),
+  );
+}
+
+export async function createRazorpayOrder(
+  contactId: number,
+  amount: number,
+): Promise<RazorpayOrderResponse> {
+  return parseJson<RazorpayOrderResponse>(
+    await crmFetch("/api/razorpay/create-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId, amount }),
+    }),
+  );
+}
+
+export async function createMediaUnlockRazorpayOrder(
+  contactId: number,
+  mediaId: number,
+  amount: number,
+): Promise<RazorpayOrderResponse> {
+  return parseJson<RazorpayOrderResponse>(
+    await crmFetch("/api/razorpay/create-order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactId, amount, mediaId }),

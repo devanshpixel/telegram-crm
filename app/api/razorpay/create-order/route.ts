@@ -1,0 +1,59 @@
+import { NextResponse } from "next/server";
+import { razorpay } from "@/lib/razorpay";
+import { getMediaById } from "@/lib/db/service";
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const contactId = Number(body.contactId);
+    const amount = Number(body.amount);
+    const mediaId = body.mediaId ? Number(body.mediaId) : undefined;
+
+    if (!Number.isInteger(contactId) || contactId <= 0) {
+      return NextResponse.json({ error: "Valid contactId is required" }, { status: 400 });
+    }
+    if (mediaId !== undefined && (!Number.isInteger(mediaId) || mediaId <= 0)) {
+      return NextResponse.json({ error: "Valid mediaId is required" }, { status: 400 });
+    }
+    if (!razorpay) {
+      return NextResponse.json({ error: "Razorpay is not configured" }, { status: 500 });
+    }
+
+    let resolvedAmount = amount;
+    if (mediaId !== undefined) {
+      const media = getMediaById(mediaId);
+      if (!media) {
+        return NextResponse.json({ error: "Media not found" }, { status: 404 });
+      }
+      resolvedAmount = media.price;
+    }
+    if (typeof resolvedAmount !== "number" || resolvedAmount <= 0) {
+      return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
+    }
+
+    const notes: Record<string, string> = { contactId: String(contactId) };
+    if (mediaId) notes.mediaId = String(mediaId);
+
+    const paymentLink = await razorpay.paymentLink.create({
+      amount: Math.round(resolvedAmount * 100),
+      currency: "INR",
+      description: "CRM PPV Unlock",
+      customer: {
+        name: "CRM Customer",
+        email: "",
+        contact: "",
+      },
+      notes,
+      callback_url: `${request.headers.get("origin") || "http://localhost:3000"}?checkout=success`,
+      callback_method: "get",
+    });
+
+    return NextResponse.json({
+      paymentLinkUrl: (paymentLink as { short_url: string }).short_url,
+      paymentLinkId: (paymentLink as { id: string }).id,
+    });
+  } catch (e) {
+    console.error("Razorpay create-order error:", e);
+    return NextResponse.json({ error: "Failed to create payment link" }, { status: 500 });
+  }
+}

@@ -321,4 +321,9 @@ export interface CheckoutSessionResponse {
   sessionId: string;
 }
 
+export interface RazorpayOrderResponse {
+  paymentLinkUrl: string;
+  paymentLinkId: string;
+}
+
 export type ReplyMode = "casual" | "flirty" | "sales" | "reengagement" | "auto";
