@@ -85,7 +85,7 @@ export function getContactByTelegramId(
 
 function listChatRows(): ChatListRow[] {
   const db = getDb();
-  return db
+  const rows = db
     .prepare(
       `SELECT c.*, conv.id AS conversation_id, conv.last_message, conv.last_message_time,
               conv.unread_count, conv.is_pinned
@@ -94,6 +94,8 @@ function listChatRows(): ChatListRow[] {
        ORDER BY conv.is_pinned DESC, conv.last_message_time DESC`,
     )
     .all() as ChatListRow[];
+  console.log("[crm-debug] listChatRows: found", rows.length, "rows");
+  return rows;
 }
 
 export function listChats(): Chat[] {
@@ -105,6 +107,7 @@ export function getDashboardStats(): DashboardStats {
   const totalChats = (
     db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number }
   ).count;
+  console.log("[crm-debug] getDashboardStats: totalChats =", totalChats);
   const onlineCount = (
     db
       .prepare("SELECT COUNT(*) AS count FROM contacts WHERE is_online = 1")

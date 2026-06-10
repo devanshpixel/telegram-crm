@@ -1,0 +1,103 @@
+   ▲ Next.js 15.5.19
+   - Local:        http://127.0.0.1:3000
+   - Network:      http://127.0.0.1:3000
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 3.5s
+ ○ Compiling / ...
+ ✓ Compiled / in 7.2s (780 modules)
+ GET / 200 in 8981ms
+ ✓ Compiled in 1879ms (347 modules)
+ GET / 200 in 251ms
+ GET / 200 in 244ms
+ GET / 200 in 315ms
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 1047ms (115 modules)
+ ○ Compiling /api/contacts/[id] ...
+ ✓ Compiled /api/contacts/[id] in 2.1s (787 modules)
+ GET /api/contacts/1 200 in 3218ms
+ ○ Compiling /api/notes ...
+ ✓ Compiled /api/notes in 610ms (789 modules)
+ POST /api/notes 201 in 777ms
+ ✓ Compiled /api/tags in 449ms (791 modules)
+ POST /api/tags 201 in 552ms
+ ○ Compiling /api/followups ...
+ ✓ Compiled /api/followups in 739ms (793 modules)
+ GET /api/followups?limit=10 200 in 842ms
+ ○ Compiling /api/ai/suggest-reply ...
+ ✓ Compiled /api/ai/suggest-reply in 766ms (796 modules)
+ POST /api/ai/suggest-reply 500 in 3812ms
+ ○ Compiling /api/media/upload ...
+ ✓ Compiled /api/media/upload in 837ms (800 modules)
+ POST /api/media/upload 201 in 1283ms
+ ○ Compiling /api/media ...
+ ✓ Compiled /api/media in 622ms (802 modules)
+ GET /api/media?contactId=1 200 in 881ms
+ ○ Compiling /api/razorpay/create-order ...
+ ✓ Compiled /api/razorpay/create-order in 2.8s (914 modules)
+ POST /api/razorpay/create-order 500 in 3126ms
+ ○ Compiling /api/razorpay/webhook ...
+ ✓ Compiled /api/razorpay/webhook in 768ms (916 modules)
+ POST /api/razorpay/webhook 500 in 920ms
+ ○ Compiling /api/purchases/ppv ...
+ ✓ Compiled /api/purchases/ppv in 700ms (918 modules)
+ GET /api/purchases/ppv?limit=10 200 in 970ms
+ GET /api/media?contactId=1 200 in 42ms
+ ○ Compiling /api/media/[id]/file ...
+ ✓ Compiled /api/media/[id]/file in 606ms (920 modules)
+ GET /api/media/2/file?contactId=1 403 in 1391ms
+ ○ Compiling /api/media/[id]/preview ...
+ ✓ Compiled /api/media/[id]/preview in 591ms (922 modules)
+ GET /api/media/2/preview?contactId=1 200 in 1407ms
+ ○ Compiling /api/revenue ...
+ ✓ Compiled /api/revenue in 761ms (924 modules)
+ GET /api/revenue?months=12&limit=10 200 in 1055ms
+ ○ Compiling /api/telegram/send ...
+ ✓ Compiled /api/telegram/send in 1771ms (1116 modules)
+ POST /api/telegram/send 500 in 2317ms
+ GET / 200 in 910ms
+ GET / 200 in 404ms
+ POST /api/ai/suggest-reply 500 in 2429ms
+ DELETE /api/tags 404 in 61ms
+ POST /api/tags 400 in 24ms
+ DELETE /api/tags 200 in 49ms
+ GET / 200 in 283ms
+ GET /api/contacts/1 200 in 75ms
+ POST /api/notes 201 in 53ms
+ POST /api/tags 201 in 64ms
+ DELETE /api/tags 200 in 68ms
+ GET /api/followups?limit=10 200 in 83ms
+ POST /api/ai/suggest-reply 500 in 3636ms
+ POST /api/media/upload 201 in 88ms
+ GET /api/media?contactId=1 200 in 48ms
+ POST /api/razorpay/create-order 500 in 123ms
+ POST /api/razorpay/webhook 500 in 47ms
+ GET /api/purchases/ppv?limit=10 200 in 47ms
+ GET /api/media?contactId=1 200 in 55ms
+ GET /api/media/3/file?contactId=1 403 in 510ms
+ GET /api/media/3/preview?contactId=1 200 in 60ms
+ GET /api/revenue?months=12&limit=10 200 in 97ms
+ POST /api/telegram/send 500 in 74ms
+ GET / 200 in 308ms
+ GET /api/revenue?months=12&limit=10 200 in 89ms
+ ○ Compiling /api/contacts/[id]/messages ...
+ ✓ Compiled /api/contacts/[id]/messages in 5.6s (1121 modules)
+ GET /api/contacts/17 200 in 5744ms
+ GET /api/telegram/status 200 in 6301ms
+ GET /api/media?contactId=17 200 in 219ms
+ ○ Compiling /api/contacts/[id]/timeline ...
+ GET /api/contacts/17/messages 200 in 7537ms
+ ✓ Compiled /api/contacts/[id]/timeline in 3.1s (1123 modules)
+ GET /api/contacts/17 200 in 3375ms
+ GET /api/media?contactId=17 200 in 2103ms
+ GET /api/contacts/17 200 in 48ms
+ GET /api/media/1/preview?contactId=17 404 in 148ms
+ GET /api/contacts/17/timeline?limit=50 200 in 4346ms
+ GET /api/contacts/17/timeline?limit=50 200 in 68ms
+ GET / 200 in 624ms
+ ✓ Compiled in 8.2s (896 modules)
+ ✓ Compiled in 598ms (348 modules)
+ ✓ Compiled in 336ms (348 modules)
+ ✓ Compiled in 705ms (348 modules)
+ ✓ Compiled in 280ms (348 modules)

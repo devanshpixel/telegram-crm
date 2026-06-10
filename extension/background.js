@@ -1,7 +1,20 @@
-const CRM_BASE = "http://localhost:3000";
-const CRM_KEY = "16be7932a405cf8d";
+let CRM_BASE = "http://localhost:3000";
+let CRM_KEY = "";
+
+chrome.storage.local.get(["crmBaseUrl", "crmApiKey"], (result) => {
+  if (result.crmBaseUrl) CRM_BASE = result.crmBaseUrl;
+  if (result.crmApiKey) CRM_KEY = result.crmApiKey;
+});
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.crmBaseUrl) CRM_BASE = changes.crmBaseUrl.newValue || CRM_BASE;
+  if (changes.crmApiKey) CRM_KEY = changes.crmApiKey.newValue || CRM_KEY;
+});
 
 function crmFetch(url, options) {
+  if (!CRM_KEY) {
+    return Promise.reject(new Error("CRM key not configured. Click extension icon to set it up."));
+  }
   const headers = new Headers(options?.headers);
   headers.set("X-API-Key", CRM_KEY);
   return fetch(url, { ...options, headers });

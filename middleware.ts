@@ -7,7 +7,6 @@ const PUBLIC_PATHS = [
   "/api/telegram/verify-password",
   "/api/telegram/status",
   "/api/razorpay/webhook",
-  "/api/media/",
 ];
 
 export function middleware(request: NextRequest) {
@@ -22,11 +21,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.json({ error: "CRM_API_KEY is not configured" }, { status: 500 });
   }
 
-  if (request.headers.get("x-api-key") !== apiKey) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Allow requests with valid session cookie (browser frontend)
+  if (request.cookies.get("crm_session")?.value === apiKey) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  // Allow requests with valid API key header (extension, programmatic)
+  if (request.headers.get("x-api-key") === apiKey) {
+    return NextResponse.next();
+  }
+
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
 export const config = {

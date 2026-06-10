@@ -872,12 +872,52 @@ function showOffline() {
   clear(dom.content);
   const empty = document.createElement("p");
   empty.className = "empty";
-  empty.textContent = "Start the CRM at localhost:3000";
+  empty.textContent = "Open extension settings (⚙) to configure CRM URL and API key.";
   dom.content.appendChild(empty);
+}
+
+function bindSettings() {
+  const toggle = document.getElementById("settingsToggle");
+  const panel = document.getElementById("settingsPanel");
+  const urlInput = document.getElementById("settingsUrl");
+  const keyInput = document.getElementById("settingsKey");
+  const saveBtn = document.getElementById("settingsSaveBtn");
+  const msgEl = document.getElementById("settingsMsg");
+
+  toggle.addEventListener("click", () => {
+    const show = panel.style.display !== "block";
+    panel.style.display = show ? "block" : "none";
+    if (show) {
+      chrome.storage.local.get(["crmBaseUrl", "crmApiKey"], (result) => {
+        urlInput.value = result.crmBaseUrl || "http://localhost:3000";
+        keyInput.value = result.crmApiKey || "";
+      });
+    }
+  });
+
+  saveBtn.addEventListener("click", () => {
+    const url = urlInput.value.trim();
+    const key = keyInput.value.trim();
+    if (!url || !key) {
+      msgEl.textContent = "Both fields required";
+      msgEl.style.color = "#fca5a5";
+      return;
+    }
+    chrome.storage.local.set({ crmBaseUrl: url, crmApiKey: key }, () => {
+      msgEl.textContent = "Saved. Refreshing...";
+      msgEl.style.color = "#86efac";
+      setTimeout(() => {
+        panel.style.display = "none";
+        msgEl.textContent = "";
+        location.reload();
+      }, 1000);
+    });
+  });
 }
 
 async function init() {
   injectStyles();
+  bindSettings();
   const ping = await send({ type: "PING" });
   setStatus(ping && ping.ok);
   if (ping && ping.ok) {

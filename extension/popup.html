@@ -220,8 +220,27 @@
 <body>
   <header>
     <h1>Lustify CRM</h1>
-    <span id="status" class="status off">...</span>
+    <div style="display:flex;gap:4px;align-items:center">
+      <span id="status" class="status off">...</span>
+      <button id="settingsToggle" style="background:transparent;border:0;color:#8a8a93;cursor:pointer;font-size:14px;padding:2px" title="Settings">⚙</button>
+    </div>
   </header>
+  <div id="settingsPanel" style="display:none;padding:8px 12px;border-bottom:1px solid #1f1f23;background:#0f0f12">
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <label style="font-size:10px;color:#6b6b75;text-transform:uppercase;letter-spacing:0.5px">CRM URL</label>
+      <input id="settingsUrl" type="url" placeholder="http://localhost:3000"
+        style="background:#15151a;border:1px solid #2a2a30;color:#e7e7ea;border-radius:4px;padding:4px 8px;font:inherit;font-size:11px"
+      />
+      <label style="font-size:10px;color:#6b6b75;text-transform:uppercase;letter-spacing:0.5px">API Key</label>
+      <input id="settingsKey" type="password" placeholder="CRM_API_KEY"
+        style="background:#15151a;border:1px solid #2a2a30;color:#e7e7ea;border-radius:4px;padding:4px 8px;font:inherit;font-size:11px"
+      />
+      <div style="display:flex;gap:4px;margin-top:2px">
+        <button id="settingsSaveBtn" style="background:#7c3aed;color:#fff;border:0;border-radius:4px;padding:4px 10px;font:inherit;font-size:11px;cursor:pointer;flex:1">Save</button>
+        <span id="settingsMsg" style="font-size:10px;color:#86efac;min-height:16px;display:flex;align-items:center"></span>
+      </div>
+    </div>
+  </div>
   <form id="newContact">
     <input id="fName" placeholder="Name" required />
     <input id="fUser" placeholder="Username (e.g. @elena_v)" required />

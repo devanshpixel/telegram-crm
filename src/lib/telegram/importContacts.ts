@@ -5,6 +5,11 @@ import { createContact } from "@/lib/db/service";
 import { getTelegramClient } from "./client";
 import type { TelegramClient } from "telegram";
 
+const DB_PATH =
+  process.env.NODE_ENV === "production"
+    ? "/tmp/crm.db"
+    : "data/crm.db";
+
 export interface ContactImportSummary {
   total: number;
   imported: number;
@@ -55,9 +60,15 @@ async function fetchTelegramContactUsers(
 }
 
 export async function importContacts(): Promise<ContactImportSummary> {
+  console.log("[crm-debug] importContacts: DB_PATH =", DB_PATH);
+  const beforeCount = (getDb().prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? -1;
+  console.log("[crm-debug] importContacts: contacts BEFORE import =", beforeCount);
+
   await ensureConnected();
   const client = getTelegramClient();
   const users = await fetchTelegramContactUsers(client);
+
+  console.log("[crm-debug] importContacts: fetched", users.length, "users from Telegram");
 
   let total = 0;
   let imported = 0;
@@ -89,6 +100,10 @@ export async function importContacts(): Promise<ContactImportSummary> {
     });
     imported++;
   }
+
+  const afterCount = (getDb().prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? -1;
+  console.log("[crm-debug] importContacts: contacts AFTER import =", afterCount);
+  console.log("[crm-debug] importContacts: summary =", { total, imported, skipped });
 
   return { total, imported, skipped };
 }
