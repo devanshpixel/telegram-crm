@@ -1,6 +1,6 @@
 /**
  * Ensures better-sqlite3 native bindings match the current Node.js ABI.
- * Fails fast with a clear message instead of ERR_DLOPEN_FAILED at runtime.
+ * Soft-fail: warns on failure because production uses Turso, not better-sqlite3.
  */
 const { versions } = process;
 
@@ -18,17 +18,13 @@ try {
   );
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  console.error("\nbetter-sqlite3 native binding failed to load.\n");
-  console.error(message);
-  console.error(
+  console.warn("\nbetter-sqlite3 native binding failed to load (non-fatal, production uses Turso).\n");
+  console.warn(message);
+  console.warn(
     `\nCurrent Node: ${process.version} (ABI ${versions.modules})`,
   );
-  console.error(
-    "This usually means dependencies were installed with a different Node version.",
-  );
-  console.error("\nFix (run in this project folder):");
-  console.error("  1. Use one Node version everywhere (see .nvmrc)");
-  console.error("  2. npm run db:rebuild");
-  console.error("  3. Or: rm -r node_modules && npm install\n");
-  process.exit(1);
+  console.warn("\nTo fix locally:");
+  console.warn("  1. Use one Node version everywhere (see .nvmrc)");
+  console.warn("  2. npm run db:rebuild");
+  console.warn("  3. Or: rm -r node_modules && npm install\n");
 }
