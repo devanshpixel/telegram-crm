@@ -25,30 +25,34 @@ export async function POST(request: Request) {
 
     if (event.event === "payment_link.paid") {
       const paymentLink = event.payload.payment_link?.entity;
-      const payments = event.payload.payment?.entity;
+      const payment = event.payload.payment?.entity;
       const notes = paymentLink?.notes || {};
       const contactId = notes.contactId;
       const mediaId = notes.mediaId;
       const amountPaid = paymentLink?.amount_paid;
-      const paymentId = payments?.id || paymentLink?.id;
+      const paymentId = payment?.id;
 
       if (contactId && amountPaid && paymentId) {
         const note = mediaId
           ? `media_unlock:${mediaId}:razorpay_payment:${paymentId}`
           : `razorpay_payment:${paymentId}`;
 
-        const existing = getDb()
-          .prepare("SELECT id FROM purchases WHERE note LIKE ?")
-          .get(`%razorpay_payment:${paymentId}%`);
-        if (!existing) {
-          createPurchase({
-            contactId: Number(contactId),
-            amount: amountPaid / 100,
-            purchaseDate: new Date().toISOString().split("T")[0],
-            kind: "ppv",
-            note,
-          });
-        }
+        const db = getDb();
+        const processPayment = db.transaction(() => {
+          const existing = db
+            .prepare("SELECT id FROM purchases WHERE note LIKE ?")
+            .get(`%razorpay_payment:${paymentId}%`);
+          if (!existing) {
+            createPurchase({
+              contactId: Number(contactId),
+              amount: amountPaid / 100,
+              purchaseDate: new Date().toISOString().split("T")[0],
+              kind: "ppv",
+              note,
+            });
+          }
+        });
+        processPayment();
       }
     }
 

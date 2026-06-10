@@ -34,17 +34,16 @@ export async function POST(request: Request) {
     const notes: Record<string, string> = { contactId: String(contactId) };
     if (mediaId) notes.mediaId = String(mediaId);
 
+    const appUrl = process.env.APP_URL || "http://localhost:3000";
     const paymentLink = await razorpay.paymentLink.create({
       amount: Math.round(resolvedAmount * 100),
       currency: "INR",
       description: "CRM PPV Unlock",
       customer: {
         name: "CRM Customer",
-        email: "",
-        contact: "",
       },
       notes,
-      callback_url: `${request.headers.get("origin") || "http://localhost:3000"}?checkout=success`,
+      callback_url: `${appUrl}?checkout=success`,
       callback_method: "get",
     });
 
