@@ -32,6 +32,7 @@ async function executeBatch(client: any, statements: string[]): Promise<void> {
   for (const sql of statements) {
     const trimmed = sql.trim();
     if (!trimmed) continue;
+    console.log(`  EXEC: ${trimmed.slice(0, 120)}${trimmed.length > 120 ? "..." : ""}`);
     try {
       await client.execute(trimmed);
     } catch (e: any) {
@@ -70,6 +71,13 @@ async function main() {
 
   for (const table of TABLE_ORDER) {
     console.log(`Migrating: ${table}`);
+    const tableExists = source.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+    ).get(table);
+    if (!tableExists) {
+      console.log(`  Table does not exist in source, skipping`);
+      continue;
+    }
     const rows = source.prepare(`SELECT * FROM ${table}`).all() as Record<string, unknown>[];
 
     if (rows.length === 0) {

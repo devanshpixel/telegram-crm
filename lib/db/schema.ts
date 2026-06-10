@@ -1,6 +1,6 @@
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS contacts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   username TEXT NOT NULL,
   avatar TEXT NOT NULL,
@@ -23,12 +23,16 @@ CREATE TABLE IF NOT EXISTS contacts (
   fan_status TEXT NOT NULL DEFAULT 'active',
   fan_score INTEGER NOT NULL DEFAULT 0,
   last_purchase_date TEXT,
+  offer_sent INTEGER NOT NULL DEFAULT 0,
+  conv_state TEXT NOT NULL DEFAULT 'FREE_CHAT',
+  offer_sent_at TEXT,
+  last_locked_response_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   contact_id INTEGER NOT NULL UNIQUE,
   last_message TEXT NOT NULL DEFAULT '',
   last_message_time TEXT NOT NULL,
@@ -41,7 +45,7 @@ CREATE TABLE IF NOT EXISTS conversations (
 );
 
 CREATE TABLE IF NOT EXISTS messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   conversation_id INTEGER NOT NULL,
   text TEXT NOT NULL,
   direction TEXT NOT NULL CHECK (direction IN ('incoming', 'outgoing')),
@@ -52,7 +56,7 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE TABLE IF NOT EXISTS tags (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   contact_id INTEGER NOT NULL,
   name TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -61,7 +65,7 @@ CREATE TABLE IF NOT EXISTS tags (
 );
 
 CREATE TABLE IF NOT EXISTS notes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   contact_id INTEGER NOT NULL,
   content TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -70,14 +74,14 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 
 CREATE TABLE IF NOT EXISTS telegram_sessions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   session_string TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS purchases (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   contact_id INTEGER NOT NULL,
   amount REAL NOT NULL,
   purchase_date TEXT NOT NULL,
@@ -88,7 +92,7 @@ CREATE TABLE IF NOT EXISTS purchases (
 );
 
 CREATE TABLE IF NOT EXISTS media (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   contact_id INTEGER NOT NULL,
   filename TEXT NOT NULL,
   original_name TEXT NOT NULL,
@@ -100,7 +104,7 @@ CREATE TABLE IF NOT EXISTS media (
 );
 
 CREATE TABLE IF NOT EXISTS tag_events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   contact_id INTEGER NOT NULL,
   tag_name TEXT NOT NULL,
   event_type TEXT NOT NULL CHECK (event_type IN ('added', 'removed')),
@@ -109,11 +113,17 @@ CREATE TABLE IF NOT EXISTS tag_events (
 );
 
 CREATE TABLE IF NOT EXISTS broadcasts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   message TEXT NOT NULL,
   recipient_count INTEGER NOT NULL,
   sent_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS telegram_pending_codes (
+  phone TEXT PRIMARY KEY,
+  phone_code_hash TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
 
