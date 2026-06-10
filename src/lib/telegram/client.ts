@@ -7,17 +7,19 @@ declare global {
 }
 
 export async function loadSessionString(): Promise<string> {
+  console.log("[AUTH] Checking TELEGRAM_SESSION in env: exists =", !!process.env.TELEGRAM_SESSION, "length =", process.env.TELEGRAM_SESSION?.length || 0);
   const envSession = process.env.TELEGRAM_SESSION;
   if (envSession && envSession.trim().length > 0) {
-    console.log("[TELEGRAM] Using TELEGRAM_SESSION from environment");
+    console.log("[TELEGRAM] Using TELEGRAM_SESSION from environment, length=" + envSession.trim().length);
     return envSession.trim();
   }
+  console.log("[AUTH] TELEGRAM_SESSION env empty, checking telegram_sessions table");
   const db = await getDb();
   const row = await db
     .prepare("SELECT session_string FROM telegram_sessions LIMIT 1")
     .get() as { session_string: string } | undefined;
   if (row?.session_string) {
-    console.log("[TELEGRAM] Using session from telegram_sessions table");
+    console.log("[TELEGRAM] Using session from telegram_sessions table, length=" + row.session_string.length);
     return row.session_string;
   }
   console.log("[TELEGRAM] No session found (env empty, table empty)");

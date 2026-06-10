@@ -123,6 +123,7 @@ export async function getLoginStatus(): Promise<{
   phone: string;
 }> {
   const sessionString = await loadSessionString();
+  console.log("[AUTH] sessionString resolved: exists=", !!sessionString, "length=", sessionString.length);
 
   if (!sessionString) {
     const reason = "No session found in TELEGRAM_SESSION env var or telegram_sessions table. Run npm run telegram:login or set TELEGRAM_SESSION.";
@@ -132,25 +133,33 @@ export async function getLoginStatus(): Promise<{
 
   const apiIdRaw = process.env.TELEGRAM_API_ID;
   const apiHash = process.env.TELEGRAM_API_HASH;
+  console.log("[AUTH] API creds: apiId exists=", !!apiIdRaw, "apiHash exists=", !!apiHash);
   if (!apiIdRaw || !apiHash) {
     const reason = "Missing TELEGRAM_API_ID or TELEGRAM_API_HASH";
     console.log(`[TELEGRAM] Status: unauthenticated — ${reason}`);
     return { authenticated: false, reason, account: "", phone: "" };
   }
 
+  console.log("[AUTH] Creating TelegramClient with StringSession, session length=" + sessionString.length);
   const client = new TelegramClient(new StringSession(sessionString), Number(apiIdRaw), apiHash, {
     connectionRetries: 1,
   });
+  console.log("[AUTH] TelegramClient created");
 
   try {
+    console.log("[AUTH] Calling client.connect()...");
     await client.connect();
+    console.log("[AUTH] client.connect() completed, client.connected =", client.connected);
+
     if (!client.connected) {
       const reason = "Session string exists but client failed to connect";
       console.log(`[TELEGRAM] Status: unauthenticated — ${reason}`);
       return { authenticated: false, reason, account: "", phone: "" };
     }
 
+    console.log("[AUTH] Calling client.getMe()...");
     const me = await client.getMe();
+    console.log("[AUTH] getMe() returned:", me ? "object" : "null", me ? "id=" + me.id : "");
     if (!me) {
       const reason = "Session connected but getMe returned null — session may be revoked";
       console.log(`[TELEGRAM] Status: unauthenticated — ${reason}`);
@@ -163,11 +172,15 @@ export async function getLoginStatus(): Promise<{
     return { authenticated: true, reason: "Authenticated session", account, phone };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : "";
+    console.log("[AUTH] Exception caught:", msg);
+    console.log("[AUTH] Stack:", stack);
     const reason = `Session validation failed: ${msg}`;
     console.log(`[TELEGRAM] Status: unauthenticated — ${reason}`);
     return { authenticated: false, reason, account: "", phone: "" };
   } finally {
-    try { await client.disconnect(); } catch { /* ignore */ }
+    console.log("[AUTH] Disconnecting client...");
+    try { await client.disconnect(); console.log("[AUTH] Client disconnected"); } catch { console.log("[AUTH] Disconnect failed (ignored)"); }
   }
 }
 
