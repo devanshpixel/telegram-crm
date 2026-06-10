@@ -3,7 +3,7 @@ import { getLoginStatus } from "@/src/lib/telegram/auth";
 
 export async function GET() {
   try {
-    const status = getLoginStatus();
+    const status = await getLoginStatus();
     return NextResponse.json(status, { status: 200 });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Status check failed";

@@ -1,8 +1,7 @@
-import { Api, client as tgClient } from "telegram";
+import { Api, client as tgClient, TelegramClient } from "telegram";
+import { StringSession } from "telegram/sessions";
 import { getDb, nowIso } from "@/lib/db";
-import { getTelegramClient } from "./client";
-
-const pendingCodes = new Map<string, string>();
+import { getTelegramClient, loadSessionString } from "./client";
 
 function getApiCredentials(): { apiId: number; apiHash: string } {
   const apiIdRaw = process.env.TELEGRAM_API_ID;
@@ -23,27 +22,27 @@ function getApiCredentials(): { apiId: number; apiHash: string } {
 }
 
 async function ensureConnected(): Promise<void> {
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
   if (!client.connected) {
     await client.connect();
   }
 }
 
-function saveSessionString(sessionString: string): void {
-  const db = getDb();
+async function saveSessionString(sessionString: string): Promise<void> {
+  const db = await getDb();
   const ts = nowIso();
-  const existing = db
+  const existing = await db
     .prepare("SELECT id FROM telegram_sessions LIMIT 1")
     .get() as { id: number } | undefined;
 
   if (existing) {
-    db.prepare(
+    await db.prepare(
       "UPDATE telegram_sessions SET session_string = ?, updated_at = ? WHERE id = ?",
     ).run(sessionString, ts, existing.id);
     return;
   }
 
-  db.prepare(
+  await db.prepare(
     "INSERT INTO telegram_sessions (session_string, created_at, updated_at) VALUES (?, ?, ?)",
   ).run(sessionString, ts, ts);
 }
@@ -52,12 +51,18 @@ export async function sendCode(
   phone: string,
 ): Promise<{ isCodeViaApp: boolean }> {
   await ensureConnected();
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
   const { phoneCodeHash, isCodeViaApp } = await client.sendCode(
     getApiCredentials(),
     phone,
   );
-  pendingCodes.set(phone, phoneCodeHash);
+
+  const db = await getDb();
+  const ts = nowIso();
+  await db.prepare(
+    "INSERT OR REPLACE INTO telegram_pending_codes (phone, phone_code_hash, created_at) VALUES (?, ?, ?)",
+  ).run(phone, phoneCodeHash, ts);
+
   return { isCodeViaApp };
 }
 
@@ -65,15 +70,21 @@ export async function verifyCode(
   phone: string,
   code: string,
 ): Promise<void> {
-  const phoneCodeHash = pendingCodes.get(phone);
-  if (!phoneCodeHash) {
+  const db = await getDb();
+  const row = await db
+    .prepare("SELECT phone_code_hash FROM telegram_pending_codes WHERE phone = ?")
+    .get(phone) as { phone_code_hash: string } | undefined;
+
+  if (!row) {
     throw new Error(
       "No pending verification for this phone. Call sendCode first.",
     );
   }
 
+  const phoneCodeHash = row.phone_code_hash;
+
   await ensureConnected();
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
 
   try {
     const result = await client.invoke(
@@ -94,7 +105,7 @@ export async function verifyCode(
     }
     throw err;
   } finally {
-    pendingCodes.delete(phone);
+    await db.prepare("DELETE FROM telegram_pending_codes WHERE phone = ?").run(phone);
   }
 
   const sessionString = client.session.save() as unknown as string;
@@ -102,15 +113,62 @@ export async function verifyCode(
     throw new Error("Failed to save Telegram session after sign-in");
   }
 
-  saveSessionString(sessionString);
+  await saveSessionString(sessionString);
 }
 
-export function getLoginStatus(): { authenticated: boolean } {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT id FROM telegram_sessions LIMIT 1")
-    .get() as { id: number } | undefined;
-  return { authenticated: !!row };
+export async function getLoginStatus(): Promise<{
+  authenticated: boolean;
+  reason: string;
+  account: string;
+  phone: string;
+}> {
+  const sessionString = await loadSessionString();
+
+  if (!sessionString) {
+    const reason = "No session found in TELEGRAM_SESSION env var or telegram_sessions table. Run npm run telegram:login or set TELEGRAM_SESSION.";
+    console.log(`[TELEGRAM] Status: unauthenticated — ${reason}`);
+    return { authenticated: false, reason, account: "", phone: "" };
+  }
+
+  const apiIdRaw = process.env.TELEGRAM_API_ID;
+  const apiHash = process.env.TELEGRAM_API_HASH;
+  if (!apiIdRaw || !apiHash) {
+    const reason = "Missing TELEGRAM_API_ID or TELEGRAM_API_HASH";
+    console.log(`[TELEGRAM] Status: unauthenticated — ${reason}`);
+    return { authenticated: false, reason, account: "", phone: "" };
+  }
+
+  const client = new TelegramClient(new StringSession(sessionString), Number(apiIdRaw), apiHash, {
+    connectionRetries: 1,
+  });
+
+  try {
+    await client.connect();
+    if (!client.connected) {
+      const reason = "Session string exists but client failed to connect";
+      console.log(`[TELEGRAM] Status: unauthenticated — ${reason}`);
+      return { authenticated: false, reason, account: "", phone: "" };
+    }
+
+    const me = await client.getMe();
+    if (!me) {
+      const reason = "Session connected but getMe returned null — session may be revoked";
+      console.log(`[TELEGRAM] Status: unauthenticated — ${reason}`);
+      return { authenticated: false, reason, account: "", phone: "" };
+    }
+
+    const account = me.username ? `@${me.username}` : `${me.firstName || ""} ${me.lastName || ""}`.trim() || `user ${me.id}`;
+    const phone = me.phone || "";
+    console.log(`[TELEGRAM] Status: authenticated — account=${account} phone=${phone}`);
+    return { authenticated: true, reason: "Authenticated session", account, phone };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const reason = `Session validation failed: ${msg}`;
+    console.log(`[TELEGRAM] Status: unauthenticated — ${reason}`);
+    return { authenticated: false, reason, account: "", phone: "" };
+  } finally {
+    try { await client.disconnect(); } catch { /* ignore */ }
+  }
 }
 
 export async function signOut(): Promise<void> {
@@ -127,13 +185,13 @@ export async function signOut(): Promise<void> {
     }
   }
   global.__telegramClient = undefined;
-  const db = getDb();
-  db.prepare("DELETE FROM telegram_sessions").run();
+  const db = await getDb();
+  await db.prepare("DELETE FROM telegram_sessions").run();
 }
 
 export async function checkPassword(password: string): Promise<void> {
   await ensureConnected();
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
   const { apiId, apiHash } = getApiCredentials();
   await tgClient.auth.signInWithPassword(client, { apiId, apiHash }, {
     password: async () => password,
@@ -143,5 +201,5 @@ export async function checkPassword(password: string): Promise<void> {
   if (!sessionString) {
     throw new Error("Failed to save Telegram session after 2FA verification");
   }
-  saveSessionString(sessionString);
+  await saveSessionString(sessionString);
 }
