@@ -44,6 +44,12 @@ yarn-error.log*
 # restored-project backup
 /restored-project/
 
+# uploads
+/uploads/
+
+# log files
+*.log
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
