@@ -60,15 +60,19 @@ async function fetchTelegramContactUsers(
 }
 
 export async function importContacts(): Promise<ContactImportSummary> {
-  console.log("[crm-debug] importContacts: DB_PATH =", DB_PATH);
-  const beforeCount = (getDb().prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? -1;
-  console.log("[crm-debug] importContacts: contacts BEFORE import =", beforeCount);
+  console.log("[IMPORT] DB_PATH =", DB_PATH);
+  const beforeContacts = (getDb().prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? 0;
+  const beforeConversations = (getDb().prepare("SELECT COUNT(*) AS count FROM conversations").get() as { count: number })?.count ?? 0;
+  const beforeMessages = (getDb().prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number })?.count ?? 0;
+  console.log("[IMPORT] contacts before:", beforeContacts);
+  console.log("[IMPORT] conversations before:", beforeConversations);
+  console.log("[IMPORT] messages before:", beforeMessages);
 
   await ensureConnected();
   const client = getTelegramClient();
   const users = await fetchTelegramContactUsers(client);
 
-  console.log("[crm-debug] importContacts: fetched", users.length, "users from Telegram");
+  console.log("[IMPORT] fetched users:", users.length);
 
   let total = 0;
   let imported = 0;
@@ -101,9 +105,13 @@ export async function importContacts(): Promise<ContactImportSummary> {
     imported++;
   }
 
-  const afterCount = (getDb().prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? -1;
-  console.log("[crm-debug] importContacts: contacts AFTER import =", afterCount);
-  console.log("[crm-debug] importContacts: summary =", { total, imported, skipped });
+  const afterContacts = (getDb().prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? 0;
+  const afterConversations = (getDb().prepare("SELECT COUNT(*) AS count FROM conversations").get() as { count: number })?.count ?? 0;
+  const afterMessages = (getDb().prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number })?.count ?? 0;
+  console.log("[IMPORT] contacts after:", afterContacts);
+  console.log("[IMPORT] conversations after:", afterConversations);
+  console.log("[IMPORT] messages after:", afterMessages);
+  console.log("[IMPORT] summary:", { total, imported, skipped });
 
   return { total, imported, skipped };
 }

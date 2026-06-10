@@ -187,25 +187,17 @@ function createDatabase(): Database.Database {
 }
 
 export function getDb(): Database.Database {
-  console.log("[crm-debug] getDb() called, DB_PATH =", DB_PATH);
-  const before = global.__crmDb
-    ? ((global.__crmDb.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? -1)
-    : -2;
-  console.log("[crm-debug] getDb() existing global row count:", before);
+  console.log("[DB] getDb() DB_PATH =", DB_PATH);
   if (process.env.NODE_ENV === "production") {
     if (!global.__crmDb) {
       global.__crmDb = createDatabase();
     }
-    const after = (global.__crmDb.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? -3;
-    console.log("[crm-debug] getDb() returning db with row count:", after);
     return global.__crmDb;
   }
 
   if (!global.__crmDb) {
     global.__crmDb = createDatabase();
   }
-  const after = (global.__crmDb.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? -3;
-  console.log("[crm-debug] getDb() returning db with row count:", after);
   return global.__crmDb;
 }
 

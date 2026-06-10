@@ -94,7 +94,7 @@ function listChatRows(): ChatListRow[] {
        ORDER BY conv.is_pinned DESC, conv.last_message_time DESC`,
     )
     .all() as ChatListRow[];
-  console.log("[crm-debug] listChatRows: found", rows.length, "rows");
+  console.log("[DASHBOARD] listChats returned", rows.length, "rows");
   return rows;
 }
 
@@ -107,7 +107,7 @@ export function getDashboardStats(): DashboardStats {
   const totalChats = (
     db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number }
   ).count;
-  console.log("[crm-debug] getDashboardStats: totalChats =", totalChats);
+  console.log("[DASHBOARD] getDashboardStats: totalChats =", totalChats);
   const onlineCount = (
     db
       .prepare("SELECT COUNT(*) AS count FROM contacts WHERE is_online = 1")

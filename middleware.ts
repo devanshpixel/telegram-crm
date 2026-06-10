@@ -11,29 +11,42 @@ const PUBLIC_PATHS = [
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
-  }
-
   const apiKey = process.env.CRM_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "CRM_API_KEY is not configured" }, { status: 500 });
+
+  // Build response and set crm_session cookie if missing
+  const response = NextResponse.next();
+  if (apiKey && !request.cookies.get("crm_session")) {
+    response.cookies.set("crm_session", apiKey, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
   }
 
-  // Allow requests with valid session cookie (browser frontend)
-  if (request.cookies.get("crm_session")?.value === apiKey) {
-    return NextResponse.next();
+  // Allow public paths without auth
+  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    return response;
   }
 
-  // Allow requests with valid API key header (extension, programmatic)
-  if (request.headers.get("x-api-key") === apiKey) {
-    return NextResponse.next();
+  // Auth gate only API routes
+  if (pathname.startsWith("/api/")) {
+    if (!apiKey) {
+      return NextResponse.json({ error: "CRM_API_KEY is not configured" }, { status: 500 });
+    }
+
+    if (request.cookies.get("crm_session")?.value === apiKey) {
+      return response;
+    }
+
+    if (request.headers.get("x-api-key") === apiKey) {
+      return response;
+    }
+
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Non-API routes pass through (cookie set automatically above)
+  return response;
 }
-
-export const config = {
-  matcher: "/api/:path*",
-};
