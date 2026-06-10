@@ -3,7 +3,10 @@ import fs from "fs";
 import path from "path";
 import { SCHEMA_SQL } from "./schema";
 
-const DB_PATH = path.join(process.cwd(), "data", "crm.db");
+const DB_PATH =
+  process.env.NODE_ENV === "production"
+    ? "/tmp/crm.db"
+    : path.join(process.cwd(), "data", "crm.db");
 
 declare global {
   var __crmDb: Database.Database | undefined;
