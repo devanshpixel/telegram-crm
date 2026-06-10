@@ -5,14 +5,16 @@ import sharp from "sharp";
 import { createMedia } from "@/lib/db/service";
 import { apiError, apiOk } from "@/lib/api-error";
 
-const ALLOWED_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "video/mp4",
-  "video/webm",
-]);
+const MIME_EXT_MAP: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+};
+
+const ALLOWED_MIME_TYPES = new Set(Object.keys(MIME_EXT_MAP));
 
 const BLURABLE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
@@ -46,7 +48,7 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const ext = file.name.split(".").pop() || "bin";
+    const ext = MIME_EXT_MAP[file.type] || "bin";
     const filename = `${crypto.randomUUID()}.${ext}`;
     const uploadDir = path.join(process.cwd(), "uploads", "media");
 

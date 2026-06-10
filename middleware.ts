@@ -19,7 +19,7 @@ export function middleware(request: NextRequest) {
 
   const apiKey = process.env.CRM_API_KEY;
   if (!apiKey) {
-    return NextResponse.next();
+    return NextResponse.json({ error: "CRM_API_KEY is not configured" }, { status: 500 });
   }
 
   if (request.headers.get("x-api-key") !== apiKey) {
