@@ -316,11 +316,6 @@ export interface Media {
   createdAt: string;
 }
 
-export interface CheckoutSessionResponse {
-  sessionUrl: string;
-  sessionId: string;
-}
-
 export interface RazorpayOrderResponse {
   paymentLinkUrl: string;
   paymentLinkId: string;

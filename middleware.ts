@@ -6,7 +6,6 @@ const PUBLIC_PATHS = [
   "/api/telegram/verify-code",
   "/api/telegram/verify-password",
   "/api/telegram/status",
-  "/api/webhooks/stripe",
   "/api/razorpay/webhook",
   "/api/media/",
 ];
