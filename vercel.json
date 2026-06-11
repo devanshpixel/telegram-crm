@@ -1,14 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/telegram/poll",
-      "schedule": "*/1 * * * *"
-    },
-    {
-      "path": "/api/telegram/remind",
-      "schedule": "0 * * * *"
-    }
-  ],
   "functions": {
     "api/telegram/poll/route.ts": {
       "maxDuration": 300
