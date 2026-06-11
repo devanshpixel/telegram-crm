@@ -1,7 +1,1 @@
-{
-  "functions": {
-    "api/telegram/poll/route.ts": {
-      "maxDuration": 300
-    }
-  }
-}
+{}
