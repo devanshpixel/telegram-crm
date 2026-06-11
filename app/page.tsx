@@ -8,8 +8,15 @@ export default async function Home({
 }: {
   searchParams: Promise<{ contact?: string }>;
 }) {
-  const chats = await listChats();
-  const stats = await getDashboardStats();
+  let chats: import("@/types").Chat[] = [];
+  let stats: import("@/types").DashboardStats = { totalChats: 0, onlineCount: 0, totalRevenue: 0, unreadTotal: 0 };
+  try {
+    [chats, stats] = await Promise.all([listChats(), getDashboardStats()]);
+  } catch (e: unknown) {
+    console.log("[PAGE] Home data load failed:", e instanceof Error ? e.message : String(e));
+    chats = [];
+    stats = { totalChats: 0, onlineCount: 0, totalRevenue: 0, unreadTotal: 0 };
+  }
   const params = await searchParams;
   const requestedContactId =
     typeof params.contact === "string" ? params.contact : undefined;
