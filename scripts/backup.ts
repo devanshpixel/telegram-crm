@@ -1,9 +1,14 @@
-import { getDb } from "../lib/db/index";
 import fs from "fs";
 import path from "path";
+import { createRawBetterSqlite3 } from "../lib/db/adapters";
+
+const DB_PATH =
+  process.env.NODE_ENV === "production"
+    ? "/tmp/crm.db"
+    : path.join(process.cwd(), "data", "crm.db");
 
 async function main() {
-  const db = getDb();
+  const db = createRawBetterSqlite3(DB_PATH);
   const backupDir = path.join(process.cwd(), "backups");
   fs.mkdirSync(backupDir, { recursive: true });
 
@@ -12,7 +17,7 @@ async function main() {
 
   console.log(`Backing up to ${destFile} ...`);
   const result = await db.backup(destFile, {
-    progress: ({ totalPages, remainingPages }) => {
+    progress: ({ totalPages, remainingPages }: { totalPages: number; remainingPages: number }) => {
       const done = totalPages - remainingPages;
       const pct = totalPages > 0 ? ((done / totalPages) * 100).toFixed(0) : "0";
       process.stdout.write(`\rProgress: ${pct}% (${done}/${totalPages})`);

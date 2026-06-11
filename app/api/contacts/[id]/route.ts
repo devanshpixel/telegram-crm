@@ -19,7 +19,7 @@ export async function GET(
     const contactId = parseId(id);
     if (!contactId) return apiError("Invalid contact id");
 
-    const profile = getContactProfile(contactId);
+    const profile = await getContactProfile(contactId);
     if (!profile) return apiError("Contact not found", 404);
     return apiOk(profile);
   } catch (e) {
@@ -38,7 +38,7 @@ export async function PATCH(
     if (!contactId) return apiError("Invalid contact id");
 
     const body = await request.json();
-    const profile = updateContact(contactId, {
+    const profile = await updateContact(contactId, {
       name: body.name,
       username: body.username,
       phone: body.phone,
@@ -70,7 +70,7 @@ export async function DELETE(
     const contactId = parseId(id);
     if (!contactId) return apiError("Invalid contact id");
 
-    const deleted = deleteContact(contactId);
+    const deleted = await deleteContact(contactId);
     if (!deleted) return apiError("Contact not found", 404);
     return apiOk({ success: true });
   } catch (e) {

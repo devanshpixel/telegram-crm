@@ -16,7 +16,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid media id" }, { status: 400 });
     }
 
-    const media = getMediaById(mediaId);
+    const media = await getMediaById(mediaId);
     if (!media) {
       return NextResponse.json({ error: "Media not found" }, { status: 404 });
     }
@@ -25,7 +25,7 @@ export async function GET(
     const contactIdParam = searchParams.get("contactId");
     const contactId = contactIdParam ? Number(contactIdParam) : undefined;
 
-    const isUnlocked = typeof contactId === "number" && Number.isInteger(contactId) && contactId > 0 && isMediaUnlocked(mediaId, contactId);
+    const isUnlocked = typeof contactId === "number" && Number.isInteger(contactId) && contactId > 0 && await isMediaUnlocked(mediaId, contactId);
 
     const uploadDir = path.join(process.cwd(), "uploads", "media");
 

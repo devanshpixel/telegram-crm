@@ -13,34 +13,37 @@ export interface MessageImportSummary {
 }
 
 async function ensureConnected(): Promise<void> {
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
   if (!client.connected) {
     await client.connect();
   }
 }
 
-function listTelegramContacts(): ContactRow[] {
-  return getDb()
+async function listTelegramContacts(): Promise<ContactRow[]> {
+  const db = await getDb();
+  return (await db
     .prepare(
       `SELECT * FROM contacts
        WHERE telegram_id IS NOT NULL AND telegram_access_hash IS NOT NULL`,
     )
-    .all() as ContactRow[];
+    .all()) as ContactRow[];
 }
 
-function getConversationByContactId(
+async function getConversationByContactId(
   contactId: number,
-): ConversationRow | undefined {
-  return getDb()
+): Promise<ConversationRow | undefined> {
+  const db = await getDb();
+  return (await db
     .prepare("SELECT * FROM conversations WHERE contact_id = ?")
-    .get(contactId) as ConversationRow | undefined;
+    .get(contactId)) as ConversationRow | undefined;
 }
 
-function messageExists(
+async function messageExists(
   conversationId: number,
   telegramMessageId: number,
-): boolean {
-  const row = getDb()
+): Promise<boolean> {
+  const db = await getDb();
+  const row = await db
     .prepare(
       "SELECT id FROM messages WHERE conversation_id = ? AND telegram_message_id = ?",
     )
@@ -48,11 +51,12 @@ function messageExists(
   return row !== undefined;
 }
 
-function updateSyncCursor(
+async function updateSyncCursor(
   conversationId: number,
   lastSyncedMessageId: number,
-): void {
-  getDb()
+): Promise<void> {
+  const db = await getDb();
+  await db
     .prepare(
       "UPDATE conversations SET last_synced_message_id = ?, updated_at = ? WHERE id = ?",
     )
@@ -77,7 +81,7 @@ function formatUsername(user: Api.User): string {
 
 export async function importDialogs(): Promise<number> {
   await ensureConnected();
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
 
   let created = 0;
   for await (const dialog of client.iterDialogs()) {
@@ -86,12 +90,12 @@ export async function importDialogs(): Promise<number> {
     if (entity.bot || entity.deleted || entity.self) continue;
 
     const telegramId = entity.id.toString();
-    if (getContactByTelegramId(telegramId)) continue;
+    if (await getContactByTelegramId(telegramId)) continue;
 
     const accessHash = entity.accessHash?.toString();
     if (!accessHash) continue;
 
-    createContact({
+    await createContact({
       name: formatUserName(entity),
       username: formatUsername(entity),
       phone: entity.phone ?? "",
@@ -107,14 +111,14 @@ export async function importMessages(): Promise<MessageImportSummary> {
   const contactsCreated = await importDialogs();
 
   await ensureConnected();
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
 
   let contactsProcessed = 0;
   let messagesImported = 0;
   let messagesSkipped = 0;
 
-  for (const contact of listTelegramContacts()) {
-    const conversation = getConversationByContactId(contact.id);
+  for (const contact of await listTelegramContacts()) {
+    const conversation = await getConversationByContactId(contact.id);
     if (!conversation) continue;
 
     contactsProcessed++;
@@ -149,13 +153,13 @@ export async function importMessages(): Promise<MessageImportSummary> {
         continue;
       }
 
-      if (messageExists(conversationId, message.id)) {
+      if (await messageExists(conversationId, message.id)) {
         messagesSkipped++;
         continue;
       }
 
       const direction = message.out ? "outgoing" : "incoming";
-      const created = createMessage(contact.id, text, direction, message.id);
+      const created = await createMessage(contact.id, text, direction, message.id);
 
       if (created) {
         messagesImported++;
@@ -163,7 +167,7 @@ export async function importMessages(): Promise<MessageImportSummary> {
     }
 
     if (maxMessageId > minId) {
-      updateSyncCursor(conversationId, maxMessageId);
+      await updateSyncCursor(conversationId, maxMessageId);
     }
   }
 

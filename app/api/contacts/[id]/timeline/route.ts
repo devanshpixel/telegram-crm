@@ -17,7 +17,7 @@ export async function GET(
     if (!Number.isInteger(limit) || limit <= 0 || limit > 500) {
       return apiError("Invalid limit parameter");
     }
-    return apiOk(getTimeline(contactId, limit));
+    return apiOk(await getTimeline(contactId, limit));
   } catch (e) {
     console.error(e);
     return apiError("Failed to load timeline", 500);

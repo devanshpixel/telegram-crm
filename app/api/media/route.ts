@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const contactId = Number(contactIdParam);
     if (!Number.isInteger(contactId) || contactId <= 0) return apiError("Valid contactId is required");
 
-    return apiOk(getContactMedia(contactId));
+    return apiOk(await getContactMedia(contactId));
   } catch (e) {
     console.error("List media error:", e);
     return apiError("Failed to list media", 500);

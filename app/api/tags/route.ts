@@ -13,12 +13,12 @@ export async function POST(request: Request) {
     }
 
     try {
-      addTag(contactId, body.name);
+      await addTag(contactId, body.name);
     } catch (e) {
       return apiError(e instanceof Error ? e.message : "Failed to add tag");
     }
 
-    const profile = getContactProfile(contactId);
+    const profile = await getContactProfile(contactId);
     if (!profile) return apiError("Contact not found", 404);
     return apiOk(profile, 201);
   } catch (e) {
@@ -38,10 +38,10 @@ export async function DELETE(request: Request) {
       return apiError("Tag name is required");
     }
 
-    const deleted = deleteTag(contactId, body.name);
+    const deleted = await deleteTag(contactId, body.name);
     if (!deleted) return apiError("Tag not found", 404);
 
-    const profile = getContactProfile(contactId);
+    const profile = await getContactProfile(contactId);
     if (!profile) return apiError("Contact not found", 404);
     return apiOk(profile);
   } catch (e) {

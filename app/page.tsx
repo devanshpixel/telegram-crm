@@ -8,8 +8,8 @@ export default async function Home({
 }: {
   searchParams: Promise<{ contact?: string }>;
 }) {
-  const chats = listChats();
-  const stats = getDashboardStats();
+  const chats = await listChats();
+  const stats = await getDashboardStats();
   const params = await searchParams;
   const requestedContactId =
     typeof params.contact === "string" ? params.contact : undefined;

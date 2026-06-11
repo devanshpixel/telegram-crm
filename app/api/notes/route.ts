@@ -12,8 +12,8 @@ export async function POST(request: Request) {
       return apiError("Note content is required");
     }
 
-    addNote(contactId, body.content);
-    const profile = getContactProfile(contactId);
+    await addNote(contactId, body.content);
+    const profile = await getContactProfile(contactId);
     if (!profile) return apiError("Contact not found", 404);
     return apiOk(profile, 201);
   } catch (e) {

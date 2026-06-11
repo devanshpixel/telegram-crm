@@ -50,17 +50,17 @@ const AVATAR_COLORS = [
   "from-fuchsia-500 to-purple-600",
 ];
 
-function getTagsForContact(contactId: number): string[] {
-  const db = getDb();
-  const rows = db
+async function getTagsForContact(contactId: number): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare("SELECT name FROM tags WHERE contact_id = ? ORDER BY name ASC")
     .all(contactId) as { name: string }[];
   return rows.map((r) => r.name);
 }
 
-function getNotesText(contactId: number): string {
-  const db = getDb();
-  const rows = db
+async function getNotesText(contactId: number): Promise<string> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       "SELECT content FROM notes WHERE contact_id = ? ORDER BY updated_at DESC",
     )
@@ -68,24 +68,25 @@ function getNotesText(contactId: number): string {
   return rows.map((r) => r.content).join("\n\n");
 }
 
-function getContactById(id: number): ContactRow | undefined {
-  const db = getDb();
-  return db.prepare("SELECT * FROM contacts WHERE id = ?").get(id) as
+async function getContactById(id: number): Promise<ContactRow | undefined> {
+  const db = await getDb();
+  return (await db.prepare("SELECT * FROM contacts WHERE id = ?").get(id)) as
     | ContactRow
     | undefined;
 }
 
-export function getContactByTelegramId(
+export async function getContactByTelegramId(
   telegramId: string,
-): ContactRow | undefined {
-  return getDb()
+): Promise<ContactRow | undefined> {
+  const db = await getDb();
+  return (await db
     .prepare("SELECT * FROM contacts WHERE telegram_id = ?")
-    .get(telegramId) as ContactRow | undefined;
+    .get(telegramId)) as ContactRow | undefined;
 }
 
-function listChatRows(): ChatListRow[] {
-  const db = getDb();
-  const rows = db
+async function listChatRows(): Promise<ChatListRow[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT c.*, conv.id AS conversation_id, conv.last_message, conv.last_message_time,
               conv.unread_count, conv.is_pinned
@@ -98,28 +99,34 @@ function listChatRows(): ChatListRow[] {
   return rows;
 }
 
-export function listChats(): Chat[] {
-  return listChatRows().map((row) => mapChatRow(row, getTagsForContact(row.id)));
+export async function listChats(): Promise<Chat[]> {
+  const rows = await listChatRows();
+  const result: Chat[] = [];
+  for (const row of rows) {
+    const tags = await getTagsForContact(row.id);
+    result.push(mapChatRow(row, tags));
+  }
+  return result;
 }
 
-export function getDashboardStats(): DashboardStats {
-  const db = getDb();
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const db = await getDb();
   const totalChats = (
-    db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number }
+    await db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number }
   ).count;
   console.log("[DASHBOARD] getDashboardStats: totalChats =", totalChats);
   const onlineCount = (
-    db
+    await db
       .prepare("SELECT COUNT(*) AS count FROM contacts WHERE is_online = 1")
       .get() as { count: number }
   ).count;
   const totalRevenue = (
-    db.prepare("SELECT COALESCE(SUM(revenue), 0) AS total FROM contacts").get() as {
+    await db.prepare("SELECT COALESCE(SUM(revenue), 0) AS total FROM contacts").get() as {
       total: number;
     }
   ).total;
   const unreadTotal = (
-    db
+    await db
       .prepare("SELECT COALESCE(SUM(unread_count), 0) AS total FROM conversations")
       .get() as { total: number }
   ).total;
@@ -127,47 +134,48 @@ export function getDashboardStats(): DashboardStats {
   return mapDashboardStats(totalChats, onlineCount, totalRevenue, unreadTotal);
 }
 
-export function getContactProfile(contactId: number): ContactProfile | null {
-  const contact = getContactById(contactId);
+export async function getContactProfile(contactId: number): Promise<ContactProfile | null> {
+  const contact = await getContactById(contactId);
   if (!contact) return null;
+  const [tags, notesText, purchases] = await Promise.all([
+    getTagsForContact(contactId),
+    getNotesText(contactId),
+    getPurchasesByContact(contactId),
+  ]);
   return {
-    ...mapContactToProfile(
-      contact,
-      getTagsForContact(contactId),
-      getNotesText(contactId),
-    ),
-    purchases: getPurchasesByContact(contactId),
+    ...mapContactToProfile(contact, tags, notesText),
+    purchases,
   };
 }
 
-export function getConversationIdByContactId(
+export async function getConversationIdByContactId(
   contactId: number,
-): number | null {
-  const db = getDb();
-  const row = db
+): Promise<number | null> {
+  const db = await getDb();
+  const row = await db
     .prepare("SELECT id FROM conversations WHERE contact_id = ?")
     .get(contactId) as { id: number } | undefined;
   return row?.id ?? null;
 }
 
-export function getMessagesByContactId(contactId: number): Message[] {
-  const conversationId = getConversationIdByContactId(contactId);
+export async function getMessagesByContactId(contactId: number): Promise<Message[]> {
+  const conversationId = await getConversationIdByContactId(contactId);
   if (!conversationId) return [];
 
-  const db = getDb();
+  const db = await getDb();
   const ts = nowIso();
 
-  const markRead = db.transaction(() => {
-    db.prepare(
+  const markRead = db.transaction(async () => {
+    await db.prepare(
       "UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND direction = 'incoming' AND is_read = 0",
     ).run(conversationId);
-    db.prepare(
+    await db.prepare(
       "UPDATE conversations SET unread_count = 0, updated_at = ? WHERE id = ?",
     ).run(ts, conversationId);
   });
-  markRead();
+  await markRead();
 
-  const rows = db
+  const rows = await db
     .prepare(
       "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
     )
@@ -193,20 +201,18 @@ export interface CreateContactInput {
   lastPurchaseDate?: string | null;
 }
 
-export function createContact(input: CreateContactInput): ContactProfile {
-  const db = getDb();
+export async function createContact(input: CreateContactInput): Promise<ContactProfile> {
+  const db = await getDb();
   const ts = nowIso();
   const username = input.username.startsWith("@")
     ? input.username
     : `@${input.username}`;
   const avatar = initialsFromName(input.name);
-  const colorIndex =
-    (db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as {
-      count: number;
-    }).count % AVATAR_COLORS.length;
+  const countRow = await db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number };
+  const colorIndex = countRow.count % AVATAR_COLORS.length;
 
-  const insertContactAndConversation = db.transaction(() => {
-    const result = db
+  const insertContactAndConversation = db.transaction(async () => {
+    const result = await db
       .prepare(
         `INSERT INTO contacts (
           name, username, avatar, avatar_color, phone, email, company, location,
@@ -244,7 +250,7 @@ export function createContact(input: CreateContactInput): ContactProfile {
 
     const contactId = Number(result.lastInsertRowid);
 
-    db.prepare(
+    await db.prepare(
       `INSERT INTO conversations (
         contact_id, last_message, last_message_time, unread_count, is_pinned,
         created_at, updated_at
@@ -254,9 +260,9 @@ export function createContact(input: CreateContactInput): ContactProfile {
     return contactId;
   });
 
-  const contactId = insertContactAndConversation();
+  const contactId = await insertContactAndConversation();
 
-  const profile = getContactProfile(contactId);
+  const profile = await getContactProfile(contactId);
   if (!profile) throw new Error("Failed to create contact");
   return profile;
 }
@@ -283,18 +289,18 @@ export interface UpdateContactInput {
   lastPurchaseDate?: string | null;
 }
 
-export function updateContact(
+export async function updateContact(
   contactId: number,
   input: UpdateContactInput,
-): ContactProfile | null {
-  const existing = getContactById(contactId);
+): Promise<ContactProfile | null> {
+  const existing = await getContactById(contactId);
   if (!existing) return null;
 
-  const db = getDb();
+  const db = await getDb();
   const ts = nowIso();
 
-  const updateFieldsAndAvatar = db.transaction(() => {
-    db.prepare(
+  const updateFieldsAndAvatar = db.transaction(async () => {
+    await db.prepare(
       `UPDATE contacts SET
         name = COALESCE(?, name),
         username = COALESCE(?, username),
@@ -346,28 +352,28 @@ export function updateContact(
     );
 
     if (input.name) {
-      db.prepare("UPDATE contacts SET avatar = ? WHERE id = ?").run(
+      await db.prepare("UPDATE contacts SET avatar = ? WHERE id = ?").run(
         initialsFromName(input.name),
         contactId,
       );
     }
   });
 
-  updateFieldsAndAvatar();
+  await updateFieldsAndAvatar();
 
   return getContactProfile(contactId);
 }
 
-export function deleteContact(contactId: number): boolean {
-  const db = getDb();
-  const result = db.prepare("DELETE FROM contacts WHERE id = ?").run(contactId);
+export async function deleteContact(contactId: number): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.prepare("DELETE FROM contacts WHERE id = ?").run(contactId);
   return result.changes > 0;
 }
 
-export function addNote(contactId: number, content: string) {
-  const db = getDb();
+export async function addNote(contactId: number, content: string) {
+  const db = await getDb();
   const ts = nowIso();
-  const result = db
+  const result = await db
     .prepare(
       "INSERT INTO notes (contact_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)",
     )
@@ -382,70 +388,70 @@ export function addNote(contactId: number, content: string) {
   };
 }
 
-export function addTag(contactId: number, name: string) {
-  const db = getDb();
+export async function addTag(contactId: number, name: string) {
+  const db = await getDb();
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Tag name is required");
   const ts = nowIso();
 
-  const insertTagAndEvent = db.transaction(() => {
-    const result = db
-      .prepare(
-        "INSERT INTO tags (contact_id, name, created_at) VALUES (?, ?, ?)",
-      )
-      .run(contactId, trimmed, ts);
-    db.prepare(
-      "INSERT INTO tag_events (contact_id, tag_name, event_type, created_at) VALUES (?, ?, 'added', ?)",
-    ).run(contactId, trimmed, ts);
-    return {
-      id: Number(result.lastInsertRowid),
-      contactId,
-      name: trimmed,
-    };
-  });
-
   try {
-    return insertTagAndEvent();
+    const insertTagAndEvent = db.transaction(async () => {
+      const result = await db
+        .prepare(
+          "INSERT INTO tags (contact_id, name, created_at) VALUES (?, ?, ?)",
+        )
+        .run(contactId, trimmed, ts);
+      await db.prepare(
+        "INSERT INTO tag_events (contact_id, tag_name, event_type, created_at) VALUES (?, ?, 'added', ?)",
+      ).run(contactId, trimmed, ts);
+      return {
+        id: Number(result.lastInsertRowid),
+        contactId,
+        name: trimmed,
+      };
+    });
+
+    return await insertTagAndEvent();
   } catch {
     throw new Error("Tag already exists for this contact");
   }
 }
 
-export function deleteTag(contactId: number, name: string): boolean {
-  const db = getDb();
+export async function deleteTag(contactId: number, name: string): Promise<boolean> {
+  const db = await getDb();
   const trimmed = name.trim();
   const ts = nowIso();
 
-  const deleteAndRecord = db.transaction(() => {
-    const result = db
+  const deleteAndRecord = db.transaction(async () => {
+    const result = await db
       .prepare("DELETE FROM tags WHERE contact_id = ? AND name = ?")
       .run(contactId, trimmed);
     if (result.changes === 0) return 0;
-    db.prepare(
+    await db.prepare(
       "INSERT INTO tag_events (contact_id, tag_name, event_type, created_at) VALUES (?, ?, 'removed', ?)",
     ).run(contactId, trimmed, ts);
-    db.prepare("UPDATE contacts SET updated_at = ? WHERE id = ?").run(ts, contactId);
+    await db.prepare("UPDATE contacts SET updated_at = ? WHERE id = ?").run(ts, contactId);
     return result.changes;
   });
 
-  return deleteAndRecord() > 0;
+  return (await deleteAndRecord()) > 0;
 }
 
-export function createMessage(
+export async function createMessage(
   contactId: number,
   text: string,
   direction: MessageDirection = "outgoing",
   telegramMessageId?: number | null,
-): Message | null {
-  const conversationId = getConversationIdByContactId(contactId);
+): Promise<Message | null> {
+  const conversationId = await getConversationIdByContactId(contactId);
   if (!conversationId) return null;
 
-  const db = getDb();
+  const db = await getDb();
   const ts = nowIso();
   const isRead = direction === "outgoing" ? 1 : 0;
 
-  const insertAndUpdateConversation = db.transaction(() => {
-    const result = db
+  const insertAndUpdateConversation = db.transaction(async () => {
+    const result = await db
       .prepare(
         `INSERT INTO messages (conversation_id, text, direction, is_read, telegram_message_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -459,7 +465,7 @@ export function createMessage(
         ts,
       );
 
-    db.prepare(
+    await db.prepare(
       `UPDATE conversations SET
         last_message = ?,
         last_message_time = ?,
@@ -468,12 +474,12 @@ export function createMessage(
       WHERE id = ?`,
     ).run(text.trim(), ts, direction, ts, conversationId);
 
-    return db
+    return (await db
       .prepare("SELECT * FROM messages WHERE id = ?")
-      .get(result.lastInsertRowid) as import("./types").MessageRow;
+      .get(result.lastInsertRowid)) as import("./types").MessageRow;
   });
 
-  const row = insertAndUpdateConversation();
+  const row = await insertAndUpdateConversation();
   return mapMessageRow(row);
 }
 
@@ -485,15 +491,15 @@ export interface CreatePurchaseInput {
   kind?: string;
 }
 
-export function createPurchase(input: CreatePurchaseInput): Purchase {
-  const db = getDb();
+export async function createPurchase(input: CreatePurchaseInput): Promise<Purchase> {
+  const db = await getDb();
   const ts = nowIso();
   const kind = input.kind ?? "ppv";
-  const contact = db.prepare("SELECT id FROM contacts WHERE id = ?").get(input.contactId) as { id: number } | undefined;
+  const contact = await db.prepare("SELECT id FROM contacts WHERE id = ?").get(input.contactId) as { id: number } | undefined;
   if (!contact) throw new Error("Contact not found");
 
-  const insertAndUpdateStats = db.transaction(() => {
-    const result = db
+  const insertAndUpdateStats = db.transaction(async () => {
+    const result = await db
       .prepare(
         `INSERT INTO purchases (contact_id, amount, purchase_date, note, kind, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -510,20 +516,20 @@ export function createPurchase(input: CreatePurchaseInput): Purchase {
     if (kind === "ppv") {
       updateParts.push("ppv_count = ppv_count + 1");
     }
-    db.prepare(
+    await db.prepare(
       `UPDATE contacts SET ${updateParts.join(", ")} WHERE id = ?`,
     ).run(...updateArgs, input.contactId);
 
-    return db.prepare("SELECT * FROM purchases WHERE id = ?").get(result.lastInsertRowid) as import("./types").PurchaseRow;
+    return (await db.prepare("SELECT * FROM purchases WHERE id = ?").get(result.lastInsertRowid)) as import("./types").PurchaseRow;
   });
 
-  const row = insertAndUpdateStats();
+  const row = await insertAndUpdateStats();
   return mapPurchaseRow(row);
 }
 
-export function getPurchasesByContact(contactId: number): Purchase[] {
-  const db = getDb();
-  const rows = db
+export async function getPurchasesByContact(contactId: number): Promise<Purchase[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       "SELECT * FROM purchases WHERE contact_id = ? ORDER BY purchase_date DESC",
     )
@@ -531,9 +537,9 @@ export function getPurchasesByContact(contactId: number): Purchase[] {
   return rows.map(mapPurchaseRow);
 }
 
-export function getMonthlyRevenue(months: number = 12): MonthlyRevenue[] {
-  const db = getDb();
-  const rows = db
+export async function getMonthlyRevenue(months: number = 12): Promise<MonthlyRevenue[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT
          strftime('%Y-%m', purchase_date) AS month,
@@ -548,9 +554,9 @@ export function getMonthlyRevenue(months: number = 12): MonthlyRevenue[] {
   return rows;
 }
 
-export function getTopSpenders(limit: number = 10): TopSpender[] {
-  const db = getDb();
-  const rows = db
+export async function getTopSpenders(limit: number = 10): Promise<TopSpender[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT
          c.id,
@@ -585,16 +591,17 @@ export function getTopSpenders(limit: number = 10): TopSpender[] {
   }));
 }
 
-export function getRevenueData(months: number = 12, limit: number = 10): RevenueData {
-  return {
-    monthly: getMonthlyRevenue(months),
-    topSpenders: getTopSpenders(limit),
-  };
+export async function getRevenueData(months: number = 12, limit: number = 10): Promise<RevenueData> {
+  const [monthly, topSpenders] = await Promise.all([
+    getMonthlyRevenue(months),
+    getTopSpenders(limit),
+  ]);
+  return { monthly, topSpenders };
 }
 
-export function getPpvStats(limit: number = 10): PpvStats {
-  const db = getDb();
-  const totals = db
+export async function getPpvStats(limit: number = 10): Promise<PpvStats> {
+  const db = await getDb();
+  const totals = await db
     .prepare(
       `SELECT
          COALESCE(SUM(amount), 0) AS totalRevenue,
@@ -604,7 +611,7 @@ export function getPpvStats(limit: number = 10): PpvStats {
        WHERE kind = 'ppv'`,
     )
     .get() as { totalRevenue: number; purchaseCount: number; uniqueBuyers: number };
-  const topBuyers = db
+  const topBuyers = await db
     .prepare(
       `SELECT
          c.id,
@@ -715,10 +722,10 @@ function buildBroadcastAudienceWhere(filters: BroadcastFilters): {
   return { where, args };
 }
 
-export function getBroadcastAudienceCount(filters: BroadcastFilters): number {
-  const db = getDb();
+export async function getBroadcastAudienceCount(filters: BroadcastFilters): Promise<number> {
+  const db = await getDb();
   const { where, args } = buildBroadcastAudienceWhere(filters);
-  const row = db
+  const row = await db
     .prepare(
       `SELECT COUNT(DISTINCT c.id) AS count
        FROM contacts c
@@ -728,8 +735,8 @@ export function getBroadcastAudienceCount(filters: BroadcastFilters): number {
   return row.count;
 }
 
-export function getBroadcastRecipients(filters: BroadcastFilters): BroadcastRecipient[] {
-  const db = getDb();
+export async function getBroadcastRecipients(filters: BroadcastFilters): Promise<BroadcastRecipient[]> {
+  const db = await getDb();
   const { where, args } = buildBroadcastAudienceWhere(filters);
   return db
     .prepare(
@@ -738,12 +745,12 @@ export function getBroadcastRecipients(filters: BroadcastFilters): BroadcastReci
        WHERE ${where.join(" AND ")}
        ORDER BY c.total_spent DESC, c.updated_at DESC`,
     )
-    .all(...args) as BroadcastRecipient[];
+    .all(...args) as Promise<BroadcastRecipient[]>;
 }
 
-export function listBroadcasts(limit: number = 20): Broadcast[] {
-  const db = getDb();
-  const rows = db
+export async function listBroadcasts(limit: number = 20): Promise<Broadcast[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare("SELECT * FROM broadcasts ORDER BY created_at DESC LIMIT ?")
     .all(limit) as BroadcastRow[];
   return rows.map(mapBroadcastRow);
@@ -759,39 +766,39 @@ function audienceToRecipients(items: FollowUpListItem[]): BroadcastRecipient[] {
   }));
 }
 
-export function getFollowUpAudience(
+export async function getFollowUpAudience(
   segmentKey: string,
   limit: number = AUDIENCE_LIMIT,
-): BroadcastRecipient[] {
+): Promise<BroadcastRecipient[]> {
   const capped = Math.min(limit, AUDIENCE_LIMIT);
   switch (segmentKey) {
     case "no_message_7d":
-      return audienceToRecipients(getFollowUpNoMessageInDays(7, capped));
+      return audienceToRecipients(await getFollowUpNoMessageInDays(7, capped));
     case "no_purchase_30d":
-      return audienceToRecipients(getFollowUpNoPurchaseInDays(30, capped));
+      return audienceToRecipients(await getFollowUpNoPurchaseInDays(30, capped));
     case "vip_inactive_14d":
       return audienceToRecipients(
-        getFollowUpVipInactive(["gold", "platinum", "silver"], 14, capped),
+        await getFollowUpVipInactive(["gold", "platinum", "silver"], 14, capped),
       );
     case "high_spender_inactive":
       return audienceToRecipients(
-        getFollowUpHighSpenderInactive(200, 30, capped),
+        await getFollowUpHighSpenderInactive(200, 30, capped),
       );
     case "no_ppv_30d":
-      return audienceToRecipients(getFollowUpNoPpvInDays(30, capped));
+      return audienceToRecipients(await getFollowUpNoPpvInDays(30, capped));
     case "never_purchased":
-      return audienceToRecipients(getFollowUpNeverPurchased(capped));
+      return audienceToRecipients(await getFollowUpNeverPurchased(capped));
     default:
       return [];
   }
 }
 
-export function getFollowUpAudienceCount(segmentKey: string): number {
-  const db = getDb();
+export async function getFollowUpAudienceCount(segmentKey: string): Promise<number> {
+  const db = await getDb();
   switch (segmentKey) {
     case "no_message_7d":
       return (
-        db
+        await db
           .prepare(
             `SELECT COUNT(*) AS count FROM (
               SELECT c.id
@@ -807,7 +814,7 @@ export function getFollowUpAudienceCount(segmentKey: string): number {
       ).count;
     case "no_purchase_30d":
       return (
-        db
+        await db
           .prepare(
             `SELECT COUNT(*) AS count FROM contacts
              WHERE last_purchase_date IS NOT NULL
@@ -817,7 +824,7 @@ export function getFollowUpAudienceCount(segmentKey: string): number {
       ).count;
     case "vip_inactive_14d":
       return (
-        db
+        await db
           .prepare(
             `SELECT COUNT(*) AS count FROM contacts
              WHERE vip_level IN ('gold', 'platinum', 'silver')
@@ -827,7 +834,7 @@ export function getFollowUpAudienceCount(segmentKey: string): number {
       ).count;
     case "high_spender_inactive":
       return (
-        db
+        await db
           .prepare(
             `SELECT COUNT(*) AS count FROM contacts
              WHERE total_spent >= 200
@@ -838,7 +845,7 @@ export function getFollowUpAudienceCount(segmentKey: string): number {
       ).count;
     case "no_ppv_30d":
       return (
-        db
+        await db
           .prepare(
             `SELECT COUNT(*) AS count FROM (
               SELECT c.id
@@ -853,7 +860,7 @@ export function getFollowUpAudienceCount(segmentKey: string): number {
       ).count;
     case "never_purchased":
       return (
-        db
+        await db
           .prepare(
             `SELECT COUNT(*) AS count FROM contacts c
              LEFT JOIN purchases p ON p.contact_id = c.id
@@ -866,16 +873,16 @@ export function getFollowUpAudienceCount(segmentKey: string): number {
   }
 }
 
-export function createBroadcastHistory(input: {
+export async function createBroadcastHistory(input: {
   name: string;
   message: string;
   recipientCount: number;
   sentCount: number;
   trigger?: string | null;
-}): Broadcast {
-  const db = getDb();
+}): Promise<Broadcast> {
+  const db = await getDb();
   const ts = nowIso();
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO broadcasts (name, message, recipient_count, sent_count, trigger, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -888,64 +895,46 @@ export function createBroadcastHistory(input: {
       input.trigger ?? null,
       ts,
     );
-  const row = db
+  const row = await db
     .prepare("SELECT * FROM broadcasts WHERE id = ?")
     .get(result.lastInsertRowid) as BroadcastRow;
   return mapBroadcastRow(row);
 }
 
-function getOverview(): AnalyticsData["overview"] {
-  const db = getDb();
-  const totalFans = (
-    db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number }
-  ).count;
-  const activeFans = (
-    db
-      .prepare("SELECT COUNT(*) AS count FROM contacts WHERE fan_status = 'active'")
-      .get() as { count: number }
-  ).count;
-  const vipFans = (
-    db
-      .prepare("SELECT COUNT(*) AS count FROM contacts WHERE vip_level != 'none'")
-      .get() as { count: number }
-  ).count;
-  const totalRevenue = (
-    db.prepare("SELECT COALESCE(SUM(revenue), 0) AS total FROM contacts").get() as {
-      total: number;
-    }
-  ).total;
-  const revenueLast30Days = (
-    db
-      .prepare(
-        "SELECT COALESCE(SUM(amount), 0) AS total FROM purchases WHERE purchase_date >= date('now', '-30 days')",
-      )
-      .get() as { total: number }
-  ).total;
-  const messagesSent = (
-    db
-      .prepare("SELECT COUNT(*) AS count FROM messages WHERE direction = 'outgoing'")
-      .get() as { count: number }
-  ).count;
-  const messagesReceived = (
-    db
-      .prepare("SELECT COUNT(*) AS count FROM messages WHERE direction = 'incoming'")
-      .get() as { count: number }
-  ).count;
+async function getOverview(): Promise<AnalyticsData["overview"]> {
+  const db = await getDb();
+  const [
+    totalFansRow,
+    activeFansRow,
+    vipFansRow,
+    totalRevenueRow,
+    revenueLast30DaysRow,
+    messagesSentRow,
+    messagesReceivedRow,
+    currentMonthRow,
+    previousMonthRow,
+  ] = await Promise.all([
+    db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COUNT(*) AS count FROM contacts WHERE fan_status = 'active'").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COUNT(*) AS count FROM contacts WHERE vip_level != 'none'").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COALESCE(SUM(revenue), 0) AS total FROM contacts").get() as Promise<{ total: number }>,
+    db.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM purchases WHERE purchase_date >= date('now', '-30 days')").get() as Promise<{ total: number }>,
+    db.prepare("SELECT COUNT(*) AS count FROM messages WHERE direction = 'outgoing'").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COUNT(*) AS count FROM messages WHERE direction = 'incoming'").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM purchases WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now')").get() as Promise<{ total: number }>,
+    db.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM purchases WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now', '-1 month')").get() as Promise<{ total: number }>,
+  ]);
 
-  const currentMonth = (
-    db
-      .prepare(
-        "SELECT COALESCE(SUM(amount), 0) AS total FROM purchases WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now')",
-      )
-      .get() as { total: number }
-  ).total;
-  const previousMonth = (
-    db
-      .prepare(
-        "SELECT COALESCE(SUM(amount), 0) AS total FROM purchases WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now', '-1 month')",
-      )
-      .get() as { total: number }
-  ).total;
+  const totalFans = totalFansRow.count;
+  const activeFans = activeFansRow.count;
+  const vipFans = vipFansRow.count;
+  const totalRevenue = totalRevenueRow.total;
+  const revenueLast30Days = revenueLast30DaysRow.total;
+  const messagesSent = messagesSentRow.count;
+  const messagesReceived = messagesReceivedRow.count;
+  const currentMonth = currentMonthRow.total;
+  const previousMonth = previousMonthRow.total;
+
   const revenueGrowthPercent =
     previousMonth > 0
       ? Math.round(((currentMonth - previousMonth) / previousMonth) * 100)
@@ -965,27 +954,27 @@ function getOverview(): AnalyticsData["overview"] {
   };
 }
 
-function getFansByVipLevel(): VipLevelBreakdown[] {
-  const db = getDb();
+async function getFansByVipLevel(): Promise<VipLevelBreakdown[]> {
+  const db = await getDb();
   return db
     .prepare(
       "SELECT vip_level AS level, COUNT(*) AS count FROM contacts GROUP BY vip_level ORDER BY count DESC",
     )
-    .all() as VipLevelBreakdown[];
+    .all() as Promise<VipLevelBreakdown[]>;
 }
 
-function getFansByStatus(): FanStatusBreakdown[] {
-  const db = getDb();
+async function getFansByStatus(): Promise<FanStatusBreakdown[]> {
+  const db = await getDb();
   return db
     .prepare(
       "SELECT fan_status AS status, COUNT(*) AS count FROM contacts GROUP BY fan_status ORDER BY count DESC",
     )
-    .all() as FanStatusBreakdown[];
+    .all() as Promise<FanStatusBreakdown[]>;
 }
 
-function getFanScoreStats(): FanScoreStats {
-  const db = getDb();
-  const row = db
+async function getFanScoreStats(): Promise<FanScoreStats> {
+  const db = await getDb();
+  const row = await db
     .prepare(
       "SELECT COALESCE(MAX(fan_score), 0) AS highest, COALESCE(ROUND(AVG(fan_score), 1), 0) AS average FROM contacts",
     )
@@ -993,9 +982,9 @@ function getFanScoreStats(): FanScoreStats {
   return row;
 }
 
-function getMostActiveContacts(limit: number = 5): ActiveContact[] {
-  const db = getDb();
-  const rows = db
+async function getMostActiveContacts(limit: number = 5): Promise<ActiveContact[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
               COUNT(m.id) AS message_count
@@ -1024,9 +1013,9 @@ function getMostActiveContacts(limit: number = 5): ActiveContact[] {
   }));
 }
 
-function getInactiveContacts(days: number = 30, limit: number = 10): InactiveContact[] {
-  const db = getDb();
-  const rows = db
+async function getInactiveContacts(days: number = 30, limit: number = 10): Promise<InactiveContact[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
               CAST(julianday('now') - julianday(c.updated_at) AS INTEGER) AS days_since_activity
@@ -1054,9 +1043,9 @@ function getInactiveContacts(days: number = 30, limit: number = 10): InactiveCon
   }));
 }
 
-function getRecentPurchasers(limit: number = 5): RecentPurchaser[] {
-  const db = getDb();
-  const rows = db
+async function getRecentPurchasers(limit: number = 5): Promise<RecentPurchaser[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT id, name, username, avatar, avatar_color, last_purchase_date, total_spent
        FROM contacts
@@ -1084,37 +1073,50 @@ function getRecentPurchasers(limit: number = 5): RecentPurchaser[] {
   }));
 }
 
-export function getAnalytics(): AnalyticsData {
+export async function getAnalytics(): Promise<AnalyticsData> {
+  const [
+    overview,
+    fansByVipLevel,
+    fansByStatus,
+    fanScores,
+    mostActive,
+    inactiveContacts,
+    recentPurchasers,
+    retention,
+    campaigns,
+  ] = await Promise.all([
+    getOverview(),
+    getFansByVipLevel(),
+    getFansByStatus(),
+    getFanScoreStats(),
+    getMostActiveContacts(),
+    getInactiveContacts(),
+    getRecentPurchasers(),
+    getRetentionData(),
+    getCampaignAnalyticsSummary(),
+  ]);
   return {
-    overview: getOverview(),
-    fansByVipLevel: getFansByVipLevel(),
-    fansByStatus: getFansByStatus(),
-    fanScores: getFanScoreStats(),
-    mostActive: getMostActiveContacts(),
-    inactiveContacts: getInactiveContacts(),
-    recentPurchasers: getRecentPurchasers(),
-    retention: getRetentionData(),
-    campaigns: getCampaignAnalyticsSummary(),
+    overview,
+    fansByVipLevel,
+    fansByStatus,
+    fanScores,
+    mostActive,
+    inactiveContacts,
+    recentPurchasers,
+    retention,
+    campaigns,
   };
 }
 
-function getCampaignAnalyticsSummary(): CampaignAnalyticsSummary {
-  const db = getDb();
-  const totalCampaigns = (
-    db
-      .prepare(
-        "SELECT COUNT(*) AS count FROM broadcasts WHERE created_at >= date('now', '-30 days')",
-      )
-      .get() as { count: number }
-  ).count;
-  const totalMessagesSent = (
-    db
-      .prepare(
-        "SELECT COALESCE(SUM(sent_count), 0) AS total FROM broadcasts WHERE created_at >= date('now', '-30 days')",
-      )
-      .get() as { total: number }
-  ).total;
-  const mostUsedRow = db
+async function getCampaignAnalyticsSummary(): Promise<CampaignAnalyticsSummary> {
+  const db = await getDb();
+  const [totalCampaignsRow, totalMessagesSentRow] = await Promise.all([
+    db.prepare("SELECT COUNT(*) AS count FROM broadcasts WHERE created_at >= date('now', '-30 days')").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COALESCE(SUM(sent_count), 0) AS total FROM broadcasts WHERE created_at >= date('now', '-30 days')").get() as Promise<{ total: number }>,
+  ]);
+  const totalCampaigns = totalCampaignsRow.count;
+  const totalMessagesSent = totalMessagesSentRow.total;
+  const mostUsedRow = await db
     .prepare(
       `SELECT trigger, SUM(sent_count) AS total
        FROM broadcasts
@@ -1135,48 +1137,20 @@ function getCampaignAnalyticsSummary(): CampaignAnalyticsSummary {
   };
 }
 
-function getRetentionOverview(): RetentionData["overview"] {
-  const db = getDb();
-  const activeFans30d = (
-    db
-      .prepare(
-        "SELECT COUNT(DISTINCT contact_id) AS count FROM purchases WHERE purchase_date >= date('now', '-30 days')",
-      )
-      .get() as { count: number }
-  ).count;
-  const newFans30d = (
-    db
-      .prepare(
-        "SELECT COUNT(*) AS count FROM contacts WHERE created_at >= date('now', '-30 days')",
-      )
-      .get() as { count: number }
-  ).count;
-  const returningBuyers = (
-    db
-      .prepare(
-        "SELECT COUNT(*) AS count FROM (SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) > 1)",
-      )
-      .get() as { count: number }
-  ).count;
-  const totalBuyers = (
-    db
-      .prepare(
-        "SELECT COUNT(DISTINCT contact_id) AS count FROM purchases",
-      )
-      .get() as { count: number }
-  ).count;
-  const churnedBuyers = (
-    db
-      .prepare(
-        `SELECT COUNT(DISTINCT contact_id) AS count FROM purchases
-         WHERE contact_id IN (
-           SELECT contact_id FROM purchases
-           GROUP BY contact_id
-           HAVING MAX(purchase_date) < date('now', '-60 days')
-         )`,
-      )
-      .get() as { count: number }
-  ).count;
+async function getRetentionOverview(): Promise<RetentionData["overview"]> {
+  const db = await getDb();
+  const [activeFans30dRow, newFans30dRow, returningBuyersRow, totalBuyersRow, churnedBuyersRow] = await Promise.all([
+    db.prepare("SELECT COUNT(DISTINCT contact_id) AS count FROM purchases WHERE purchase_date >= date('now', '-30 days')").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COUNT(*) AS count FROM contacts WHERE created_at >= date('now', '-30 days')").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COUNT(*) AS count FROM (SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) > 1)").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COUNT(DISTINCT contact_id) AS count FROM purchases").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COUNT(DISTINCT contact_id) AS count FROM purchases WHERE contact_id IN (SELECT contact_id FROM purchases GROUP BY contact_id HAVING MAX(purchase_date) < date('now', '-60 days'))").get() as Promise<{ count: number }>,
+  ]);
+  const activeFans30d = activeFans30dRow.count;
+  const newFans30d = newFans30dRow.count;
+  const returningBuyers = returningBuyersRow.count;
+  const totalBuyers = totalBuyersRow.count;
+  const churnedBuyers = churnedBuyersRow.count;
   const repeatBuyerPercent =
     totalBuyers > 0 ? Math.round((returningBuyers / totalBuyers) * 100) : 0;
   return {
@@ -1188,63 +1162,34 @@ function getRetentionOverview(): RetentionData["overview"] {
   };
 }
 
-function getRetentionAnalytics(): RetentionData["analytics"] {
-  const db = getDb();
-  const buyersThisMonth = (
-    db
-      .prepare(
-        `SELECT COUNT(DISTINCT contact_id) AS count FROM purchases
-         WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now')`,
-      )
-      .get() as { count: number }
-  ).count;
-  const buyersLastMonth = (
-    db
-      .prepare(
-        `SELECT COUNT(DISTINCT contact_id) AS count FROM purchases
-         WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now', '-1 month')`,
-      )
-      .get() as { count: number }
-  ).count;
-  const revenueFromRepeatBuyers = (
-    db
-      .prepare(
-        `SELECT COALESCE(SUM(p.amount), 0) AS total FROM purchases p
-         WHERE p.contact_id IN (
-           SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) > 1
-         )`,
-      )
-      .get() as { total: number }
-  ).total;
-  const revenueFromNewBuyers = (
-    db
-      .prepare(
-        `SELECT COALESCE(SUM(p.amount), 0) AS total FROM purchases p
-         WHERE p.contact_id IN (
-           SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) = 1
-         )`,
-      )
-      .get() as { total: number }
-  ).total;
+async function getRetentionAnalytics(): Promise<RetentionData["analytics"]> {
+  const db = await getDb();
+  const [buyersThisMonthRow, buyersLastMonthRow, revenueFromRepeatBuyersRow, revenueFromNewBuyersRow] = await Promise.all([
+    db.prepare("SELECT COUNT(DISTINCT contact_id) AS count FROM purchases WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now')").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COUNT(DISTINCT contact_id) AS count FROM purchases WHERE strftime('%Y-%m', purchase_date) = strftime('%Y-%m', 'now', '-1 month')").get() as Promise<{ count: number }>,
+    db.prepare("SELECT COALESCE(SUM(p.amount), 0) AS total FROM purchases p WHERE p.contact_id IN (SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) > 1)").get() as Promise<{ total: number }>,
+    db.prepare("SELECT COALESCE(SUM(p.amount), 0) AS total FROM purchases p WHERE p.contact_id IN (SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) = 1)").get() as Promise<{ total: number }>,
+  ]);
   return {
-    buyersThisMonth,
-    buyersLastMonth,
-    revenueFromRepeatBuyers,
-    revenueFromNewBuyers,
+    buyersThisMonth: buyersThisMonthRow.count,
+    buyersLastMonth: buyersLastMonthRow.count,
+    revenueFromRepeatBuyers: revenueFromRepeatBuyersRow.total,
+    revenueFromNewBuyers: revenueFromNewBuyersRow.total,
   };
 }
 
-export function getRetentionData(): RetentionData {
-  return {
-    overview: getRetentionOverview(),
-    analytics: getRetentionAnalytics(),
-    segments: getRetentionSegmentCounts(),
-  };
+export async function getRetentionData(): Promise<RetentionData> {
+  const [overview, analytics, segments] = await Promise.all([
+    getRetentionOverview(),
+    getRetentionAnalytics(),
+    getRetentionSegmentCounts(),
+  ]);
+  return { overview, analytics, segments };
 }
 
-function getRetentionSegmentCounts(): RetentionData["segments"] {
-  const db = getDb();
-  const row = db
+async function getRetentionSegmentCounts(): Promise<RetentionData["segments"]> {
+  const db = await getDb();
+  const row = await db
     .prepare(
       `SELECT
         SUM(CASE
@@ -1280,9 +1225,9 @@ interface TimelineRow {
   amount: number | null;
 }
 
-export function getTimeline(contactId: number, limit: number = 100): TimelineEvent[] {
-  const db = getDb();
-  const rows = db
+export async function getTimeline(contactId: number, limit: number = 100): Promise<TimelineEvent[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT id, type, ts, text, amount FROM (
         SELECT
@@ -1366,9 +1311,9 @@ function mapFollowUpRow(row: {
   };
 }
 
-function getFollowUpNoMessageInDays(days: number, limit: number): FollowUpListItem[] {
-  const db = getDb();
-  const rows = db
+async function getFollowUpNoMessageInDays(days: number, limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
               CAST(julianday('now') - julianday(MAX(m.created_at)) AS INTEGER) AS days_since
@@ -1392,9 +1337,9 @@ function getFollowUpNoMessageInDays(days: number, limit: number): FollowUpListIt
   return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
 }
 
-function getFollowUpNoPurchaseInDays(days: number, limit: number): FollowUpListItem[] {
-  const db = getDb();
-  const rows = db
+async function getFollowUpNoPurchaseInDays(days: number, limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT id, name, username, avatar, avatar_color,
               CAST(julianday('now') - julianday(last_purchase_date) AS INTEGER) AS days_since
@@ -1415,9 +1360,9 @@ function getFollowUpNoPurchaseInDays(days: number, limit: number): FollowUpListI
   return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
 }
 
-function getFollowUpNoPpvInDays(days: number, limit: number): FollowUpListItem[] {
-  const db = getDb();
-  const rows = db
+async function getFollowUpNoPpvInDays(days: number, limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
               CAST(julianday('now') - julianday(MAX(p.purchase_date)) AS INTEGER) AS days_since
@@ -1440,10 +1385,10 @@ function getFollowUpNoPpvInDays(days: number, limit: number): FollowUpListItem[]
   return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
 }
 
-function getFollowUpVipInactive(vipLevels: string[], days: number, limit: number): FollowUpListItem[] {
-  const db = getDb();
+async function getFollowUpVipInactive(vipLevels: string[], days: number, limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
   const placeholders = vipLevels.map(() => "?").join(",");
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT id, name, username, avatar, avatar_color,
               CAST(julianday('now') - julianday(updated_at) AS INTEGER) AS days_since
@@ -1464,9 +1409,9 @@ function getFollowUpVipInactive(vipLevels: string[], days: number, limit: number
   return rows.map((r) => mapFollowUpRow({ ...r, hint_value: null }));
 }
 
-function getFollowUpHighSpenderInactive(minSpent: number, days: number, limit: number): FollowUpListItem[] {
-  const db = getDb();
-  const rows = db
+async function getFollowUpHighSpenderInactive(minSpent: number, days: number, limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT id, name, username, avatar, avatar_color, total_spent,
               CAST(julianday('now') - julianday(COALESCE(last_purchase_date, updated_at)) AS INTEGER) AS days_since
@@ -1491,9 +1436,9 @@ function getFollowUpHighSpenderInactive(minSpent: number, days: number, limit: n
   );
 }
 
-function getFollowUpNeverPurchased(limit: number): FollowUpListItem[] {
-  const db = getDb();
-  const rows = db
+async function getFollowUpNeverPurchased(limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color
        FROM contacts c
@@ -1514,49 +1459,49 @@ function getFollowUpNeverPurchased(limit: number): FollowUpListItem[] {
   );
 }
 
-export function getFollowUps(limit: number = 10): FollowUpData {
+export async function getFollowUps(limit: number = 10): Promise<FollowUpData> {
   const lists: FollowUpList[] = [
     {
       key: "no_message_7d",
       title: "No message in 7 days",
       description: "Fans you haven't replied to in a week",
       count: 0,
-      items: getFollowUpNoMessageInDays(7, limit),
+      items: await getFollowUpNoMessageInDays(7, limit),
     },
     {
       key: "no_purchase_30d",
       title: "No purchase in 30 days",
       description: "Previous buyers at risk of churning",
       count: 0,
-      items: getFollowUpNoPurchaseInDays(30, limit),
+      items: await getFollowUpNoPurchaseInDays(30, limit),
     },
     {
       key: "vip_inactive_14d",
       title: "VIP inactive for 14 days",
       description: "VIP-tier fans who went quiet",
       count: 0,
-      items: getFollowUpVipInactive(["gold", "platinum", "silver"], 14, limit),
+      items: await getFollowUpVipInactive(["gold", "platinum", "silver"], 14, limit),
     },
     {
       key: "high_spender_inactive",
       title: "High spender inactive",
       description: "Top spenders (≥$200) silent for 30+ days",
       count: 0,
-      items: getFollowUpHighSpenderInactive(200, 30, limit),
+      items: await getFollowUpHighSpenderInactive(200, 30, limit),
     },
     {
       key: "no_ppv_30d",
       title: "No PPV purchase in 30 days",
       description: "Past PPV buyers who stopped unlocking",
       count: 0,
-      items: getFollowUpNoPpvInDays(30, limit),
+      items: await getFollowUpNoPpvInDays(30, limit),
     },
     {
       key: "never_purchased",
       title: "Never purchased",
       description: "Engaged fans who never bought",
       count: 0,
-      items: getFollowUpNeverPurchased(limit),
+      items: await getFollowUpNeverPurchased(limit),
     },
   ];
   for (const list of lists) {
@@ -1574,56 +1519,55 @@ export interface CreateMediaInput {
   price?: number;
 }
 
-export function createMedia(input: CreateMediaInput): Media {
-  const db = getDb();
+export async function createMedia(input: CreateMediaInput): Promise<Media> {
+  const db = await getDb();
   const ts = nowIso();
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO media (contact_id, filename, original_name, mime_type, file_size, price, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(input.contactId, input.filename, input.originalName, input.mimeType, input.fileSize, input.price ?? 0, ts);
-  const row = db.prepare("SELECT * FROM media WHERE id = ?").get(result.lastInsertRowid) as MediaRow;
+  const row = await db.prepare("SELECT * FROM media WHERE id = ?").get(result.lastInsertRowid) as MediaRow;
   return mapMediaRow(row);
 }
 
-export function getMediaById(id: number): Media | null {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM media WHERE id = ?").get(id) as MediaRow | undefined;
+export async function getMediaById(id: number): Promise<Media | null> {
+  const db = await getDb();
+  const row = await db.prepare("SELECT * FROM media WHERE id = ?").get(id) as MediaRow | undefined;
   return row ? mapMediaRow(row) : null;
 }
 
-export function getContactMedia(contactId: number): Media[] {
-  const db = getDb();
-  const rows = db
+export async function getContactMedia(contactId: number): Promise<Media[]> {
+  const db = await getDb();
+  const rows = await db
     .prepare("SELECT * FROM media WHERE contact_id = ? ORDER BY created_at DESC")
     .all(contactId) as MediaRow[];
   return rows.map(mapMediaRow);
 }
 
-export function updateMediaPrice(id: number, price: number): Media | null {
-  const db = getDb();
-  db.prepare("UPDATE media SET price = ? WHERE id = ?").run(price, id);
+export async function updateMediaPrice(id: number, price: number): Promise<Media | null> {
+  const db = await getDb();
+  await db.prepare("UPDATE media SET price = ? WHERE id = ?").run(price, id);
   return getMediaById(id);
 }
 
-export function isMediaUnlocked(mediaId: number, contactId: number): boolean {
-  const db = getDb();
-  const row = db
+export async function isMediaUnlocked(mediaId: number, contactId: number): Promise<boolean> {
+  const db = await getDb();
+  const row = await db
     .prepare("SELECT id FROM purchases WHERE kind = 'ppv' AND note LIKE ? AND contact_id = ?")
     .get(`media_unlock:${mediaId}:%`, contactId) as { id: number } | undefined;
   return !!row;
 }
 
-export function deleteMedia(id: number): boolean {
-  const db = getDb();
-  const row = db.prepare("SELECT filename FROM media WHERE id = ?").get(id) as { filename: string } | undefined;
+export async function deleteMedia(id: number): Promise<boolean> {
+  const db = await getDb();
+  const row = await db.prepare("SELECT filename FROM media WHERE id = ?").get(id) as { filename: string } | undefined;
   if (!row) return false;
-  db.prepare("DELETE FROM media WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM media WHERE id = ?").run(id);
   try {
     fs.unlinkSync(path.join(process.cwd(), "uploads", "media", row.filename));
   } catch {
-    // file may not exist on disk
   }
   return true;
 }

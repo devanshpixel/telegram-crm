@@ -1,7 +1,12 @@
-import Database from "better-sqlite3";
-import fs from "fs";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import path from "path";
 import { SCHEMA_SQL } from "./schema";
+import {
+  createRawBetterSqlite3,
+  wrapBetterSqlite3,
+  createTursoAsync,
+} from "./adapters";
+import type { AsyncDb } from "./adapters";
 
 const DB_PATH =
   process.env.NODE_ENV === "production"
@@ -9,63 +14,43 @@ const DB_PATH =
     : path.join(process.cwd(), "data", "crm.db");
 
 declare global {
-  var __crmDb: Database.Database | undefined;
+  var __crmDb: AsyncDb | undefined;
 }
 
-function columnExists(
-  database: Database.Database,
-  table: string,
-  column: string,
-): boolean {
+function columnExists(database: any, table: string, column: string): boolean {
   const rows = database
     .prepare(`PRAGMA table_info(${table})`)
     .all() as { name: string }[];
   return rows.some((row) => row.name === column);
 }
 
-function migrateDatabase(database: Database.Database): void {
+function migrateBetterSqlite3(database: any): void {
   if (!columnExists(database, "contacts", "telegram_id")) {
     database.exec("ALTER TABLE contacts ADD COLUMN telegram_id TEXT");
   }
   if (!columnExists(database, "contacts", "telegram_access_hash")) {
-    database.exec(
-      "ALTER TABLE contacts ADD COLUMN telegram_access_hash TEXT",
-    );
+    database.exec("ALTER TABLE contacts ADD COLUMN telegram_access_hash TEXT");
   }
   if (!columnExists(database, "messages", "telegram_message_id")) {
-    database.exec(
-      "ALTER TABLE messages ADD COLUMN telegram_message_id INTEGER",
-    );
+    database.exec("ALTER TABLE messages ADD COLUMN telegram_message_id INTEGER");
   }
   if (!columnExists(database, "conversations", "last_synced_message_id")) {
-    database.exec(
-      "ALTER TABLE conversations ADD COLUMN last_synced_message_id INTEGER NOT NULL DEFAULT 0",
-    );
+    database.exec("ALTER TABLE conversations ADD COLUMN last_synced_message_id INTEGER NOT NULL DEFAULT 0");
   }
   if (!columnExists(database, "contacts", "total_spent")) {
-    database.exec(
-      "ALTER TABLE contacts ADD COLUMN total_spent REAL NOT NULL DEFAULT 0",
-    );
+    database.exec("ALTER TABLE contacts ADD COLUMN total_spent REAL NOT NULL DEFAULT 0");
   }
   if (!columnExists(database, "contacts", "vip_level")) {
-    database.exec(
-      "ALTER TABLE contacts ADD COLUMN vip_level TEXT NOT NULL DEFAULT 'none'",
-    );
+    database.exec("ALTER TABLE contacts ADD COLUMN vip_level TEXT NOT NULL DEFAULT 'none'");
   }
   if (!columnExists(database, "contacts", "fan_status")) {
-    database.exec(
-      "ALTER TABLE contacts ADD COLUMN fan_status TEXT NOT NULL DEFAULT 'active'",
-    );
+    database.exec("ALTER TABLE contacts ADD COLUMN fan_status TEXT NOT NULL DEFAULT 'active'");
   }
   if (!columnExists(database, "contacts", "fan_score")) {
-    database.exec(
-      "ALTER TABLE contacts ADD COLUMN fan_score INTEGER NOT NULL DEFAULT 0",
-    );
+    database.exec("ALTER TABLE contacts ADD COLUMN fan_score INTEGER NOT NULL DEFAULT 0");
   }
   if (!columnExists(database, "contacts", "last_purchase_date")) {
-    database.exec(
-      "ALTER TABLE contacts ADD COLUMN last_purchase_date TEXT",
-    );
+    database.exec("ALTER TABLE contacts ADD COLUMN last_purchase_date TEXT");
   }
   const tables = database
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='purchases'")
@@ -101,17 +86,11 @@ function migrateDatabase(database: Database.Database): void {
     `);
   }
   if (!columnExists(database, "purchases", "kind")) {
-    database.exec(
-      "ALTER TABLE purchases ADD COLUMN kind TEXT NOT NULL DEFAULT 'ppv'",
-    );
+    database.exec("ALTER TABLE purchases ADD COLUMN kind TEXT NOT NULL DEFAULT 'ppv'");
   }
-  database.exec(
-    "CREATE INDEX IF NOT EXISTS idx_purchases_contact_kind ON purchases(contact_id, kind)",
-  );
+  database.exec("CREATE INDEX IF NOT EXISTS idx_purchases_contact_kind ON purchases(contact_id, kind)");
   if (!columnExists(database, "contacts", "ppv_count")) {
-    database.exec(
-      "ALTER TABLE contacts ADD COLUMN ppv_count INTEGER NOT NULL DEFAULT 0",
-    );
+    database.exec("ALTER TABLE contacts ADD COLUMN ppv_count INTEGER NOT NULL DEFAULT 0");
   }
   const backfillRow = database
     .prepare("SELECT COUNT(*) AS c FROM contacts WHERE ppv_count > 0")
@@ -143,18 +122,22 @@ function migrateDatabase(database: Database.Database): void {
   if (!columnExists(database, "broadcasts", "trigger")) {
     database.exec("ALTER TABLE broadcasts ADD COLUMN trigger TEXT");
   }
-  database.exec(
-    "CREATE INDEX IF NOT EXISTS idx_broadcasts_trigger_created_at ON broadcasts(trigger, created_at)",
-  );
-  database.exec(
-    "CREATE INDEX IF NOT EXISTS idx_purchases_purchase_date ON purchases(purchase_date)",
-  );
-  database.exec(
-    "CREATE INDEX IF NOT EXISTS idx_contacts_created_at ON contacts(created_at)",
-  );
-  database.exec(
-    "CREATE INDEX IF NOT EXISTS idx_contacts_last_purchase_date ON contacts(last_purchase_date)",
-  );
+  database.exec("CREATE INDEX IF NOT EXISTS idx_broadcasts_trigger_created_at ON broadcasts(trigger, created_at)");
+  if (!columnExists(database, "contacts", "offer_sent")) {
+    database.exec("ALTER TABLE contacts ADD COLUMN offer_sent INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columnExists(database, "contacts", "conv_state")) {
+    database.exec("ALTER TABLE contacts ADD COLUMN conv_state TEXT NOT NULL DEFAULT 'FREE_CHAT'");
+  }
+  if (!columnExists(database, "contacts", "offer_sent_at")) {
+    database.exec("ALTER TABLE contacts ADD COLUMN offer_sent_at TEXT");
+  }
+  if (!columnExists(database, "contacts", "last_locked_response_at")) {
+    database.exec("ALTER TABLE contacts ADD COLUMN last_locked_response_at TEXT");
+  }
+  database.exec("CREATE INDEX IF NOT EXISTS idx_purchases_purchase_date ON purchases(purchase_date)");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_contacts_created_at ON contacts(created_at)");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_contacts_last_purchase_date ON contacts(last_purchase_date)");
   const mediaTables = database
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='media'")
     .all() as { name: string }[];
@@ -176,29 +159,28 @@ function migrateDatabase(database: Database.Database): void {
   }
 }
 
-function createDatabase(): Database.Database {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const database = new Database(DB_PATH);
-  database.pragma("journal_mode = WAL");
-  database.pragma("foreign_keys = ON");
-  database.exec(SCHEMA_SQL);
-  migrateDatabase(database);
-  return database;
+function isTursoConfigured(): boolean {
+  return !!process.env.TURSO_DB_URL;
 }
 
-export function getDb(): Database.Database {
-  console.log("[DB] getDb() DB_PATH =", DB_PATH);
-  if (process.env.NODE_ENV === "production") {
-    if (!global.__crmDb) {
-      global.__crmDb = createDatabase();
-    }
-    return global.__crmDb;
+export async function getDb(): Promise<AsyncDb> {
+  if (global.__crmDb) return global.__crmDb;
+
+  let db: AsyncDb;
+  if (isTursoConfigured()) {
+    const tursoUrl = process.env.TURSO_DB_URL!;
+    const tursoToken = process.env.TURSO_DB_TOKEN;
+    db = createTursoAsync(tursoUrl, tursoToken);
+    await db.exec(SCHEMA_SQL);
+  } else {
+    const raw = createRawBetterSqlite3(DB_PATH);
+    raw.exec(SCHEMA_SQL);
+    migrateBetterSqlite3(raw);
+    db = wrapBetterSqlite3(raw);
   }
 
-  if (!global.__crmDb) {
-    global.__crmDb = createDatabase();
-  }
-  return global.__crmDb;
+  global.__crmDb = db;
+  return db;
 }
 
 export function nowIso(): string {

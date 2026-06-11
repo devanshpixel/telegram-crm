@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const validModes: ReplyMode[] = ["casual", "flirty", "sales", "reengagement", "auto"];
     const mode: ReplyMode = validModes.includes(body.mode) ? body.mode : "auto";
 
-    const messages = getMessagesByContactId(contactId);
+    const messages = await getMessagesByContactId(contactId);
     if (messages.length === 0) {
       return apiError("No messages found for this contact", 404);
     }

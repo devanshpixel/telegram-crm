@@ -14,7 +14,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid media id" }, { status: 400 });
     }
 
-    const media = getMediaById(mediaId);
+    const media = await getMediaById(mediaId);
     if (!media) {
       return NextResponse.json({ error: "Media not found" }, { status: 404 });
     }
@@ -29,7 +29,7 @@ export async function GET(
       return NextResponse.json({ error: "Valid contactId is required" }, { status: 400 });
     }
 
-    if (!isMediaUnlocked(mediaId, contactId)) {
+    if (!(await isMediaUnlocked(mediaId, contactId))) {
       return NextResponse.json({ error: "Media not unlocked" }, { status: 403 });
     }
 

@@ -1,6 +1,13 @@
-import { getDb, nowIso } from "../lib/db/index";
+import { nowIso } from "../lib/db/index";
+import { createRawBetterSqlite3 } from "../lib/db/adapters";
+import path from "path";
 
-const db = getDb();
+const DB_PATH =
+  process.env.NODE_ENV === "production"
+    ? "/tmp/crm.db"
+    : path.join(process.cwd(), "data", "crm.db");
+
+const db = createRawBetterSqlite3(DB_PATH);
 
 const existing = (
   db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number }

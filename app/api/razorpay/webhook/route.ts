@@ -37,22 +37,19 @@ export async function POST(request: Request) {
           ? `media_unlock:${mediaId}:razorpay_payment:${paymentId}`
           : `razorpay_payment:${paymentId}`;
 
-        const db = getDb();
-        const processPayment = db.transaction(() => {
-          const existing = db
-            .prepare("SELECT id FROM purchases WHERE note LIKE ?")
-            .get(`%razorpay_payment:${paymentId}%`);
-          if (!existing) {
-            createPurchase({
-              contactId: Number(contactId),
-              amount: amountPaid / 100,
-              purchaseDate: new Date().toISOString().split("T")[0],
-              kind: "ppv",
-              note,
-            });
-          }
-        });
-        processPayment();
+        const db = await getDb();
+        const existing = await db
+          .prepare("SELECT id FROM purchases WHERE note LIKE ?")
+          .get(`%razorpay_payment:${paymentId}%`);
+        if (!existing) {
+          await createPurchase({
+            contactId: Number(contactId),
+            amount: amountPaid / 100,
+            purchaseDate: new Date().toISOString().split("T")[0],
+            kind: "ppv",
+            note,
+          });
+        }
       }
     }
 

@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const media = createMedia({
+    const media = await createMedia({
       contactId,
       filename,
       originalName: file.name,

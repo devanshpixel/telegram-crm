@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const counts = {} as ReengagementAudiences;
     for (const key of BROADCAST_TRIGGER_KEYS) {
-      counts[key] = getFollowUpAudienceCount(key);
+      counts[key] = await getFollowUpAudienceCount(key);
     }
     return apiOk({ counts });
   } catch (e) {

@@ -321,4 +321,6 @@ export interface RazorpayOrderResponse {
   paymentLinkId: string;
 }
 
-export type ReplyMode = "casual" | "flirty" | "sales" | "reengagement" | "auto";
+export type ConvState = "FREE_CHAT" | "OFFER_SENT" | "PAID";
+
+export type ReplyMode = "casual" | "flirty" | "sales" | "reengagement" | "premium" | "auto";

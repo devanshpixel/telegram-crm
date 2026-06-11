@@ -10,7 +10,7 @@ export async function GET(
     const mediaId = Number(id);
     if (!Number.isInteger(mediaId) || mediaId <= 0) return apiError("Invalid media id");
 
-    const media = getMediaById(mediaId);
+    const media = await getMediaById(mediaId);
     if (!media) return apiError("Media not found", 404);
 
     return apiOk(media);
@@ -33,7 +33,7 @@ export async function PATCH(
     const price = Number(body.price);
     if (typeof price !== "number" || price < 0) return apiError("Valid price is required");
 
-    const media = updateMediaPrice(mediaId, price);
+    const media = await updateMediaPrice(mediaId, price);
     if (!media) return apiError("Media not found", 404);
 
     return apiOk(media);
@@ -52,7 +52,7 @@ export async function DELETE(
     const mediaId = Number(id);
     if (!Number.isInteger(mediaId) || mediaId <= 0) return apiError("Invalid media id");
 
-    const deleted = deleteMedia(mediaId);
+    const deleted = await deleteMedia(mediaId);
     if (!deleted) return apiError("Media not found", 404);
 
     return apiOk({ success: true });

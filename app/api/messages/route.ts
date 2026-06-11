@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       return apiError("Invalid message direction");
     }
 
-    const message = createMessage(contactId, body.text, direction);
+    const message = await createMessage(contactId, body.text, direction);
     if (!message) return apiError("Conversation not found", 404);
     return apiOk(message, 201);
   } catch (e) {

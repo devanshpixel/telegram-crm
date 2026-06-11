@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     const filters = normalizeFilters(body.filters);
     if (typeof filters === "string") return apiError(filters);
 
-    return apiOk({ count: getBroadcastAudienceCount(filters) });
+    return apiOk({ count: await getBroadcastAudienceCount(filters) });
   } catch (e) {
     console.error(e);
     return apiError("Failed to preview broadcast audience", 500);

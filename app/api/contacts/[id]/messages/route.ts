@@ -11,7 +11,7 @@ export async function GET(
     if (!Number.isInteger(contactId) || contactId <= 0) {
       return apiError("Invalid contact id");
     }
-    return apiOk(getMessagesByContactId(contactId));
+    return apiOk(await getMessagesByContactId(contactId));
   } catch (e) {
     console.error(e);
     return apiError("Failed to load messages", 500);

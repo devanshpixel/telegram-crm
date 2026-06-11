@@ -17,7 +17,7 @@ export async function GET(request: Request) {
       return apiError("Invalid limit parameter");
     }
 
-    return apiOk(getRevenueData(months, limit));
+    return apiOk(await getRevenueData(months, limit));
   } catch (e) {
     console.error(e);
     return apiError("Failed to load revenue", 500);

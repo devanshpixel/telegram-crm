@@ -10,16 +10,17 @@ import { getTelegramClient } from "./client";
 const FLOOD_RETRY_MAX = 3;
 
 async function ensureConnected(): Promise<void> {
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
   if (!client.connected) {
     await client.connect();
   }
 }
 
-function getContactById(contactId: number): ContactRow | undefined {
-  return getDb()
+async function getContactById(contactId: number): Promise<ContactRow | undefined> {
+  const db = await getDb();
+  return (await db
     .prepare("SELECT * FROM contacts WHERE id = ?")
-    .get(contactId) as ContactRow | undefined;
+    .get(contactId)) as ContactRow | undefined;
 }
 
 function buildPeer(contact: ContactRow): Api.InputPeerUser {
@@ -38,7 +39,7 @@ export async function sendTelegramMessage(
     throw new Error("Message text cannot be empty");
   }
 
-  const contact = getContactById(contactId);
+  const contact = await getContactById(contactId);
   if (!contact) {
     throw new Error(`Contact not found: ${contactId}`);
   }
@@ -50,7 +51,7 @@ export async function sendTelegramMessage(
   }
 
   await ensureConnected();
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
   const peer = buildPeer(contact);
 
   let lastError: Error | null = null;
@@ -63,7 +64,7 @@ export async function sendTelegramMessage(
         throw new Error("Failed to send Telegram message");
       }
 
-      const saved = createMessage(contactId, trimmedText, "outgoing", sent.id);
+      const saved = await createMessage(contactId, trimmedText, "outgoing", sent.id);
       if (!saved) {
         throw new Error(`No conversation found for contact ${contactId}`);
       }

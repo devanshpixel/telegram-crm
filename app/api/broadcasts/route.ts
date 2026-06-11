@@ -16,7 +16,7 @@ function sleep(ms: number): Promise<void> {
 
 export async function GET() {
   try {
-    return apiOk(listBroadcasts(20));
+    return apiOk(await listBroadcasts(20));
   } catch (e) {
     console.error(e);
     return apiError("Failed to load broadcasts", 500);
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     inflightBroadcasts.add(lockKey);
 
     try {
-      const recipients = getBroadcastRecipients(filters);
+      const recipients = await getBroadcastRecipients(filters);
       const recipientCount = recipients.length;
       let sentCount = 0;
       const errors: string[] = [];
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         await sleep(THROTTLE_MS);
       }
 
-      const broadcast = createBroadcastHistory({
+      const broadcast = await createBroadcastHistory({
         name,
         message,
         recipientCount,

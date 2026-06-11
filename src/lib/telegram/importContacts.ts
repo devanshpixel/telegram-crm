@@ -17,14 +17,16 @@ export interface ContactImportSummary {
 }
 
 async function ensureConnected(): Promise<void> {
-  const client = getTelegramClient();
-  if (!client.connected) {
+  const client = await getTelegramClient();
+
+  if (!(client as any).connected) {
     await client.connect();
   }
 }
 
-function contactExistsByTelegramId(telegramId: string): boolean {
-  const row = getDb()
+async function contactExistsByTelegramId(telegramId: string): Promise<boolean> {
+  const db = await getDb();
+  const row = await db
     .prepare("SELECT id FROM contacts WHERE telegram_id = ?")
     .get(telegramId);
   return row !== undefined;
@@ -61,15 +63,16 @@ async function fetchTelegramContactUsers(
 
 export async function importContacts(): Promise<ContactImportSummary> {
   console.log("[IMPORT] DB_PATH =", DB_PATH);
-  const beforeContacts = (getDb().prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? 0;
-  const beforeConversations = (getDb().prepare("SELECT COUNT(*) AS count FROM conversations").get() as { count: number })?.count ?? 0;
-  const beforeMessages = (getDb().prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number })?.count ?? 0;
+  const db = await getDb();
+  const beforeContacts = (await db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? 0;
+  const beforeConversations = (await db.prepare("SELECT COUNT(*) AS count FROM conversations").get() as { count: number })?.count ?? 0;
+  const beforeMessages = (await db.prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number })?.count ?? 0;
   console.log("[IMPORT] contacts before:", beforeContacts);
   console.log("[IMPORT] conversations before:", beforeConversations);
   console.log("[IMPORT] messages before:", beforeMessages);
 
   await ensureConnected();
-  const client = getTelegramClient();
+  const client = await getTelegramClient();
   const users = await fetchTelegramContactUsers(client);
 
   console.log("[IMPORT] fetched users:", users.length);
@@ -84,7 +87,7 @@ export async function importContacts(): Promise<ContactImportSummary> {
     total++;
     const telegramId = entity.id.toString();
 
-    if (contactExistsByTelegramId(telegramId)) {
+    if (await contactExistsByTelegramId(telegramId)) {
       skipped++;
       continue;
     }
@@ -95,7 +98,7 @@ export async function importContacts(): Promise<ContactImportSummary> {
       continue;
     }
 
-    createContact({
+    await createContact({
       name: formatUserName(entity),
       username: formatUsername(entity),
       phone: entity.phone ?? "",
@@ -105,9 +108,9 @@ export async function importContacts(): Promise<ContactImportSummary> {
     imported++;
   }
 
-  const afterContacts = (getDb().prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? 0;
-  const afterConversations = (getDb().prepare("SELECT COUNT(*) AS count FROM conversations").get() as { count: number })?.count ?? 0;
-  const afterMessages = (getDb().prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number })?.count ?? 0;
+  const afterContacts = (await db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number })?.count ?? 0;
+  const afterConversations = (await db.prepare("SELECT COUNT(*) AS count FROM conversations").get() as { count: number })?.count ?? 0;
+  const afterMessages = (await db.prepare("SELECT COUNT(*) AS count FROM messages").get() as { count: number })?.count ?? 0;
   console.log("[IMPORT] contacts after:", afterContacts);
   console.log("[IMPORT] conversations after:", afterConversations);
   console.log("[IMPORT] messages after:", afterMessages);

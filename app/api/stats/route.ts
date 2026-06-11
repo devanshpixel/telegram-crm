@@ -3,7 +3,7 @@ import { apiError, apiOk } from "@/lib/api-error";
 
 export async function GET() {
   try {
-    return apiOk(getDashboardStats());
+    return apiOk(await getDashboardStats());
   } catch (e) {
     console.error(e);
     return apiError("Failed to load stats", 500);

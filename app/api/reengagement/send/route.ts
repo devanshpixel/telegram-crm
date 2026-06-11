@@ -50,7 +50,7 @@ export async function POST(request: Request): Promise<Response> {
     inflightReengagements.add(segmentKey);
 
     try {
-      const recipients = getFollowUpAudience(segmentKey);
+      const recipients = await getFollowUpAudience(segmentKey);
       const recipientCount = recipients.length;
       let sentCount = 0;
       const errors: string[] = [];
@@ -67,7 +67,7 @@ export async function POST(request: Request): Promise<Response> {
         await sleep(THROTTLE_MS);
       }
 
-      const broadcast = createBroadcastHistory({
+      const broadcast = await createBroadcastHistory({
         name,
         message,
         recipientCount,

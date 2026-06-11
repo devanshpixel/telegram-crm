@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
     let resolvedAmount = amount;
     if (mediaId !== undefined) {
-      const media = getMediaById(mediaId);
+      const media = await getMediaById(mediaId);
       if (!media) {
         return NextResponse.json({ error: "Media not found" }, { status: 404 });
       }

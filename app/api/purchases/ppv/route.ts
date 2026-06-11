@@ -11,7 +11,7 @@ export async function GET(request: Request) {
       return apiError("Invalid limit parameter");
     }
 
-    return apiOk(getPpvStats(limit));
+    return apiOk(await getPpvStats(limit));
   } catch (e) {
     console.error(e);
     return apiError("Failed to load PPV stats", 500);
