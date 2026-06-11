@@ -8,6 +8,7 @@ const PUBLIC_PATHS = [
   "/api/telegram/status",
   "/api/telegram/poll",
   "/api/telegram/remind",
+  "/api/telegram/sign-out",
   "/api/settings",
   "/api/razorpay/webhook",
 ];
