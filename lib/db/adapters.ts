@@ -101,7 +101,10 @@ export function createTursoAsync(url: string, authToken?: string): AsyncDb {
       };
     },
     async exec(sql: string): Promise<void> {
-      await client.execute(sql);
+      const statements = sql.split(";").map(s => s.trim()).filter(s => s.length > 0);
+      for (const stmt of statements) {
+        await client.execute(stmt);
+      }
     },
     transaction<T>(fn: () => T | Promise<T>): () => Promise<T> {
       return async () => {
