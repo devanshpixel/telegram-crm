@@ -19,9 +19,8 @@ export interface ContactImportSummary {
 async function ensureConnected(): Promise<void> {
   const client = await getTelegramClient();
 
-  if (!(client as any).connected) {
     await client.connect();
-  }
+  
 }
 
 async function contactExistsByTelegramId(telegramId: string): Promise<boolean> {
