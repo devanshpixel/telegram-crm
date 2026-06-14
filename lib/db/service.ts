@@ -101,9 +101,23 @@ async function listChatRows(): Promise<ChatListRow[]> {
 
 export async function listChats(): Promise<Chat[]> {
   const rows = await listChatRows();
+  if (rows.length === 0) return [];
+
+  const db = await getDb();
+  const tagsRows = await db
+    .prepare("SELECT contact_id, name FROM tags ORDER BY name ASC")
+    .all() as { contact_id: number; name: string }[];
+
+  const tagsByContact = new Map<number, string[]>();
+  for (const t of tagsRows) {
+    const list = tagsByContact.get(t.contact_id) ?? [];
+    list.push(t.name);
+    tagsByContact.set(t.contact_id, list);
+  }
+
   const result: Chat[] = [];
   for (const row of rows) {
-    const tags = await getTagsForContact(row.id);
+    const tags = tagsByContact.get(row.id) ?? [];
     result.push(mapChatRow(row, tags));
   }
   return result;
