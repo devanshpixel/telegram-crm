@@ -14,6 +14,7 @@ import { TimelineSection } from "./TimelineSection";
 
 interface SidebarRightProps {
   profile: ContactProfile;
+  totalMessages?: number;
   onClose?: () => void;
   onAddNote: (content: string) => Promise<void>;
   onAddTag: (name: string) => Promise<void>;
@@ -23,6 +24,7 @@ interface SidebarRightProps {
 
 export function SidebarRight({
   profile,
+  totalMessages,
   onClose,
   onAddNote,
   onAddTag,
@@ -50,8 +52,9 @@ export function SidebarRight({
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <ProfileSection profile={profile} />
+        <ProfileSection profile={profile} totalMessages={totalMessages} />
         <RevenueSection profile={profile} />
+
         <PpvSection profile={profile} />
         <PurchaseHistory purchases={profile.purchases ?? []} />
         <MediaGallery key={profile.id} contactId={Number(profile.id)} />

@@ -285,7 +285,7 @@ export function Dashboard({
         <div
           className={cn(
             "h-full shrink-0 transition-transform duration-200",
-            "w-full md:w-[min(100%,340px)] lg:w-[360px]",
+            "w-full md:w-[20%]",
             mobilePanel === "list" ? "flex translate-x-0" : "hidden md:flex",
           )}
         >
@@ -301,7 +301,7 @@ export function Dashboard({
 
         <div
           className={cn(
-            "h-full min-w-0 flex-1",
+            "h-full min-w-0 flex-1 md:max-w-[60%]",
             mobilePanel === "chat" || mobilePanel === "crm"
               ? "flex"
               : "hidden md:flex",
@@ -321,16 +321,18 @@ export function Dashboard({
         <div
           className={cn(
             "h-full shrink-0",
-            "fixed inset-y-0 right-0 z-40 w-full max-w-[340px] shadow-panel transition-transform duration-200 lg:static lg:z-0 lg:max-w-none lg:w-[320px] lg:shadow-none",
+            "fixed inset-y-0 right-0 z-40 w-full max-w-[340px] shadow-panel transition-transform duration-200 lg:static lg:z-0 lg:max-w-none lg:w-[20%] lg:shadow-none",
             mobilePanel === "crm"
               ? "translate-x-0 flex"
               : "translate-x-full hidden lg:flex",
             "lg:translate-x-0",
           )}
         >
+
           {activeProfile ? (
             <SidebarRight
               profile={activeProfile}
+              totalMessages={activeMessages.length}
               onClose={handleCloseCrm}
               onAddNote={handleAddNote}
               onAddTag={handleAddTag}
