@@ -95,6 +95,12 @@ export function Dashboard({
   }, []);
 
   useEffect(() => {
+    if (chats.length > 0 && activeChatId && !chats.find(c => c.id === activeChatId)) {
+      setActiveChatId(chats[0].id);
+    }
+  }, [chats, activeChatId]);
+
+  useEffect(() => {
     if (!activeChatId) return;
     void loadProfile(activeChatId);
     void loadMessages(activeChatId);
