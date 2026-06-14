@@ -70,17 +70,24 @@ export async function sendTelegramMessage(
       }
 
       return saved;
-    } catch (e) {
-      if (e instanceof FloodWaitError) {
+    } catch (err: unknown) {
+      const e = err as Error & { seconds?: number };
+      const isFlood =
+        err instanceof FloodWaitError ||
+        e.name === "FloodWaitError" ||
+        (e.message && e.message.includes("FLOOD_WAIT"));
+
+      if (isFlood) {
         lastError = e;
+        const seconds = e.seconds ?? Math.pow(2, attempt);
         console.warn(
-          `[FloodWait] sleeping ${e.seconds}s for contact ${contactId} (attempt ${attempt}/${FLOOD_RETRY_MAX})`,
+          `[FloodWait] sleeping ${seconds}s for contact ${contactId} (attempt ${attempt}/${FLOOD_RETRY_MAX})`,
         );
-        await new Promise((resolve) => setTimeout(resolve, e.seconds * 1000));
+        await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
         await ensureConnected();
         continue;
       }
-      throw e;
+      throw err;
     }
   }
 
