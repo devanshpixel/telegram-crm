@@ -34,19 +34,12 @@ interface DashboardProps {
   requestedContactId?: string;
 }
 
-function reviveChats(chats: Chat[]): Chat[] {
-  return chats.map((c) => ({
-    ...c,
-    lastMessageTime: new Date(c.lastMessageTime),
-  }));
-}
-
 export function Dashboard({
   initialChats,
   initialStats,
   requestedContactId,
 }: DashboardProps) {
-  const [chats, setChats] = useState<Chat[]>(() => reviveChats(initialChats));
+  const [chats, setChats] = useState<Chat[]>(initialChats);
   const [stats, setStats] = useState<DashboardStats>(initialStats);
   const [activeChatId, setActiveChatId] = useState<string>(() => {
     if (requestedContactId) {
@@ -55,6 +48,7 @@ export function Dashboard({
     }
     return initialChats[0]?.id ?? "";
   });
+
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("list");
   const [profiles, setProfiles] = useState<Record<string, ContactProfile>>({});
   const [messages, setMessages] = useState<Record<string, Message[]>>({});

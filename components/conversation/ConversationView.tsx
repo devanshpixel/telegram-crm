@@ -57,7 +57,7 @@ export function ConversationView({
                 const isGrouped =
                   !!prev &&
                   prev.direction === message.direction &&
-                  message.timestamp.getTime() - prev.timestamp.getTime() <
+                  new Date(message.timestamp).getTime() - new Date(prev.timestamp).getTime() <
                     5 * 60 * 1000;
                 return (
                   <MessageBubble

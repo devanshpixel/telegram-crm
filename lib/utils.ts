@@ -4,7 +4,8 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
-export function formatTime(date: Date): string {
+export function formatTime(dateInput: Date | string): string {
+  const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const days = Math.floor(diff / (24 * 60 * 60 * 1000));
@@ -22,6 +23,7 @@ export function formatTime(date: Date): string {
   }
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+
 
 export function formatCurrency(amount: number, compact = false): string {
   if (compact && amount >= 1000) {

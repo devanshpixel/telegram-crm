@@ -4,7 +4,7 @@ export interface Message {
   id: string;
   text: string;
   direction: MessageDirection;
-  timestamp: Date;
+  timestamp: string;
   read?: boolean;
 }
 
@@ -15,13 +15,14 @@ export interface Chat {
   avatar: string;
   avatarColor: string;
   lastMessage: string;
-  lastMessageTime: Date;
+  lastMessageTime: string;
   unreadCount: number;
   isOnline: boolean;
   isPinned?: boolean;
   revenue: number;
   tags: string[];
 }
+
 
 export interface ContactProfile {
   id: string;

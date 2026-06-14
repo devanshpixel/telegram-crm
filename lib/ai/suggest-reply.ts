@@ -107,6 +107,8 @@ export function detectMode(
   return "casual";
 }
 
+const FALLBACK_REPLY = "ji bilkul, main thoda busy thi. kaise ho?";
+
 export async function suggestReply(
   messages: { text: string; direction: "incoming" | "outgoing" }[],
   mode: ReplyMode = "auto",
@@ -124,33 +126,51 @@ export async function suggestReply(
     ? "Recent messages:\n" + transcript + "\n\nSuggested reply:"
     : "The conversation is just starting.\n\nSuggested reply:";
 
-  const res = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: 100,
-      temperature: 0.8,
-    }),
-  });
+  const fetchWithRetry = async (retryCount = 0): Promise<string> => {
+    try {
+      const res = await fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          max_tokens: 100,
+          temperature: 0.8,
+        }),
+      });
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => "unknown error");
-    throw new Error("OpenRouter request failed: " + res.status + " " + err);
-  }
+      if (!res.ok) {
+        const err = await res.text().catch(() => "unknown error");
+        throw new Error("OpenRouter request failed: " + res.status + " " + err);
+      }
 
-  const body = await res.json();
-  const text: string | undefined = body?.choices?.[0]?.message?.content;
-  if (!text || !text.trim()) {
-    throw new Error("OpenRouter returned empty response");
-  }
+      const body = await res.json();
+      const text: string | undefined = body?.choices?.[0]?.message?.content;
+      if (!text || !text.trim()) {
+        if (retryCount < 1) {
+          console.log("[AI] Empty response, retrying...");
+          return fetchWithRetry(retryCount + 1);
+        }
+        console.error("OpenRouter empty response after retry. Body:", JSON.stringify(body, null, 2));
+        return FALLBACK_REPLY;
+      }
+      return text.trim();
+    } catch (e) {
+      if (retryCount < 1) {
+        console.log("[AI] Request failed, retrying...", e instanceof Error ? e.message : String(e));
+        return fetchWithRetry(retryCount + 1);
+      }
+      console.error("[AI] Final failure:", e instanceof Error ? e.message : String(e));
+      return FALLBACK_REPLY;
+    }
+  };
 
-  return text.trim();
+  return fetchWithRetry();
 }
+

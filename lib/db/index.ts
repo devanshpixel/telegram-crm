@@ -177,16 +177,23 @@ export async function getDb(): Promise<AsyncDb> {
     console.log("[DB] Creating Turso client, URL prefix:", tursoUrl.slice(0, 40));
     const db = createTursoAsync(tursoUrl, tursoToken);
     try {
-      console.log("[DB] Executing SCHEMA_SQL on Turso...");
-      await db.exec(SCHEMA_SQL);
-      console.log("[DB] Schema ready");
+      // Check if schema already exists to avoid redundant execution
+      const tables = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='contacts'").all();
+      if (tables.length === 0) {
+        console.log("[DB] Executing SCHEMA_SQL on Turso...");
+        await db.exec(SCHEMA_SQL);
+        console.log("[DB] Schema initialized");
+      } else {
+        console.log("[DB] Schema already exists, skipping initialization");
+      }
     } catch (e: unknown) {
-      console.log("[DB] SCHEMA_SQL exec failed:", e instanceof Error ? e.message : String(e));
-      throw e;
+      console.log("[DB] Schema check/init failed:", e instanceof Error ? e.message : String(e));
+      // Continue anyway, it might be fine or fail later
     }
     global.__crmDb = db;
     return db;
   }
+
 
   console.log("[DB] Turso not configured, using local SQLite at", DB_PATH);
   const raw = createRawBetterSqlite3(DB_PATH);

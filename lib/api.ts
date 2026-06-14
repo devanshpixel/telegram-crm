@@ -30,22 +30,15 @@ async function parseJson<T>(res: Response): Promise<T> {
   return data as T;
 }
 
-function reviveChat(chat: Chat): Chat {
-  return { ...chat, lastMessageTime: new Date(chat.lastMessageTime) };
-}
-
-function reviveMessage(m: Message): Message {
-  return { ...m, timestamp: new Date(m.timestamp) };
-}
-
 async function crmFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return fetch(input, init);
 }
 
+
 export async function fetchChats(): Promise<Chat[]> {
-  const data = await parseJson<Chat[]>(await crmFetch("/api/contacts"));
-  return data.map(reviveChat);
+  return parseJson<Chat[]>(await crmFetch("/api/contacts"));
 }
+
 
 export async function fetchStats(): Promise<DashboardStats> {
   return parseJson<DashboardStats>(await crmFetch("/api/stats"));
@@ -129,11 +122,11 @@ export async function fetchContact(id: string): Promise<ContactProfile> {
 }
 
 export async function fetchMessages(contactId: string): Promise<Message[]> {
-  const data = await parseJson<Message[]>(
+  return parseJson<Message[]>(
     await crmFetch(`/api/contacts/${contactId}/messages`),
   );
-  return data.map(reviveMessage);
 }
+
 
 export async function fetchTimeline(
   contactId: string,
@@ -225,7 +218,7 @@ export async function createMessageApi(
   text: string,
   direction: MessageDirection = "outgoing",
 ): Promise<Message> {
-  const data = await parseJson<Message>(
+  return parseJson<Message>(
     await crmFetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -236,8 +229,8 @@ export async function createMessageApi(
       }),
     }),
   );
-  return reviveMessage(data);
 }
+
 
 export interface ContactImportSummary {
   total: number;

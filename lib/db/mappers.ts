@@ -16,7 +16,7 @@ export function mapChatRow(row: ChatListRow, tags: string[]): Chat {
     avatar: row.avatar,
     avatarColor: row.avatar_color,
     lastMessage: row.last_message,
-    lastMessageTime: new Date(row.last_message_time),
+    lastMessageTime: row.last_message_time,
     unreadCount: row.unread_count,
     isOnline: row.is_online === 1,
     isPinned: row.is_pinned === 1,
@@ -24,6 +24,7 @@ export function mapChatRow(row: ChatListRow, tags: string[]): Chat {
     tags,
   };
 }
+
 
 export function mapContactToProfile(
   contact: ContactRow,
@@ -63,10 +64,11 @@ export function mapMessageRow(row: MessageRow): Message {
     id: String(row.id),
     text: row.text,
     direction: row.direction,
-    timestamp: new Date(row.created_at),
+    timestamp: row.created_at,
     read: row.is_read === 1,
   };
 }
+
 
 export function mapDashboardStats(
   totalChats: number,

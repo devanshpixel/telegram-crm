@@ -12,6 +12,8 @@ import { razorpay } from "@/lib/razorpay";
 import { suggestReply } from "@/lib/ai/suggest-reply";
 import { getTelegramClient } from "./client";
 import { sendTelegramMessage } from "./sendMessage";
+import { readFileSync, existsSync } from "fs";
+import path from "path";
 
 export interface PollSummary {
   dialogsChecked: number;
@@ -95,7 +97,7 @@ async function getIncomingMessageCount(contactId: number): Promise<number> {
   const db = await getDb();
   const row = (await db
     .prepare(
-      "SELECT COUNT(*) AS count FROM messages WHERE contact_id = ? AND direction = 'incoming'",
+      "SELECT COUNT(*) AS count FROM messages m INNER JOIN conversations c ON m.conversation_id = c.id WHERE c.contact_id = ? AND m.direction = 'incoming'",
     )
     .get(contactId)) as { count: number };
   return row?.count ?? 0;
@@ -129,13 +131,20 @@ async function setConvState(
   }
 }
 
-function getOfferPrice(): number {
-  const raw = process.env.OFFER_PRICE;
-  if (raw) {
-    const parsed = parseInt(raw, 10);
-    if (!isNaN(parsed) && parsed > 0) return parsed;
+function getOfferSettings() {
+  const filePath = path.join(process.cwd(), "data", "settings.json");
+  if (existsSync(filePath)) {
+    try {
+      return JSON.parse(readFileSync(filePath, "utf-8"));
+    } catch {
+      // ignore
+    }
   }
-  return 499;
+  return {
+    offerPrice: parseInt(process.env.OFFER_PRICE || "499", 10),
+    offerMessage:
+      "Hey! You've been enjoying the chat so here's something special 🔥\n\nUnlock premium access for exclusive content, behind-the-scenes, and unlimited chat.",
+  };
 }
 
 function hoursSince(isoString: string | null): number {
@@ -171,10 +180,13 @@ async function sendAiReply(
   await sendTelegramMessage(contactId, reply);
 }
 
-export async function createPaymentLink(contactId: number): Promise<string> {
+export async function createPaymentLink(
+  contactId: number,
+  overrideAmount?: number,
+): Promise<string> {
   if (!razorpay) throw new Error("Razorpay not configured");
   const appUrl = process.env.APP_URL || "http://localhost:3000";
-  const amount = getOfferPrice();
+  const amount = overrideAmount ?? getOfferSettings().offerPrice;
   const paymentLink = await razorpay.paymentLink.create({
     amount: amount,
     currency: "INR",
@@ -188,14 +200,13 @@ export async function createPaymentLink(contactId: number): Promise<string> {
 }
 
 async function sendPremiumOffer(contactId: number): Promise<void> {
-  const link = await createPaymentLink(contactId);
-  const text =
-    `Hey! You've been enjoying the chat so here's something special 🔥\n\n` +
-    `Unlock premium access for exclusive content, behind-the-scenes, and unlimited chat.\n\n` +
-    `👉 ${link}`;
+  const settings = getOfferSettings();
+  const link = await createPaymentLink(contactId, settings.offerPrice);
+  const text = `${settings.offerMessage}\n\n👉 ${link}`;
   await sendTelegramMessage(contactId, text);
   await setConvState(contactId, "OFFER_SENT", nowIso());
 }
+
 
 export async function sendLockedResponse(contactId: number): Promise<void> {
   const link = await createPaymentLink(contactId);
