@@ -166,33 +166,33 @@ function isTursoConfigured(): boolean {
 export async function getDb(): Promise<AsyncDb> {
   if (global.__crmDb) return global.__crmDb;
 
-  console.log("[DB] isTursoConfigured=", isTursoConfigured(), "TURSO_DB_URL=", process.env.TURSO_DB_URL?.slice(0, 30) + "...", "TURSO_DB_TOKEN exists=", !!process.env.TURSO_DB_TOKEN, "TURSO_DB_TOKEN length=", process.env.TURSO_DB_TOKEN?.length);
+  const hasUrl = !!process.env.TURSO_DB_URL;
+  const hasToken = !!process.env.TURSO_DB_TOKEN;
+  const tokenLen = process.env.TURSO_DB_TOKEN?.length ?? 0;
+  console.log("[DB] TURSO_DB_URL exists=", hasUrl, "TURSO_DB_TOKEN exists=", hasToken, "token length=", tokenLen);
 
-  let db: AsyncDb;
   if (isTursoConfigured()) {
     const tursoUrl = process.env.TURSO_DB_URL!;
     const tursoToken = process.env.TURSO_DB_TOKEN;
+    console.log("[DB] Creating Turso client, URL prefix:", tursoUrl.slice(0, 40));
+    const db = createTursoAsync(tursoUrl, tursoToken);
     try {
-      console.log("[DB] Creating Turso client...");
-      db = createTursoAsync(tursoUrl, tursoToken);
       console.log("[DB] Executing SCHEMA_SQL on Turso...");
       await db.exec(SCHEMA_SQL);
-      console.log("[DB] Turso schema ready");
+      console.log("[DB] Schema ready");
     } catch (e: unknown) {
-      console.log("[DB] Turso connection failed:", e instanceof Error ? e.message : String(e));
-      console.log("[DB] Falling back to local SQLite at", DB_PATH);
-      const raw = createRawBetterSqlite3(DB_PATH);
-      raw.exec(SCHEMA_SQL);
-      migrateBetterSqlite3(raw);
-      db = wrapBetterSqlite3(raw);
+      console.log("[DB] SCHEMA_SQL exec failed:", e instanceof Error ? e.message : String(e));
+      throw e;
     }
-  } else {
-    const raw = createRawBetterSqlite3(DB_PATH);
-    raw.exec(SCHEMA_SQL);
-    migrateBetterSqlite3(raw);
-    db = wrapBetterSqlite3(raw);
+    global.__crmDb = db;
+    return db;
   }
 
+  console.log("[DB] Turso not configured, using local SQLite at", DB_PATH);
+  const raw = createRawBetterSqlite3(DB_PATH);
+  raw.exec(SCHEMA_SQL);
+  migrateBetterSqlite3(raw);
+  const db = wrapBetterSqlite3(raw);
   global.__crmDb = db;
   return db;
 }
