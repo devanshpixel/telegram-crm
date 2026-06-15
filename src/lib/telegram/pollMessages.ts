@@ -316,8 +316,23 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       for await (const dialog of client.iterDialogs()) {
         const entity = dialog.entity;
         
+        console.log(`[DIALOG] title="${dialog.name}" username=${entity instanceof Api.User ? entity.username : "n/a"} id=${entity?.id}`);
+
         // Skip non-users, bots, self early before counting against the quota
-        if (!(entity instanceof Api.User) || entity.bot || entity.deleted || entity.self) {
+        if (!(entity instanceof Api.User)) {
+          console.log("[SKIP] reason=not-user");
+          continue;
+        }
+        if (entity.bot) {
+          console.log("[SKIP] reason=bot");
+          continue;
+        }
+        if (entity.deleted) {
+          console.log("[SKIP] reason=deleted");
+          continue;
+        }
+        if (entity.self) {
+          console.log("[SKIP] reason=self");
           continue;
         }
 
@@ -345,6 +360,8 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           }
         }
 
+        console.log(`[CONTACT] id=${contact.id} telegramId=${contact.telegram_id}`);
+
         // Task E: Offer Expiry
         if (contact.conv_state === "OFFER_SENT") {
           const expired = await checkOfferExpiry(contact.id, contact.offer_sent_at);
@@ -369,25 +386,41 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         let maxId = minId;
         const peer = buildPeer(contact.telegram_id, contact.telegram_access_hash);
 
+        console.log(`[MESSAGES] peer=${contact.telegram_id} minId=${minId}`);
+
         try {
           for await (const message of client.iterMessages(peer, {
             minId,
             reverse: true,
           })) {
-            if (!message.id) continue;
+            if (!message.id) {
+              console.log("[SKIPPED_MESSAGE] reason=no-id");
+              continue;
+            }
             if (message.id > maxId) maxId = message.id;
             
-            if (!(message instanceof Api.Message)) continue;
-            if (message.out) continue;
+            if (!(message instanceof Api.Message)) {
+              console.log(`[SKIPPED_MESSAGE] messageId=${message.id} reason=not-api-message`);
+              continue;
+            }
+            if (message.out) {
+              console.log(`[SKIPPED_MESSAGE] messageId=${message.id} reason=outgoing`);
+              continue;
+            }
 
             const text = message.message?.trim() || (message.media ? "[Media]" : "");
-            if (!text) continue;
+            if (!text) {
+              console.log(`[SKIPPED_MESSAGE] messageId=${message.id} reason=empty-text-no-media`);
+              continue;
+            }
 
             const saved = await createMessage(contact.id, text, "incoming", message.id);
             if (!saved) {
+              console.log(`[SKIPPED_MESSAGE] messageId=${message.id} reason=save-failed`);
               summary.errors.push(`Failed to save message for contact ${contact.id}`);
               continue;
             }
+            console.log(`[IMPORTED] messageId=${message.id}`);
             summary.newMessages++;
 
             // Task D: Update lead score
