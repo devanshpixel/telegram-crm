@@ -322,6 +322,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
         summary.dialogsChecked++;
         const entity = dialog.entity;
+        console.log(`[${summary.dialogsChecked}] title="${dialog.name}" username=${entity instanceof Api.User ? entity.username : "n/a"} id=${entity?.id}`);
         if (!(entity instanceof Api.User)) continue;
         if (entity.bot || entity.deleted || entity.self) continue;
 
