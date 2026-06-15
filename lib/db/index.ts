@@ -207,8 +207,8 @@ export async function getDb(): Promise<AsyncDb> {
     const db = createTursoAsync(tursoUrl, tursoToken);
     try {
       // Check if schema already exists to avoid redundant execution
-      const tables = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='contacts'").all();
-      if (tables.length === 0) {
+      const tables = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('contacts', 'settings')").all();
+      if (tables.length < 2) {
         console.log("[DB] Executing SCHEMA_SQL on Turso...");
         await db.exec(SCHEMA_SQL);
         console.log("[DB] Schema initialized");
