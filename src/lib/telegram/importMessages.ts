@@ -147,7 +147,7 @@ export async function importMessages(): Promise<MessageImportSummary> {
         maxMessageId = message.id;
       }
 
-      const text = message.message?.trim() ?? "";
+      const text = message.message?.trim() || (message.media ? "[Media]" : "");
       if (!text) {
         messagesSkipped++;
         continue;

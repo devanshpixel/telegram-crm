@@ -16,8 +16,8 @@ import { suggestReply } from "@/lib/ai/suggest-reply";
 import { getTelegramClient } from "./client";
 import { sendTelegramMessage } from "./sendMessage";
 
-const MAX_DIALOGS_PER_POLL = 10;
-const POLL_TIMEOUT_MS = 8000;
+const MAX_DIALOGS_PER_POLL = 50;
+const POLL_TIMEOUT_MS = 15000;
 
 export interface PollSummary {
   dialogsChecked: number;
@@ -314,6 +314,13 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       }
 
       for await (const dialog of client.iterDialogs()) {
+        const entity = dialog.entity;
+        
+        // Skip non-users, bots, self early before counting against the quota
+        if (!(entity instanceof Api.User) || entity.bot || entity.deleted || entity.self) {
+          continue;
+        }
+
         if (summary.dialogsChecked >= MAX_DIALOGS_PER_POLL) break;
         if (Date.now() - startTime > POLL_TIMEOUT_MS) {
           console.warn("[Poll] Timeout reached, stopping poll loop");
@@ -321,10 +328,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         }
 
         summary.dialogsChecked++;
-        const entity = dialog.entity;
-        console.log(`[${summary.dialogsChecked}] title="${dialog.name}" username=${entity instanceof Api.User ? entity.username : "n/a"} id=${entity?.id}`);
-        if (!(entity instanceof Api.User)) continue;
-        if (entity.bot || entity.deleted || entity.self) continue;
+        // console.log(`[${summary.dialogsChecked}] title="${dialog.name}" username=${entity.username} id=${entity.id}`);
 
         const telegramId = entity.id.toString();
         let contact = knownMap.get(telegramId);
@@ -370,12 +374,15 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             minId,
             reverse: true,
           })) {
-            if (!(message instanceof Api.Message) || !message.id) continue;
-            if (message.out) continue;
-            if (!message.message?.trim()) continue;
+            if (!message.id) continue;
             if (message.id > maxId) maxId = message.id;
+            
+            if (!(message instanceof Api.Message)) continue;
+            if (message.out) continue;
 
-            const text = message.message.trim();
+            const text = message.message?.trim() || (message.media ? "[Media]" : "");
+            if (!text) continue;
+
             const saved = await createMessage(contact.id, text, "incoming", message.id);
             if (!saved) {
               summary.errors.push(`Failed to save message for contact ${contact.id}`);
