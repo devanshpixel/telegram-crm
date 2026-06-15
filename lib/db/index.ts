@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import path from "path";
+import fs from "fs";
 import { SCHEMA_SQL } from "./schema";
 import {
   createRawBetterSqlite3,
@@ -135,6 +136,34 @@ function migrateBetterSqlite3(database: any): void {
   if (!columnExists(database, "contacts", "last_locked_response_at")) {
     database.exec("ALTER TABLE contacts ADD COLUMN last_locked_response_at TEXT");
   }
+
+  const settingsTables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'")
+    .all() as { name: string }[];
+  if (settingsTables.length === 0) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    // Migrate from settings.json if it exists
+    const settingsPath = path.join(process.cwd(), "data", "settings.json");
+    if (fs.existsSync(settingsPath)) {
+      try {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+        const ts = new Date().toISOString();
+        for (const [key, value] of Object.entries(settings)) {
+          database.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+            .run(key, JSON.stringify(value), ts);
+        }
+      } catch (e) {
+        console.error("[DB] Failed to migrate settings.json:", e);
+      }
+    }
+  }
+
   database.exec("CREATE INDEX IF NOT EXISTS idx_purchases_purchase_date ON purchases(purchase_date)");
   database.exec("CREATE INDEX IF NOT EXISTS idx_contacts_created_at ON contacts(created_at)");
   database.exec("CREATE INDEX IF NOT EXISTS idx_contacts_last_purchase_date ON contacts(last_purchase_date)");

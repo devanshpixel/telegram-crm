@@ -115,7 +115,8 @@ export async function suggestReply(
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY is not configured");
+    console.warn("[AI] OPENROUTER_API_KEY is not configured, using fallback");
+    return FALLBACK_REPLY;
   }
 
   const transcript = buildTranscript(messages);

@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import path from "path";
-import { getDb } from "@/lib/db";
-import { nowIso } from "@/lib/db";
+import { getSetting, updateSetting } from "@/lib/db/service";
+import { getDb, nowIso } from "@/lib/db";
 
 interface Settings {
   offerPrice: number;
@@ -11,51 +9,45 @@ interface Settings {
   automatedReplies: boolean;
 }
 
-function getDefaultSettings(): Settings {
+const DEFAULT_SETTINGS: Settings = {
+  offerPrice: 499,
+  offerMessage:
+    "Hey! You've been enjoying the chat so here's something special 🔥\n\nUnlock premium access for exclusive content, behind-the-scenes, and unlimited chat.",
+  aiMode: "auto",
+  automatedReplies: true,
+};
+
+async function getAllSettings(): Promise<Settings> {
+  const [offerPrice, offerMessage, aiMode, automatedReplies] = await Promise.all([
+    getSetting("offerPrice", DEFAULT_SETTINGS.offerPrice),
+    getSetting("offerMessage", DEFAULT_SETTINGS.offerMessage),
+    getSetting("aiMode", DEFAULT_SETTINGS.aiMode),
+    getSetting("automatedReplies", DEFAULT_SETTINGS.automatedReplies),
+  ]);
+
   return {
-    offerPrice: parseInt(process.env.OFFER_PRICE || "499", 10),
-    offerMessage:
-      "Hey! You've been enjoying the chat so here's something special 🔥\n\nUnlock premium access for exclusive content, behind-the-scenes, and unlimited chat.",
-    aiMode: "auto",
-    automatedReplies: true,
+    offerPrice,
+    offerMessage,
+    aiMode,
+    automatedReplies,
   };
 }
 
-function getSettingsPath(): string {
-  return path.join(process.cwd(), "data", "settings.json");
-}
-
-function readSettings(): Settings {
-  const filePath = getSettingsPath();
-  if (!existsSync(filePath)) {
-    return getDefaultSettings();
-  }
-  try {
-    return JSON.parse(readFileSync(filePath, "utf-8")) as Settings;
-  } catch {
-    return getDefaultSettings();
-  }
-}
-
-function writeSettings(s: Settings): void {
-  writeFileSync(getSettingsPath(), JSON.stringify(s, null, 2), "utf-8");
-}
-
 export async function GET() {
-  return NextResponse.json(readSettings());
+  return NextResponse.json(await getAllSettings());
 }
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<Settings>;
-    const current = readSettings();
-    const updated: Settings = {
-      offerPrice: body.offerPrice ?? current.offerPrice,
-      offerMessage: body.offerMessage ?? current.offerMessage,
-      aiMode: body.aiMode ?? current.aiMode,
-      automatedReplies: body.automatedReplies ?? current.automatedReplies,
-    };
-    writeSettings(updated);
+    
+    if (body.offerPrice !== undefined) await updateSetting("offerPrice", body.offerPrice);
+    if (body.offerMessage !== undefined) await updateSetting("offerMessage", body.offerMessage);
+    if (body.aiMode !== undefined) await updateSetting("aiMode", body.aiMode);
+    if (body.automatedReplies !== undefined) await updateSetting("automatedReplies", body.automatedReplies);
+
+    const updated = await getAllSettings();
+    
     const db = await getDb();
     if (body.offerPrice) {
       const ts = nowIso();

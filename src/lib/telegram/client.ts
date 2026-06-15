@@ -4,16 +4,11 @@ import { getDb } from "@/lib/db";
 
 declare global {
   var __telegramClient: TelegramClient | undefined;
+  var __activeSessionString: string | undefined;
 }
 
 export async function loadSessionString(): Promise<string> {
-  console.log("[AUTH] Checking TELEGRAM_SESSION in env: exists =", !!process.env.TELEGRAM_SESSION, "length =", process.env.TELEGRAM_SESSION?.length || 0);
-  const envSession = process.env.TELEGRAM_SESSION;
-  if (envSession && envSession.trim().length > 0) {
-    console.log("[TELEGRAM] Using TELEGRAM_SESSION from environment, length=" + envSession.trim().length);
-    return envSession.trim();
-  }
-  console.log("[AUTH] TELEGRAM_SESSION env empty, checking telegram_sessions table");
+  // Task: Prioritize DB session as it's the one created by the dashboard login
   const db = await getDb();
   const row = await db
     .prepare("SELECT session_string FROM telegram_sessions LIMIT 1")
@@ -22,11 +17,18 @@ export async function loadSessionString(): Promise<string> {
     console.log("[TELEGRAM] Using session from telegram_sessions table, length=" + row.session_string.length);
     return row.session_string;
   }
+
+  const envSession = process.env.TELEGRAM_SESSION;
+  if (envSession && envSession.trim().length > 0) {
+    console.log("[TELEGRAM] Using TELEGRAM_SESSION from environment, length=" + envSession.trim().length);
+    return envSession.trim();
+  }
+  
   console.log("[TELEGRAM] No session found (env empty, table empty)");
   return "";
 }
 
-async function createClient(): Promise<TelegramClient> {
+async function createClient(sessionString: string): Promise<TelegramClient> {
   const apiIdRaw = process.env.TELEGRAM_API_ID;
   const apiHash = process.env.TELEGRAM_API_HASH;
 
@@ -41,15 +43,27 @@ async function createClient(): Promise<TelegramClient> {
     throw new Error("Invalid TELEGRAM_API_ID: must be a numeric value");
   }
 
-  const sessionString = await loadSessionString();
   return new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
     connectionRetries: 5,
   });
 }
 
 export async function getTelegramClient(): Promise<TelegramClient> {
-  if (!global.__telegramClient) {
-    global.__telegramClient = await createClient();
+  const sessionString = await loadSessionString();
+  
+  if (global.__telegramClient) {
+    if (global.__activeSessionString === sessionString) {
+      return global.__telegramClient;
+    }
+    console.log("[TELEGRAM] Session changed, recreating client");
+    try {
+      await global.__telegramClient.disconnect();
+    } catch {
+      // ignore
+    }
   }
+
+  global.__activeSessionString = sessionString;
+  global.__telegramClient = await createClient(sessionString);
   return global.__telegramClient;
 }

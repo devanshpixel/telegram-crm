@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { razorpay, WEBHOOK_SECRET } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
-import { createPurchase } from "@/lib/db/service";
+import { createPurchase, recalculateLeadScore } from "@/lib/db/service";
+import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 
 export async function POST(request: Request) {
   try {
@@ -27,32 +28,58 @@ export async function POST(request: Request) {
       const paymentLink = event.payload.payment_link?.entity;
       const payment = event.payload.payment?.entity;
       const notes = paymentLink?.notes || {};
-      const contactId = notes.contactId;
+      const contactId = Number(notes.contactId);
       const mediaId = notes.mediaId;
       const amountPaid = paymentLink?.amount_paid;
       const paymentId = payment?.id;
 
       if (contactId && amountPaid && paymentId) {
+        const db = await getDb();
+        
+        // Verify contact exists
+        const contact = await db.prepare("SELECT id FROM contacts WHERE id = ?").get(contactId);
+        if (!contact) {
+          console.error(`[Razorpay Webhook] Contact ${contactId} not found`);
+          return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+        }
+
         const note = mediaId
           ? `media_unlock:${mediaId}:razorpay_payment:${paymentId}`
           : `razorpay_payment:${paymentId}`;
 
-        const db = await getDb();
         const existing = await db
           .prepare("SELECT id FROM purchases WHERE note LIKE ?")
           .get(`%razorpay_payment:${paymentId}%`);
+          
         if (!existing) {
-          await createPurchase({
-            contactId: Number(contactId),
-            amount: amountPaid / 100,
-            purchaseDate: new Date().toISOString().split("T")[0],
-            kind: "ppv",
-            note,
+          const processPayment = db.transaction(async () => {
+            await createPurchase({
+              contactId,
+              amount: amountPaid / 100,
+              purchaseDate: new Date().toISOString().split("T")[0],
+              kind: "ppv",
+              note,
+            });
+            const ts = new Date().toISOString();
+            await db
+              .prepare("UPDATE contacts SET conv_state = 'PAID', updated_at = ? WHERE id = ?")
+              .run(ts, contactId);
+
+            // Task D: Update lead score
+            await recalculateLeadScore(contactId);
           });
-          const ts = new Date().toISOString();
-          await db
-            .prepare("UPDATE contacts SET conv_state = 'PAID', updated_at = ? WHERE id = ?")
-            .run(ts, Number(contactId));
+
+          await processPayment();
+
+          // Task A: Send Telegram confirmation
+          try {
+            await sendTelegramMessage(
+              contactId,
+              "✅ Payment successful! Your premium access has been unlocked. Thank you for your support! ❤️"
+            );
+          } catch (e) {
+            console.error(`[Razorpay Webhook] Failed to send Telegram confirmation to ${contactId}:`, e);
+          }
         }
       }
     }

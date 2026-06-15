@@ -1574,6 +1574,77 @@ export async function isMediaUnlocked(mediaId: number, contactId: number): Promi
   return !!row;
 }
 
+export async function getSetting<T>(key: string, defaultValue: T): Promise<T> {
+  const db = await getDb();
+  const row = await db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
+  if (!row) return defaultValue;
+  try {
+    return JSON.parse(row.value) as T;
+  } catch {
+    return defaultValue;
+  }
+}
+
+export async function updateSetting(key: string, value: unknown): Promise<void> {
+  const db = await getDb();
+  const ts = nowIso();
+  await db
+    .prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+    .run(key, JSON.stringify(value), ts);
+}
+
+export async function recalculateLeadScore(contactId: number): Promise<number> {
+  const db = await getDb();
+  
+  // Base score
+  let score = 50;
+
+  // 1. Message count (incoming)
+  const msgRow = await db.prepare(
+    "SELECT COUNT(*) AS count FROM messages m INNER JOIN conversations c ON m.conversation_id = c.id WHERE c.contact_id = ? AND m.direction = 'incoming'"
+  ).get(contactId) as { count: number };
+  score += Math.min(msgRow.count * 2, 20); // Max +20 from messages
+
+  // 2. Payment history
+  const purchaseRow = await db.prepare(
+    "SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM purchases WHERE contact_id = ?"
+  ).get(contactId) as { count: number, total: number };
+  
+  if (purchaseRow.count > 0) {
+    score += 30; // Customer bonus
+    score += Math.min(Math.floor(purchaseRow.total / 10), 20); // +1 per $10, max +20
+  }
+
+  // 3. Intent keywords in last 5 messages
+  const lastMsgs = await db.prepare(
+    "SELECT text FROM messages m INNER JOIN conversations c ON m.conversation_id = c.id WHERE c.contact_id = ? AND m.direction = 'incoming' ORDER BY m.created_at DESC LIMIT 5"
+  ).all(contactId) as { text: string }[];
+  
+  const intentKeywords = ["buy", "price", "payment", "premium", "vip", "exclusive", "subscription", "unlock", "video", "content"];
+  let intentCount = 0;
+  for (const msg of lastMsgs) {
+    const lower = msg.text.toLowerCase();
+    if (intentKeywords.some(kw => lower.includes(kw))) {
+      intentCount++;
+    }
+  }
+  score += intentCount * 10;
+
+  // Clamp score between 0 and 100
+  const finalScore = Math.max(0, Math.min(100, score));
+  
+  // Determine status
+  let status = "cold";
+  if (finalScore >= 80) status = "hot";
+  else if (finalScore >= 50) status = "warm";
+
+  await db.prepare(
+    "UPDATE contacts SET lead_score = ?, lead_status = ?, updated_at = ? WHERE id = ?"
+  ).run(finalScore, status, nowIso(), contactId);
+
+  return finalScore;
+}
+
 export async function deleteMedia(id: number): Promise<boolean> {
   const db = await getDb();
   const row = await db.prepare("SELECT filename FROM media WHERE id = ?").get(id) as { filename: string } | undefined;
