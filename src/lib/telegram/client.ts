@@ -14,17 +14,17 @@ export async function loadSessionString(): Promise<string> {
     .prepare("SELECT session_string FROM telegram_sessions LIMIT 1")
     .get() as { session_string: string } | undefined;
   if (row?.session_string) {
-    console.log("[TELEGRAM] Using session from telegram_sessions table, length=" + row.session_string.length);
+    console.error(`[TRACE] SESSION SOURCE: DATABASE (len=${row.session_string.length})`);
     return row.session_string;
   }
 
   const envSession = process.env.TELEGRAM_SESSION;
   if (envSession && envSession.trim().length > 0) {
-    console.log("[TELEGRAM] Using TELEGRAM_SESSION from environment, length=" + envSession.trim().length);
+    console.error(`[TRACE] SESSION SOURCE: ENVIRONMENT (len=${envSession.trim().length})`);
     return envSession.trim();
   }
   
-  console.log("[TELEGRAM] No session found (env empty, table empty)");
+  console.error("[TRACE] SESSION SOURCE: NONE FOUND");
   return "";
 }
 

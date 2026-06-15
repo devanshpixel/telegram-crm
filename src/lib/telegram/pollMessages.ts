@@ -268,6 +268,7 @@ async function getLockStatus(): Promise<{ isPolling: boolean, lastUpdated: strin
 }
 
 export async function pollIncomingMessages(): Promise<PollSummary> {
+  console.error("[TRACE] POLL ENTRY");
   const summary: PollSummary = {
     dialogsChecked: 0,
     newMessages: 0,
@@ -309,7 +310,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       const client = await getTelegramClient();
       
       const me = await client.getMe();
-      console.log(`[POLL_START] account=${me instanceof Api.User ? me.username || me.id : "unknown"}`);
+      console.error(`[POLL_START] account=${me instanceof Api.User ? me.username || me.id : "unknown"}`);
 
       const knownContacts = await listContactConversations();
       const knownMap = new Map<string, ContactWithConv>();
@@ -320,23 +321,23 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       for await (const dialog of client.iterDialogs()) {
         const entity = dialog.entity;
         
-        console.log(`[DIALOG] title="${dialog.name}" username=${entity instanceof Api.User ? entity.username : "n/a"} id=${entity?.id}`);
+        console.error(`[DIALOG] title="${dialog.name}" username=${entity instanceof Api.User ? entity.username : "n/a"} id=${entity?.id}`);
 
         // Skip non-users, bots, self early before counting against the quota
         if (!(entity instanceof Api.User)) {
-          console.log("[SKIP] reason=not-user");
+          console.error("[SKIP] reason=not-user");
           continue;
         }
         if (entity.bot) {
-          console.log("[SKIP] reason=bot");
+          console.error("[SKIP] reason=bot");
           continue;
         }
         if (entity.deleted) {
-          console.log("[SKIP] reason=deleted");
+          console.error("[SKIP] reason=deleted");
           continue;
         }
         if (entity.self) {
-          console.log("[SKIP] reason=self");
+          console.error("[SKIP] reason=self");
           continue;
         }
 
@@ -364,7 +365,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           }
         }
 
-        console.log(`[CONTACT] id=${contact.id} telegramId=${contact.telegram_id}`);
+        console.error(`[CONTACT] id=${contact.id} telegramId=${contact.telegram_id}`);
 
         // Task E: Offer Expiry
         if (contact.conv_state === "OFFER_SENT") {
@@ -390,7 +391,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         let maxId = minId;
         const peer = buildPeer(contact.telegram_id, contact.telegram_access_hash);
 
-        console.log(`[MESSAGES] peer=${contact.telegram_id} minId=${minId}`);
+        console.error(`[MESSAGES] peer=${contact.telegram_id} minId=${minId}`);
 
         try {
           for await (const message of client.iterMessages(peer, {
@@ -402,33 +403,33 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             const className = (message as { className?: string }).className || "Unknown";
 
             if (!msgId) {
-              console.log(`[SKIPPED_MESSAGE] reason=no-id className=${className}`);
+              console.error(`[SKIPPED_MESSAGE] reason=no-id className=${className}`);
               continue;
             }
             if (msgId > maxId) maxId = msgId;
             
             if (!(message instanceof Api.Message)) {
-              console.log(`[SKIPPED_MESSAGE] messageId=${msgId} reason=not-api-message className=${className}`);
+              console.error(`[SKIPPED_MESSAGE] messageId=${msgId} reason=not-api-message className=${className}`);
               continue;
             }
             if (message.out) {
-              console.log(`[SKIPPED_MESSAGE] messageId=${msgId} reason=outgoing`);
+              console.error(`[SKIPPED_MESSAGE] messageId=${msgId} reason=outgoing`);
               continue;
             }
 
             const text = message.message?.trim() || (message.media ? "[Media]" : "");
             if (!text) {
-              console.log(`[SKIPPED_MESSAGE] messageId=${msgId} reason=empty-text-no-media`);
+              console.error(`[SKIPPED_MESSAGE] messageId=${msgId} reason=empty-text-no-media`);
               continue;
             }
 
             const saved = await createMessage(contact.id, text, "incoming", msgId);
             if (!saved) {
-              console.log(`[SKIPPED_MESSAGE] messageId=${msgId} reason=save-failed`);
+              console.error(`[SKIPPED_MESSAGE] messageId=${msgId} reason=save-failed`);
               summary.errors.push(`Failed to save message for contact ${contact.id}`);
               continue;
             }
-            console.log(`[IMPORTED] messageId=${msgId}`);
+            console.error(`[IMPORTED] messageId=${msgId}`);
             summary.newMessages++;
 
             // Task D: Update lead score
@@ -490,5 +491,6 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     }
   }
 
+  console.error("[TRACE] BEFORE RETURN", JSON.stringify(summary));
   return summary;
 }
