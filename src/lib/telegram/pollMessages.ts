@@ -325,7 +325,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
         // Skip non-users, bots, self early before counting against the quota
         if (!(entity instanceof Api.User)) {
-          console.error("[SKIP] reason=not-user");
+          console.error(`[SKIP] reason=not-user title="${dialog.name}" type=${(entity as any)?.className || "unknown"}`);
           continue;
         }
         if (entity.bot) {
