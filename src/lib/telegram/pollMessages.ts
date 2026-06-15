@@ -307,6 +307,10 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     try {
       await ensureConnected();
       const client = await getTelegramClient();
+      
+      const me = await client.getMe();
+      console.log(`[POLL_START] account=${me instanceof Api.User ? me.username || me.id : "unknown"}`);
+
       const knownContacts = await listContactConversations();
       const knownMap = new Map<string, ContactWithConv>();
       for (const c of knownContacts) {
@@ -393,34 +397,38 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             minId,
             reverse: true,
           })) {
-            if (!message.id) {
-              console.log("[SKIPPED_MESSAGE] reason=no-id");
+            // Safely extract properties for logging before strict TS narrowing
+            const msgId = (message as { id?: number }).id;
+            const className = (message as { className?: string }).className || "Unknown";
+
+            if (!msgId) {
+              console.log(`[SKIPPED_MESSAGE] reason=no-id className=${className}`);
               continue;
             }
-            if (message.id > maxId) maxId = message.id;
+            if (msgId > maxId) maxId = msgId;
             
             if (!(message instanceof Api.Message)) {
-              console.log(`[SKIPPED_MESSAGE] messageId=${message.id} reason=not-api-message`);
+              console.log(`[SKIPPED_MESSAGE] messageId=${msgId} reason=not-api-message className=${className}`);
               continue;
             }
             if (message.out) {
-              console.log(`[SKIPPED_MESSAGE] messageId=${message.id} reason=outgoing`);
+              console.log(`[SKIPPED_MESSAGE] messageId=${msgId} reason=outgoing`);
               continue;
             }
 
             const text = message.message?.trim() || (message.media ? "[Media]" : "");
             if (!text) {
-              console.log(`[SKIPPED_MESSAGE] messageId=${message.id} reason=empty-text-no-media`);
+              console.log(`[SKIPPED_MESSAGE] messageId=${msgId} reason=empty-text-no-media`);
               continue;
             }
 
-            const saved = await createMessage(contact.id, text, "incoming", message.id);
+            const saved = await createMessage(contact.id, text, "incoming", msgId);
             if (!saved) {
-              console.log(`[SKIPPED_MESSAGE] messageId=${message.id} reason=save-failed`);
+              console.log(`[SKIPPED_MESSAGE] messageId=${msgId} reason=save-failed`);
               summary.errors.push(`Failed to save message for contact ${contact.id}`);
               continue;
             }
-            console.log(`[IMPORTED] messageId=${message.id}`);
+            console.log(`[IMPORTED] messageId=${msgId}`);
             summary.newMessages++;
 
             // Task D: Update lead score
