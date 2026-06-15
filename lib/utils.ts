@@ -5,7 +5,19 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatTime(dateInput: Date | string): string {
-  const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+  if (!dateInput) return "";
+  
+  let dateString = typeof dateInput === "string" ? dateInput : String(dateInput);
+  if (typeof dateInput === "string" && !dateInput.endsWith("Z") && dateInput.includes(" ")) {
+    dateString = dateInput.replace(" ", "T") + "Z";
+  } else if (typeof dateInput === "string" && !dateInput.endsWith("Z") && dateInput.includes("T")) {
+    dateString = dateInput + "Z";
+  }
+
+  const date = typeof dateInput === "string" ? new Date(dateString) : dateInput as Date;
+  
+  if (isNaN(date.getTime())) return "";
+
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const days = Math.floor(diff / (24 * 60 * 60 * 1000));
