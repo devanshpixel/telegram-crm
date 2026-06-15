@@ -16,8 +16,8 @@ import { suggestReply } from "@/lib/ai/suggest-reply";
 import { getTelegramClient } from "./client";
 import { sendTelegramMessage } from "./sendMessage";
 
-const MAX_DIALOGS_PER_POLL = 50;
-const POLL_TIMEOUT_MS = 15000;
+const MAX_DIALOGS_PER_POLL = 100;
+const POLL_TIMEOUT_MS = 30000;
 
 export interface PollSummary {
   dialogsChecked: number;
