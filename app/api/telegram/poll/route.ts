@@ -7,9 +7,17 @@ export async function POST() {
     return NextResponse.json(summary);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Poll failed";
+    console.error("[Poll API] Fatal error:", message);
     return NextResponse.json(
-      { error: message, code: "POLL_FAILED" },
-      { status: 500 },
+      { 
+        dialogsChecked: 0,
+        newMessages: 0,
+        repliesSent: 0,
+        offersSent: 0,
+        remindersSent: 0,
+        errors: [`Fatal poll error: ${message}`],
+      },
+      { status: 200 },
     );
   }
 }

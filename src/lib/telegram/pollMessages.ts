@@ -251,10 +251,20 @@ async function checkOfferExpiry(contactId: number, offerSentAt: string | null): 
 }
 
 async function getLockStatus(): Promise<{ isPolling: boolean, lastUpdated: string | null }> {
-  const db = await getDb();
-  const row = await db.prepare("SELECT value, updated_at FROM settings WHERE key = 'is_polling'").get() as { value: string, updated_at: string } | undefined;
-  if (!row) return { isPolling: false, lastUpdated: null };
-  return { isPolling: JSON.parse(row.value), lastUpdated: row.updated_at };
+  try {
+    const db = await getDb();
+    const row = await db.prepare("SELECT value, updated_at FROM settings WHERE key = 'is_polling'").get() as { value: string, updated_at: string } | undefined;
+    if (!row) return { isPolling: false, lastUpdated: null };
+    try {
+      return { isPolling: JSON.parse(row.value), lastUpdated: row.updated_at };
+    } catch {
+      console.warn("[Poll] Invalid JSON in is_polling setting, recovering with default false");
+      return { isPolling: false, lastUpdated: row.updated_at };
+    }
+  } catch (e) {
+    // If DB is locked or table missing, rethrow to be caught by the main poll loop
+    throw e;
+  }
 }
 
 export async function pollIncomingMessages(): Promise<PollSummary> {
@@ -267,148 +277,168 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     errors: [],
   };
 
-  // Task: Prevent concurrent polls with stale lock protection
-  const lock = await getLockStatus();
-  if (lock.isPolling && lock.lastUpdated) {
-    const lockAgeMs = Date.now() - new Date(lock.lastUpdated).getTime();
-    if (lockAgeMs < 5 * 60 * 1000) { // 5 minute timeout
-      console.warn("[Poll] Another poll is already in progress, skipping");
-      return summary;
-    } else {
-      console.warn("[Poll] Stale lock detected, overriding");
-    }
-  }
-
-  await updateSetting("is_polling", true);
-
   const startTime = Date.now();
 
   try {
-    await ensureConnected();
-    const client = await getTelegramClient();
-    const knownContacts = await listContactConversations();
-    const knownMap = new Map<string, ContactWithConv>();
-    for (const c of knownContacts) {
-      knownMap.set(c.telegram_id, c);
+    // Task: Prevent concurrent polls with stale lock protection - Now inside try/catch
+    try {
+      const lock = await getLockStatus();
+      if (lock.isPolling && lock.lastUpdated) {
+        const lockAgeMs = Date.now() - new Date(lock.lastUpdated).getTime();
+        if (lockAgeMs < 5 * 60 * 1000) { // 5 minute timeout
+          console.warn("[Poll] Another poll is already in progress, skipping");
+          return summary;
+        } else {
+          console.warn("[Poll] Stale lock detected, overriding");
+        }
+      }
+    } catch (e) {
+      summary.errors.push(`Lock check failed: ${e instanceof Error ? e.message : String(e)}`);
+      return summary;
     }
 
-    for await (const dialog of client.iterDialogs()) {
-      if (summary.dialogsChecked >= MAX_DIALOGS_PER_POLL) break;
-      if (Date.now() - startTime > POLL_TIMEOUT_MS) {
-        console.warn("[Poll] Timeout reached, stopping poll loop");
-        break;
+    try {
+      await updateSetting("is_polling", true);
+    } catch (e) {
+      summary.errors.push(`Failed to set polling lock: ${e instanceof Error ? e.message : String(e)}`);
+      return summary;
+    }
+
+    try {
+      await ensureConnected();
+      const client = await getTelegramClient();
+      const knownContacts = await listContactConversations();
+      const knownMap = new Map<string, ContactWithConv>();
+      for (const c of knownContacts) {
+        knownMap.set(c.telegram_id, c);
       }
 
-      summary.dialogsChecked++;
-      const entity = dialog.entity;
-      if (!(entity instanceof Api.User)) continue;
-      if (entity.bot || entity.deleted || entity.self) continue;
-
-      const telegramId = entity.id.toString();
-      let contact = knownMap.get(telegramId);
-
-      if (!contact) {
-        try {
-          contact = await createContactFromDialog(entity);
-          knownMap.set(telegramId, contact);
-        } catch (e) {
-          summary.errors.push(
-            `Failed to create contact for ${telegramId}: ${e instanceof Error ? e.message : String(e)}`,
-          );
-          continue;
+      for await (const dialog of client.iterDialogs()) {
+        if (summary.dialogsChecked >= MAX_DIALOGS_PER_POLL) break;
+        if (Date.now() - startTime > POLL_TIMEOUT_MS) {
+          console.warn("[Poll] Timeout reached, stopping poll loop");
+          break;
         }
-      }
 
-      // Task E: Offer Expiry
-      if (contact.conv_state === "OFFER_SENT") {
-        const expired = await checkOfferExpiry(contact.id, contact.offer_sent_at);
-        if (expired) {
-          contact.conv_state = "FREE_CHAT";
-        }
-      }
+        summary.dialogsChecked++;
+        const entity = dialog.entity;
+        if (!(entity instanceof Api.User)) continue;
+        if (entity.bot || entity.deleted || entity.self) continue;
 
-      const conversation = await getConversationByContactId(contact.id);
-      if (!conversation) {
-        summary.errors.push(`No conversation for contact ${contact.id}`);
-        continue;
-      }
+        const telegramId = entity.id.toString();
+        let contact = knownMap.get(telegramId);
 
-      const paid = await hasUserPaid(contact.id);
-      if (paid && contact.conv_state !== "PAID") {
-        await setConvState(contact.id, "PAID");
-        contact.conv_state = "PAID";
-      }
-
-      const minId = conversation.last_synced_message_id || 0;
-      let maxId = minId;
-      const peer = buildPeer(contact.telegram_id, contact.telegram_access_hash);
-
-      try {
-        for await (const message of client.iterMessages(peer, {
-          minId,
-          reverse: true,
-        })) {
-          if (!(message instanceof Api.Message) || !message.id) continue;
-          if (message.out) continue;
-          if (!message.message?.trim()) continue;
-          if (message.id > maxId) maxId = message.id;
-
-          const text = message.message.trim();
-          const saved = await createMessage(contact.id, text, "incoming", message.id);
-          if (!saved) {
-            summary.errors.push(`Failed to save message for contact ${contact.id}`);
-            continue;
-          }
-          summary.newMessages++;
-
-          // Task D: Update lead score
-          await recalculateLeadScore(contact.id);
-
+        if (!contact) {
           try {
-            const count = await getIncomingMessageCount(contact.id);
-
-            if (contact.conv_state === "PAID") {
-              await sendAiReply(contact.id, "casual");
-              summary.repliesSent++;
-            } else if (contact.conv_state === "OFFER_SENT") {
-              if (await shouldSendLockedResponse(contact.id)) {
-                await sendLockedResponse(contact.id);
-                summary.remindersSent++;
-              }
-            } else {
-              // Task C: Intent-based offer trigger
-              const hasIntent = hasPurchaseIntent(text);
-              if (hasIntent || count > 5) {
-                await sendPremiumOffer(contact.id);
-                summary.offersSent++;
-                contact.conv_state = "OFFER_SENT";
-              } else {
-                await sendAiReply(contact.id, "casual");
-                summary.repliesSent++;
-              }
-            }
+            contact = await createContactFromDialog(entity);
+            knownMap.set(telegramId, contact);
           } catch (e) {
             summary.errors.push(
-              `Response error for contact ${contact.id}: ${e instanceof Error ? e.message : String(e)}`,
+              `Failed to create contact for ${telegramId}: ${e instanceof Error ? e.message : String(e)}`,
             );
+            continue;
           }
         }
-      } catch (e) {
-        summary.errors.push(
-          `Iteration error for contact ${contact.id}: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
 
-      if (maxId > minId) {
-        await updateSyncCursor(conversation.id, maxId);
+        // Task E: Offer Expiry
+        if (contact.conv_state === "OFFER_SENT") {
+          const expired = await checkOfferExpiry(contact.id, contact.offer_sent_at);
+          if (expired) {
+            contact.conv_state = "FREE_CHAT";
+          }
+        }
+
+        const conversation = await getConversationByContactId(contact.id);
+        if (!conversation) {
+          summary.errors.push(`No conversation for contact ${contact.id}`);
+          continue;
+        }
+
+        const paid = await hasUserPaid(contact.id);
+        if (paid && contact.conv_state !== "PAID") {
+          await setConvState(contact.id, "PAID");
+          contact.conv_state = "PAID";
+        }
+
+        const minId = conversation.last_synced_message_id || 0;
+        let maxId = minId;
+        const peer = buildPeer(contact.telegram_id, contact.telegram_access_hash);
+
+        try {
+          for await (const message of client.iterMessages(peer, {
+            minId,
+            reverse: true,
+          })) {
+            if (!(message instanceof Api.Message) || !message.id) continue;
+            if (message.out) continue;
+            if (!message.message?.trim()) continue;
+            if (message.id > maxId) maxId = message.id;
+
+            const text = message.message.trim();
+            const saved = await createMessage(contact.id, text, "incoming", message.id);
+            if (!saved) {
+              summary.errors.push(`Failed to save message for contact ${contact.id}`);
+              continue;
+            }
+            summary.newMessages++;
+
+            // Task D: Update lead score
+            await recalculateLeadScore(contact.id);
+
+            try {
+              const count = await getIncomingMessageCount(contact.id);
+
+              if (contact.conv_state === "PAID") {
+                await sendAiReply(contact.id, "casual");
+                summary.repliesSent++;
+              } else if (contact.conv_state === "OFFER_SENT") {
+                if (await shouldSendLockedResponse(contact.id)) {
+                  await sendLockedResponse(contact.id);
+                  summary.remindersSent++;
+                }
+              } else {
+                // Task C: Intent-based offer trigger
+                const hasIntent = hasPurchaseIntent(text);
+                if (hasIntent || count > 5) {
+                  await sendPremiumOffer(contact.id);
+                  summary.offersSent++;
+                  contact.conv_state = "OFFER_SENT";
+                } else {
+                  await sendAiReply(contact.id, "casual");
+                  summary.repliesSent++;
+                }
+              }
+            } catch (e) {
+              summary.errors.push(
+                `Response error for contact ${contact.id}: ${e instanceof Error ? e.message : String(e)}`,
+              );
+            }
+          }
+        } catch (e) {
+          summary.errors.push(
+            `Iteration error for contact ${contact.id}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+
+        if (maxId > minId) {
+          await updateSyncCursor(conversation.id, maxId);
+        }
       }
+    } catch (e) {
+      summary.errors.push(
+        "Poll loop failed: " + (e instanceof Error ? e.message : String(e)),
+      );
     }
   } catch (e) {
     summary.errors.push(
-      "Poll loop failed: " + (e instanceof Error ? e.message : String(e)),
+      "Critical poll error: " + (e instanceof Error ? e.message : String(e)),
     );
   } finally {
-    await updateSetting("is_polling", false);
+    try {
+      await updateSetting("is_polling", false);
+    } catch (e) {
+      console.error("[Poll] Failed to release polling lock:", e);
+    }
   }
 
   return summary;
