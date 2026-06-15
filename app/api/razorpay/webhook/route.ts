@@ -49,6 +49,10 @@ export async function POST(request: Request) {
             kind: "ppv",
             note,
           });
+          const ts = new Date().toISOString();
+          await db
+            .prepare("UPDATE contacts SET conv_state = 'PAID', updated_at = ? WHERE id = ?")
+            .run(ts, Number(contactId));
         }
       }
     }
