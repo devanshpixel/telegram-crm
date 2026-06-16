@@ -52,7 +52,7 @@ export async function POST(request: Request) {
           .get(`%razorpay_payment:${paymentId}%`);
           
         if (!existing) {
-          const processPayment = db.transaction(async () => {
+          try {
             await createPurchase({
               contactId,
               amount: amountPaid / 100,
@@ -67,9 +67,10 @@ export async function POST(request: Request) {
 
             // Task D: Update lead score
             await recalculateLeadScore(contactId);
-          });
-
-          await processPayment();
+          } catch (error) {
+            console.error("[Razorpay Webhook] Transaction failed:", error);
+            throw error;
+          }
 
           // Task A: Send Telegram confirmation
           try {

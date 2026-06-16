@@ -16,8 +16,8 @@ import { suggestReply } from "@/lib/ai/suggest-reply";
 import { getTelegramClient } from "./client";
 import { sendTelegramMessage } from "./sendMessage";
 
-const MAX_DIALOGS_PER_POLL = 100;
-const POLL_TIMEOUT_MS = 30000;
+const MAX_DIALOGS_PER_POLL = 500;
+const POLL_TIMEOUT_MS = 60000;
 
 export interface PollSummary {
   dialogsChecked: number;
@@ -492,5 +492,8 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
   }
 
   console.error("[TRACE] BEFORE RETURN", JSON.stringify(summary));
+  return summary;
+}
+error("[TRACE] BEFORE RETURN", JSON.stringify(summary));
   return summary;
 }

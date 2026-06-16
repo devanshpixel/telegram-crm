@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Image, Loader2, Upload } from "lucide-react";
+import { Image as ImageIcon, Loader2, Upload } from "lucide-react";
 import { uploadMedia } from "@/lib/api";
 
 interface UploadMediaFormProps {
@@ -37,7 +37,7 @@ export function UploadMediaForm({ contactId }: UploadMediaFormProps) {
     return (
       <section className="border-b border-border px-5 py-5">
         <div className="mb-3 flex items-center gap-2">
-          <Image className="h-4 w-4 text-text-muted" />
+          <ImageIcon className="h-4 w-4 text-text-muted" />
           <h3 className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">Upload media</h3>
         </div>
         <p className="text-xs text-text-muted">Media uploaded.</p>

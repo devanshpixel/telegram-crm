@@ -1,7 +1,8 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
 import { useEffect, useState } from "react";
-import { ExternalLink, Image, Loader2, Lock, Pencil, Unlock, X, Check } from "lucide-react";
+import { ExternalLink, Image as ImageIcon, Loader2, Lock, Pencil, Unlock, X, Check } from "lucide-react";
 import { createMediaUnlockRazorpayOrder, fetchContact, fetchContactMedia, updateMediaPriceApi } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import { PurchaseHistory } from "./PurchaseHistory";
@@ -33,7 +34,7 @@ export function MediaGallery({ contactId }: MediaGalleryProps) {
     return (
       <section className="border-b border-border px-5 py-5">
         <div className="mb-3 flex items-center gap-2">
-          <Image className="h-4 w-4 text-text-muted" />
+          <ImageIcon className="h-4 w-4 text-text-muted" />
           <h3 className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">Media</h3>
         </div>
         <p className="flex items-center gap-1.5 text-xs text-text-muted">
@@ -48,7 +49,7 @@ export function MediaGallery({ contactId }: MediaGalleryProps) {
     return (
       <section className="border-b border-border px-5 py-5">
         <div className="mb-3 flex items-center gap-2">
-          <Image className="h-4 w-4 text-text-muted" />
+          <ImageIcon className="h-4 w-4 text-text-muted" />
           <h3 className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">Media</h3>
         </div>
         <p className="text-xs text-text-muted">No media yet</p>
@@ -60,7 +61,7 @@ export function MediaGallery({ contactId }: MediaGalleryProps) {
     <>
       <section className="border-b border-border px-5 py-5">
         <div className="mb-3 flex items-center gap-2">
-          <Image className="h-4 w-4 text-accent" />
+          <ImageIcon className="h-4 w-4 text-accent" />
           <h3 className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">Media</h3>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -182,5 +183,3 @@ function MediaCard({ media, contactId }: { media: Media; contactId: number }) {
     </div>
   );
 }
-
-

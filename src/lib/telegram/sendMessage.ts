@@ -58,6 +58,7 @@ export async function sendTelegramMessage(
 
   for (let attempt = 1; attempt <= FLOOD_RETRY_MAX; attempt++) {
     try {
+      console.log(`[SEND_ATTEMPT] contactId=${contactId} text="${trimmedText.substring(0, 50)}..."`);
       const sent = await client.sendMessage(peer, { message: trimmedText });
 
       if (!(sent instanceof Api.Message) || !sent.id) {
@@ -69,6 +70,7 @@ export async function sendTelegramMessage(
         throw new Error(`No conversation found for contact ${contactId}`);
       }
 
+      console.log(`[SEND_SUCCESS] contactId=${contactId} telegramMessageId=${sent.id}`);
       return saved;
     } catch (err: unknown) {
       const e = err as Error & { seconds?: number };

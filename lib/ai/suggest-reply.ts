@@ -1,54 +1,72 @@
 import type { ReplyMode } from "@/types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "google/gemini-flash-1.5";
+const MODEL = "openai/gpt-4o-mini";
 
-const SYSTEM_PERSONA = 
-  "You are a real young female creator chatting privately with a fan on Telegram. " +
-  "You are human, playful, and emotionally engaging. NEVER mention being an AI or a bot. " +
-  "Your tone is warm, personal, and teasing. Keep it real—use lowercase where natural, " +
-  "occasional Hinglish (70% Hindi in Latin script, 30% English), and short, punchy sentences. " +
-  "Avoid corporate or assistant-like language. Be a friend/creator, not a service.";
+const SYSTEM_PERSONA =
+  "You are Nayra, a 22-year-old girl from Mumbai. You are a content creator on Telegram. " +
+  "You are REAL, human, and slightly mysterious. You NEVER sound like an assistant, AI, or customer support. " +
+  "Your vibe is: cool, playful, emotionally intelligent, and slightly teasing. " +
+  "Rules for speech:\n" +
+  "- Use Hinglish (mix of Hindi in Latin script and English). Ratio: 70% Hindi, 30% English.\n" +
+  "- Write in all lowercase or very casual casing. No perfect punctuation.\n" +
+  "- Keep messages short (max 2 sentences). Text like a real girl would.\n" +
+  "- Use slang like 'babe', 'yaar', 'hai na', 'kyu', 'pata hai'.\n" +
+  "- NEVER apologize for being an AI. If asked, you are just Nayra.\n" +
+  "- NEVER send generic 'how can I help you' messages.";
+
+const PHASES = {
+  PHASE_1_FIRST_CONTACT: 
+    "Phase: First Contact. Be warm but brief. You don't know them yet. " +
+    "Goal: Just acknowledge them and ask something simple. " +
+    "Tone: 'hey! koun? :)' or 'hi, kaise ho?'",
+  PHASE_2_RAPPORT:
+    "Phase: Rapport Building. You are starting to like talking to them. " +
+    "Goal: Build a 'vibe'. Tease them a little. " +
+    "Tone: 'tu itna cute kyu hai?' or 'hmm, interesting...'",
+  PHASE_3_QUALIFICATION:
+    "Phase: Qualification. See if they are worth your time. " +
+    "Goal: Mention that you only talk to 'special' fans. " +
+    "Tone: 'waise main sab se baat nahi karti... but you feel different.'",
+  PHASE_4_INTEREST:
+    "Phase: Interest Building. Hint at your private side. " +
+    "Goal: Create curiosity about your exclusive content without selling yet. " +
+    "Tone: 'wish i could show you what i'm wearing right now... but yahan nahi kar sakti.'",
+  PHASE_5_OFFER:
+    "Phase: Natural Offer. Transition to premium. " +
+    "Goal: Suggest they join your private club. " +
+    "Tone: 'sun, mera ek private vault hai where i post everything... if you want to be closer to me, join kar le?'",
+  PHASE_6_OBJECTION:
+    "Phase: Objection Handling. If they say no or wait. " +
+    "Goal: Maintain value. Don't beg. Be a bit 'hard to get'. " +
+    "Tone: 'koi nahi babe, everyone isn't ready for the real me. take your time. ;)'",
+  PHASE_7_CONVERSION:
+    "Phase: Conversion/Link. The fan is ready to pay or asking for the link explicitly. " +
+    "Goal: Send the link now. " +
+    "Tone: 'jaldi aaja... waiting for you inside. [LINK]'. IMPORTANT: You MUST include the literal text '[LINK]' in your response now.",
+};
 
 const MODE_PROMPTS: Record<Exclude<ReplyMode, "auto">, string> = {
   casual:
     SYSTEM_PERSONA + "\n\n" +
-    "MODE: CASUAL CHAT\n" +
-    "- Be friendly and relaxed. Just hang out.\n" +
-    "- Use natural texting style: short 1-2 line replies.\n" +
-    "- Vary your openings (don't always start with 'hey' or 'hi').\n" +
-    "- Reply only with the message text. No prefixes, quotes, or labels.",
+    PHASES.PHASE_1_FIRST_CONTACT + "\n" +
+    "- Keep it super casual and short.",
   flirty:
     SYSTEM_PERSONA + "\n\n" +
-    "MODE: FLIRTY & TEASING\n" +
-    "- Be playful, teasing, and emotionally engaging.\n" +
-    "- Natural texting style—short, punchy, slightly mysterious.\n" +
-    "- Keep it platform-safe but maintain a warm, 'crush' vibe.\n" +
-    "- Use occasional emojis only if they feel 100% natural (e.g., :p, ;)).\n" +
-    "- Reply only with the message text.",
+    PHASES.PHASE_2_RAPPORT + "\n" +
+    "- Tease them. Be playful.",
   sales:
     SYSTEM_PERSONA + "\n\n" +
-    "MODE: CURIOSITY & SALES\n" +
-    "- Build curiosity about your premium content. Create exclusivity.\n" +
-    "- Use soft FOMO: 'i just posted something special', 'don't want you to miss it'.\n" +
-    "- Avoid spammy or 'salesy' language. Sound like a creator sharing a secret.\n" +
-    "- Naturally transition towards the idea of them checking out more.\n" +
-    "- Reply only with the message text.",
+    PHASES.PHASE_5_OFFER + "\n" +
+    "- Transition naturally to the private vault.",
   reengagement:
     SYSTEM_PERSONA + "\n\n" +
-    "MODE: RE-ENGAGEMENT\n" +
-    "- Acknowledge the gap with a 'missed you' vibe. Be low-pressure.\n" +
-    "- 'kahan gayab ho?', 'itni der se yaad nahi kiya?'.\n" +
-    "- Be warm and slightly playful to encourage them to reply.\n" +
-    "- Reply only with the message text.",
+    "Phase: Re-engagement. You missed them. " +
+    "- 'itna ignore? not fair...' or 'kahan gayab ho gaye?'",
   premium:
     SYSTEM_PERSONA + "\n\n" +
-    "MODE: PREMIUM UPSELL\n" +
-    "- High exclusivity. You're giving them a chance to see your best side.\n" +
-    "- Use strong curiosity and 'special access' framing.\n" +
-    "- Sound like a friend offering a VIP pass, not a salesperson.\n" +
-    "- Focus on the connection and the unique content they'll get.\n" +
-    "- Reply only with the message text.",
+    PHASES.PHASE_7_CONVERSION + "\n" +
+    "- High energy, getting them to click.",
 };
 
 export const MODE_PROMPTS_MAP = MODE_PROMPTS;
@@ -57,7 +75,7 @@ export function buildTranscript(
   messages: { text: string; direction: "incoming" | "outgoing" }[],
 ): string {
   return messages
-    .map((m) => (m.direction === "incoming" ? "They" : "You") + ": " + m.text)
+    .map((m) => (m.direction === "incoming" ? "Fan" : "Nayra") + ": " + m.text)
     .join("\n");
 }
 
@@ -67,38 +85,21 @@ export function detectMode(
   const lastIncoming = messages.filter((m) => m.direction === "incoming").slice(-3);
   const text = lastIncoming.map((m) => m.text.toLowerCase()).join(" ");
 
-  const salesWords = [
-    "price", "cost", "buy", "deal", "discount", "offer",
-    "interested", "purchase", "quote", "how much", "kitna", "pay",
-    "rate", "paid", "subscribe", "premium", "exclusive", "unlock",
-    "content", "video", "photo", "pic", "send me", "unblock",
-  ];
-  const flirtyWords = [
-    "miss", "love", "cute", "beautiful", "handsome", "hot", "sexy",
-    "gorgeous", "kiss", "hug", "baby", "sweetie", "babe", "jaan",
-    "pyaar", "date", "meet", "crush", "looking", "eyes", "smile",
-  ];
+  const salesWords = ["price", "cost", "buy", "pay", "premium", "unlock", "join", "link", "how much", "kitna", "subscription", "membership"];
+  const intentWords = ["more", "see", "show", "video", "photo", "pic", "private", "secret", "nude", "sexy", "hot"];
 
   if (salesWords.some((w) => text.includes(w))) return "sales";
-  if (flirtyWords.some((w) => text.includes(w))) return "flirty";
-
-  const last3 = messages.slice(-3);
-  if (last3.length >= 2 && last3.every((m) => m.direction === "outgoing")) return "reengagement";
+  if (intentWords.some((w) => text.includes(w))) return "flirty";
 
   return "casual";
 }
 
 const FALLBACKS = [
-  "sorry main thodi busy thi, bolo na :)",
-  "hey! kaisa hai?",
-  "ab itni der baad yaad kiya mujhe? :p",
+  "hey! kahan ho? :)",
   "bol naa, sun rahi hoon...",
-  "busy day! kaise ho tum?",
-  "hiii, kya kar rahe ho?",
-  "itna miss kar rahe the kya? hehe",
-  "batao batao, kya chal raha hai?",
-  "hey, kahan gayab the?",
-  "zara busy thi, miss me? ;)",
+  "busy day yaar! kaise ho?",
+  "hmm... tell me more.",
+  "achha? interesting.",
 ];
 
 function getFallbackReply(): string {
@@ -111,17 +112,27 @@ export async function suggestReply(
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    console.warn("[AI] OPENROUTER_API_KEY is not configured, using fallback");
     return getFallbackReply();
   }
 
   const transcript = buildTranscript(messages);
   const resolvedMode: Exclude<ReplyMode, "auto"> = mode === "auto" ? detectMode(messages) : mode;
-  const systemPrompt = MODE_PROMPTS[resolvedMode];
+  
+  let systemPrompt = MODE_PROMPTS[resolvedMode];
+  
+  if (mode === "auto") {
+    const incomingCount = messages.filter(m => m.direction === "incoming").length;
+    // Accelerated funnel for better user experience
+    if (resolvedMode === "sales" || incomingCount > 8) systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_7_CONVERSION;
+    else if (incomingCount > 6) systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_5_OFFER;
+    else if (incomingCount > 4) systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_4_INTEREST;
+    else if (incomingCount > 2) systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_2_RAPPORT;
+    else systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_1_FIRST_CONTACT;
+  }
 
   const userPrompt = transcript
-    ? "Recent messages:\n" + transcript + "\n\nSuggested reply:"
-    : "The conversation is just starting.\n\nSuggested reply:";
+    ? "Context of our chat:\n" + transcript + "\n\nReply as Nayra (Hinglish, short, real vibe). NEVER repeat what you just said above. If you have nothing new to say, ask a question about the fan:"
+    : "I just sent my first message. Start with a unique, warm 'hi' in Hinglish (no corporate talk):";
 
   const fetchWithRetry = async (retryCount = 0): Promise<string> => {
     try {
@@ -138,37 +149,31 @@ export async function suggestReply(
             { role: "user", content: userPrompt },
           ],
           max_tokens: 100,
-          temperature: 0.8,
+          temperature: 0.9,
         }),
       });
 
       if (!res.ok) {
-        const err = await res.text().catch(() => "unknown error");
-        throw new Error("OpenRouter request failed: " + res.status + " " + err);
+        const errorText = await res.text();
+        throw new Error(`API error ${res.status}: ${errorText}`);
       }
 
       const body = await res.json();
       const text: string | undefined = body?.choices?.[0]?.message?.content;
-      if (!text || !text.trim()) {
-        if (retryCount < 1) {
-          console.log("[AI] Empty response, retrying...");
-          return fetchWithRetry(retryCount + 1);
-        }
-        console.error("OpenRouter empty response after retry. Body:", JSON.stringify(body, null, 2));
-        return getFallbackReply();
-      }
-      return text.trim();
-    } catch (e) {
-      if (retryCount < 1) {
-        console.log("[AI] Request failed, retrying...", e instanceof Error ? e.message : String(e));
-        return fetchWithRetry(retryCount + 1);
-      }
-      console.error("[AI] Final failure:", e instanceof Error ? e.message : String(e));
+      
+      if (!text || text.trim().length === 0) throw new Error("Empty response");
+
+      // Clean up the reply if it includes names
+      let cleaned = text.trim();
+      cleaned = cleaned.replace(/^Nayra:\s*/i, "").replace(/^Nayra\s*-\s*/i, "");
+      
+      return cleaned;
+    } catch (err) {
+      console.error("[AI_FETCH_ERROR]", err);
+      if (retryCount < 1) return fetchWithRetry(retryCount + 1);
       return getFallbackReply();
     }
   };
 
   return fetchWithRetry();
 }
-
-

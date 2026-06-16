@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { pollIncomingMessages } from "@/src/lib/telegram/pollMessages";
 
-export async function POST() {
+export async function POST(req: Request) {
+  const authHeader = req.headers.get("authorization");
+  if (
+    process.env.CRON_SECRET &&
+    authHeader !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const summary = await pollIncomingMessages();
     return NextResponse.json(summary);
