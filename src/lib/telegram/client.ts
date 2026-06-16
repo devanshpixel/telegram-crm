@@ -1,6 +1,7 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { getDb } from "@/lib/db";
+import { LogLevel } from "telegram/extensions/Logger";
 
 declare global {
   var __telegramClient: TelegramClient | undefined;
@@ -43,9 +44,45 @@ async function createClient(sessionString: string): Promise<TelegramClient> {
     throw new Error("Invalid TELEGRAM_API_ID: must be a numeric value");
   }
 
-  return new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
-    connectionRetries: 5,
+  const proxyHost = process.env.TELEGRAM_PROXY_HOST;
+  const proxyPort = process.env.TELEGRAM_PROXY_PORT ? Number(process.env.TELEGRAM_PROXY_PORT) : undefined;
+  const proxyType = process.env.TELEGRAM_PROXY_TYPE || "socks5"; // socks5, mtproxy, http
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let proxyOptions: any = undefined;
+  if (proxyHost && proxyPort) {
+    console.error(`[TELEGRAM] Using ${proxyType} proxy: ${proxyHost}:${proxyPort}`);
+    if (proxyType === "mtproxy") {
+      proxyOptions = {
+        MTProxy: true,
+        server: proxyHost,
+        port: proxyPort,
+        secret: process.env.TELEGRAM_PROXY_SECRET,
+      };
+    } else {
+      proxyOptions = {
+        ip: proxyHost,
+        port: proxyPort,
+        socksType: proxyType === "socks5" ? 5 : undefined,
+        username: process.env.TELEGRAM_PROXY_USER,
+        password: process.env.TELEGRAM_PROXY_PASS,
+        timeout: 10,
+      };
+    }
+  }
+
+  console.error(`[TELEGRAM] Creating client (apiId=${apiId})`);
+  const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
+    connectionRetries: 10,
+    requestRetries: 2,
+    timeout: 30000,
+    proxy: proxyOptions,
+    useWSS: process.env.TELEGRAM_USE_WSS !== "false", // Default to true
   });
+
+  client.setLogLevel(LogLevel.INFO); 
+  
+  return client;
 }
 
 export async function getTelegramClient(): Promise<TelegramClient> {

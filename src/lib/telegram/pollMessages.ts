@@ -494,6 +494,3 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
   console.error("[TRACE] BEFORE RETURN", JSON.stringify(summary));
   return summary;
 }
-error("[TRACE] BEFORE RETURN", JSON.stringify(summary));
-  return summary;
-}

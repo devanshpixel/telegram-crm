@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchRevenue } from "@/lib/api";
 import type { MonthlyRevenue } from "@/types";
-import { BarChart3, Loader2 } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 
 interface RevenueChartProps {
   className?: string;

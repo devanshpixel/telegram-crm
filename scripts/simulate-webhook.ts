@@ -37,6 +37,7 @@ async function main() {
 
   try {
     const res = await axios.post("http://localhost:3000/api/razorpay/webhook", body, {
+      timeout: 5000,
       headers: {
         "Content-Type": "application/json",
         "x-razorpay-signature": signature,
@@ -45,7 +46,7 @@ async function main() {
     });
     console.log("Webhook response:", res.data);
   } catch (e: any) {
-    console.error("Webhook failed:", e.response?.data || e.message);
+    console.error("Webhook failed:", e.response?.data || e.code || e.message);
   }
 }
 
