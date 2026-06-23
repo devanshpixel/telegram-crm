@@ -185,7 +185,7 @@ export async function createPaymentLink(
   const settings = await getOfferSettings();
   const amount = overrideAmount ?? settings.offerPrice;
   const paymentLink = await razorpay.paymentLink.create({
-    amount: amount,
+    amount: Math.round(amount * 100),
     currency: "INR",
     description: "Premium Chat Unlock",
     customer: { name: "Fan" },

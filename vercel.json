@@ -1,12 +1,2 @@
 {
-  "crons": [
-    {
-      "path": "/api/telegram/poll",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/telegram/remind",
-      "schedule": "*/5 * * * *"
-    }
-  ]
 }
