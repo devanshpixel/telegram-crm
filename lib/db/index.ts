@@ -195,36 +195,23 @@ function isTursoConfigured(): boolean {
 export async function getDb(): Promise<AsyncDb> {
   if (global.__crmDb) return global.__crmDb;
 
-  const hasUrl = !!process.env.TURSO_DB_URL;
-  const hasToken = !!process.env.TURSO_DB_TOKEN;
-  const tokenLen = process.env.TURSO_DB_TOKEN?.length ?? 0;
-  console.log("[DB] TURSO_DB_URL exists=", hasUrl, "TURSO_DB_TOKEN exists=", hasToken, "token length=", tokenLen);
-
   if (isTursoConfigured()) {
     const tursoUrl = process.env.TURSO_DB_URL!;
     const tursoToken = process.env.TURSO_DB_TOKEN;
-    console.log("[DB] Creating Turso client, URL prefix:", tursoUrl.slice(0, 40));
     const db = createTursoAsync(tursoUrl, tursoToken);
     try {
       // Check if schema already exists to avoid redundant execution
       const tables = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('contacts', 'settings')").all();
       if (tables.length < 2) {
-        console.log("[DB] Executing SCHEMA_SQL on Turso...");
         await db.exec(SCHEMA_SQL);
-        console.log("[DB] Schema initialized");
-      } else {
-        console.log("[DB] Schema already exists, skipping initialization");
       }
     } catch (e: unknown) {
-      console.log("[DB] Schema check/init failed:", e instanceof Error ? e.message : String(e));
-      // Continue anyway, it might be fine or fail later
+      console.error("[DB] Turso schema check/init failed:", e instanceof Error ? e.message : String(e));
     }
     global.__crmDb = db;
     return db;
   }
 
-
-  console.log("[DB] Turso not configured, using local SQLite at", DB_PATH);
   const raw = createRawBetterSqlite3(DB_PATH);
   raw.exec(SCHEMA_SQL);
   migrateBetterSqlite3(raw);

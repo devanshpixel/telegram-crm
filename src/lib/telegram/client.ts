@@ -9,23 +9,20 @@ declare global {
 }
 
 export async function loadSessionString(): Promise<string> {
-  // Task: Prioritize DB session as it's the one created by the dashboard login
+  // Prioritize DB session (the one created by the dashboard login flow).
   const db = await getDb();
   const row = await db
     .prepare("SELECT session_string FROM telegram_sessions LIMIT 1")
     .get() as { session_string: string } | undefined;
   if (row?.session_string) {
-    console.error(`[TRACE] SESSION SOURCE: DATABASE (len=${row.session_string.length})`);
     return row.session_string;
   }
 
   const envSession = process.env.TELEGRAM_SESSION;
   if (envSession && envSession.trim().length > 0) {
-    console.error(`[TRACE] SESSION SOURCE: ENVIRONMENT (len=${envSession.trim().length})`);
     return envSession.trim();
   }
-  
-  console.error("[TRACE] SESSION SOURCE: NONE FOUND");
+
   return "";
 }
 
@@ -51,7 +48,7 @@ async function createClient(sessionString: string): Promise<TelegramClient> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let proxyOptions: any = undefined;
   if (proxyHost && proxyPort) {
-    console.error(`[TELEGRAM] Using ${proxyType} proxy: ${proxyHost}:${proxyPort}`);
+    console.log(`[TELEGRAM] Using ${proxyType} proxy: ${proxyHost}:${proxyPort}`);
     if (proxyType === "mtproxy") {
       proxyOptions = {
         MTProxy: true,
@@ -71,11 +68,11 @@ async function createClient(sessionString: string): Promise<TelegramClient> {
     }
   }
 
-  console.error(`[TELEGRAM] Creating client (apiId=${apiId})`);
+  console.log(`[TELEGRAM] Creating client (apiId=${apiId})`);
   const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
     connectionRetries: 10,
     requestRetries: 2,
-    timeout: 30000,
+    timeout: 30,
     proxy: proxyOptions,
     useWSS: process.env.TELEGRAM_USE_WSS !== "false", // Default to true
   });

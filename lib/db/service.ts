@@ -95,7 +95,6 @@ async function listChatRows(): Promise<ChatListRow[]> {
        ORDER BY conv.is_pinned DESC, conv.last_message_time DESC`,
     )
     .all() as ChatListRow[];
-  console.log("[DASHBOARD] listChats returned", rows.length, "rows");
   return rows;
 }
 
@@ -128,7 +127,6 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const totalChats = (
     await db.prepare("SELECT COUNT(*) AS count FROM contacts").get() as { count: number }
   ).count;
-  console.log("[DASHBOARD] getDashboardStats: totalChats =", totalChats);
   const onlineCount = (
     await db
       .prepare("SELECT COUNT(*) AS count FROM contacts WHERE is_online = 1")
@@ -461,6 +459,14 @@ export async function createMessage(
   if (!conversationId) return null;
 
   const db = await getDb();
+
+  // Idempotency: skip if this Telegram message was already saved
+  if (telegramMessageId != null) {
+    const exists = await db
+      .prepare("SELECT id FROM messages WHERE telegram_message_id = ? AND conversation_id = ?")
+      .get(telegramMessageId, conversationId);
+    if (exists) return null;
+  }
   const ts = nowIso();
   const isRead = direction === "outgoing" ? 1 : 0;
 
@@ -503,6 +509,7 @@ export interface CreatePurchaseInput {
   purchaseDate: string;
   note?: string;
   kind?: string;
+  markPaid?: boolean;
 }
 
 export async function createPurchase(input: CreatePurchaseInput): Promise<Purchase> {
@@ -529,6 +536,9 @@ export async function createPurchase(input: CreatePurchaseInput): Promise<Purcha
     const updateArgs: (string | number)[] = [input.amount, input.amount, input.purchaseDate, ts];
     if (kind === "ppv") {
       updateParts.push("ppv_count = ppv_count + 1");
+    }
+    if (input.markPaid) {
+      updateParts.push("conv_state = 'PAID'");
     }
     await db.prepare(
       `UPDATE contacts SET ${updateParts.join(", ")} WHERE id = ?`,

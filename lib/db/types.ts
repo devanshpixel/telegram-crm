@@ -24,6 +24,10 @@ export interface ContactRow {
   last_purchase_date: string | null;
   created_at: string;
   updated_at: string;
+  offer_sent: number;
+  conv_state: string;
+  offer_sent_at: string | null;
+  last_locked_response_at: string | null;
 }
 
 export interface ConversationRow {

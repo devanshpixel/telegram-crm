@@ -22,6 +22,9 @@ export function mapChatRow(row: ChatListRow, tags: string[]): Chat {
     isPinned: row.is_pinned === 1,
     revenue: row.revenue,
     tags,
+    convState: row.conv_state as Chat["convState"],
+    leadScore: row.lead_score,
+    leadStatus: row.lead_status,
   };
 }
 

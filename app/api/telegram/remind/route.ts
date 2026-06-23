@@ -2,7 +2,18 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { sendLockedResponse } from "@/src/lib/telegram/pollMessages";
 
-export async function POST() {
+export async function POST(req: Request) {
+  // Defense-in-depth auth (middleware already enforces this). Accept either
+  // Vercel's `Authorization: Bearer <CRON_SECRET>` or an explicit
+  // `x-cron-secret` header, mirroring middleware.ts.
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const authHeader = req.headers.get("authorization");
+    const cronHeader = req.headers.get("x-cron-secret");
+    if (authHeader !== `Bearer ${secret}` && cronHeader !== secret) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
   try {
     const db = await getDb();
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

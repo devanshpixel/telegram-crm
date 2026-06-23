@@ -75,6 +75,7 @@ export function buildTranscript(
   messages: { text: string; direction: "incoming" | "outgoing" }[],
 ): string {
   return messages
+    .slice(-10)
     .map((m) => (m.direction === "incoming" ? "Fan" : "Nayra") + ": " + m.text)
     .join("\n");
 }
@@ -118,16 +119,27 @@ export async function suggestReply(
   const transcript = buildTranscript(messages);
   const resolvedMode: Exclude<ReplyMode, "auto"> = mode === "auto" ? detectMode(messages) : mode;
   
-  let systemPrompt = MODE_PROMPTS[resolvedMode];
+  let systemPrompt: string;
   
   if (mode === "auto") {
     const incomingCount = messages.filter(m => m.direction === "incoming").length;
-    // Accelerated funnel for better user experience
-    if (resolvedMode === "sales" || incomingCount > 8) systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_7_CONVERSION;
-    else if (incomingCount > 6) systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_5_OFFER;
-    else if (incomingCount > 4) systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_4_INTEREST;
-    else if (incomingCount > 2) systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_2_RAPPORT;
-    else systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_1_FIRST_CONTACT;
+
+    // **Intent-Driven Funnel Acceleration**
+    // Prioritize explicit user intent over simple message counting for a smarter, more responsive funnel.
+    if (resolvedMode === "sales") {
+      systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_7_CONVERSION;
+    } else if (incomingCount > 6) { // If no explicit intent, progress based on engagement
+      systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_5_OFFER;
+    } else if (incomingCount > 4) {
+      systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_4_INTEREST;
+    } else if (incomingCount > 2) {
+      systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_2_RAPPORT;
+    } else {
+      systemPrompt = SYSTEM_PERSONA + "\n\n" + PHASES.PHASE_1_FIRST_CONTACT;
+    }
+  } else {
+    // For explicit modes (casual, flirty, etc.), use the direct prompt.
+    systemPrompt = MODE_PROMPTS[resolvedMode];
   }
 
   const userPrompt = transcript

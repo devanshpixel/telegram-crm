@@ -5,7 +5,13 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { RevenueBadge } from "@/components/ui/RevenueBadge";
 import { cn, formatTime } from "@/lib/utils";
-import type { Chat } from "@/types";
+import type { Chat, ConvState } from "@/types";
+
+const CONV_STATE_CONFIG: Record<ConvState, { label: string; variant: "default" | "success" | "revenue" }> = {
+  FREE_CHAT: { label: "New", variant: "default" },
+  OFFER_SENT: { label: "Offered", variant: "revenue" },
+  PAID: { label: "Paid", variant: "success" },
+};
 
 interface ChatListItemProps {
   chat: Chat;
@@ -72,6 +78,12 @@ export function ChatListItem({ chat, isActive, onClick }: ChatListItemProps) {
         </p>
 
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <Badge
+            variant={CONV_STATE_CONFIG[chat.convState].variant}
+            className="!px-1.5 !py-0 !text-[10px]"
+          >
+            {CONV_STATE_CONFIG[chat.convState].label}
+          </Badge>
           <RevenueBadge amount={chat.revenue} />
           {chat.tags.slice(0, 2).map((tag) => (
             <Badge

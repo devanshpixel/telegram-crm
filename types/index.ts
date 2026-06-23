@@ -21,6 +21,9 @@ export interface Chat {
   isPinned?: boolean;
   revenue: number;
   tags: string[];
+  convState: ConvState;
+  leadScore: number;
+  leadStatus: string;
 }
 
 

@@ -1,7 +1,8 @@
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { IconButton } from "@/components/ui/IconButton";
 import { RevenueBadge } from "@/components/ui/RevenueBadge";
-import type { Chat } from "@/types";
+import type { Chat, ConvState } from "@/types";
 import { ArrowLeft, MoreVertical, PanelRight, Search } from "lucide-react";
 
 interface ConversationHeaderProps {
@@ -10,6 +11,12 @@ interface ConversationHeaderProps {
   onOpenCrm?: () => void;
   showBackButton?: boolean;
 }
+
+const CONV_STATE_CONFIG: Record<ConvState, { label: string; variant: "default" | "success" | "revenue" }> = {
+  FREE_CHAT: { label: "New", variant: "default" },
+  OFFER_SENT: { label: "Offered", variant: "revenue" },
+  PAID: { label: "Paid", variant: "success" },
+};
 
 export function ConversationHeader({
   chat,
@@ -39,6 +46,12 @@ export function ConversationHeader({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="truncate text-[15px] font-semibold">{chat.name}</h2>
+            <Badge
+              variant={CONV_STATE_CONFIG[chat.convState].variant}
+              className="!px-1.5 !py-0 !text-[10px]"
+            >
+              {CONV_STATE_CONFIG[chat.convState].label}
+            </Badge>
             <RevenueBadge amount={chat.revenue} size="md" />
           </div>
           <p className="truncate text-xs">

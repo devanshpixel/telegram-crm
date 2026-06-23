@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS broadcasts (
   message TEXT NOT NULL,
   recipient_count INTEGER NOT NULL,
   sent_count INTEGER NOT NULL DEFAULT 0,
+  trigger TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -141,4 +142,5 @@ CREATE INDEX IF NOT EXISTS idx_purchases_contact_kind ON purchases(contact_id, k
 CREATE INDEX IF NOT EXISTS idx_media_contact ON media(contact_id);
 CREATE INDEX IF NOT EXISTS idx_tag_events_contact ON tag_events(contact_id);
 CREATE INDEX IF NOT EXISTS idx_broadcasts_created_at ON broadcasts(created_at);
+CREATE INDEX IF NOT EXISTS idx_broadcasts_trigger_created_at ON broadcasts(trigger, created_at);
 `;

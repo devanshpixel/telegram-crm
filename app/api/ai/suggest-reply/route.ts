@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       return apiError("OPENROUTER_API_KEY is not configured", 500);
     }
 
-    const validModes: ReplyMode[] = ["casual", "flirty", "sales", "reengagement", "auto"];
+    const validModes: ReplyMode[] = ["casual", "flirty", "sales", "reengagement", "premium", "auto"];
     const mode: ReplyMode = validModes.includes(body.mode) ? body.mode : "auto";
 
     const messages = await getMessagesByContactId(contactId);

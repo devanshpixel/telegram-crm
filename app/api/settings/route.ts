@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getSetting, updateSetting } from "@/lib/db/service";
-import { getDb, nowIso } from "@/lib/db";
 
 interface Settings {
   offerPrice: number;
@@ -37,24 +36,36 @@ export async function GET() {
   return NextResponse.json(await getAllSettings());
 }
 
+const VALID_AI_MODES: Settings["aiMode"][] = ["auto", "casual", "flirty", "sales", "premium"];
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<Settings>;
-    
-    if (body.offerPrice !== undefined) await updateSetting("offerPrice", body.offerPrice);
-    if (body.offerMessage !== undefined) await updateSetting("offerMessage", body.offerMessage);
-    if (body.aiMode !== undefined) await updateSetting("aiMode", body.aiMode);
-    if (body.automatedReplies !== undefined) await updateSetting("automatedReplies", body.automatedReplies);
+
+    if (body.offerPrice !== undefined) {
+      if (typeof body.offerPrice !== "number" || !Number.isFinite(body.offerPrice) || body.offerPrice <= 0) {
+        return NextResponse.json({ error: "offerPrice must be a positive number" }, { status: 400 });
+      }
+      await updateSetting("offerPrice", Math.round(body.offerPrice));
+    }
+    if (body.offerMessage !== undefined) {
+      const msg = String(body.offerMessage).trim();
+      if (!msg) {
+        return NextResponse.json({ error: "offerMessage must not be empty" }, { status: 400 });
+      }
+      await updateSetting("offerMessage", msg);
+    }
+    if (body.aiMode !== undefined) {
+      if (!VALID_AI_MODES.includes(body.aiMode)) {
+        return NextResponse.json({ error: "aiMode is invalid" }, { status: 400 });
+      }
+      await updateSetting("aiMode", body.aiMode);
+    }
+    if (body.automatedReplies !== undefined) {
+      await updateSetting("automatedReplies", Boolean(body.automatedReplies));
+    }
 
     const updated = await getAllSettings();
-    
-    const db = await getDb();
-    if (body.offerPrice) {
-      const ts = nowIso();
-      await db
-        .prepare("INSERT INTO purchases (contact_id, amount, note, kind, purchase_date, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(0, body.offerPrice, "price_update", "config", ts, ts);
-    }
     return NextResponse.json(updated);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to update settings";

@@ -10,7 +10,7 @@ import {
   recalculateLeadScore,
 } from "@/lib/db/service";
 import type { ConversationRow } from "@/lib/db/types";
-import type { ConvState } from "@/types";
+import type { ConvState, ReplyMode } from "@/types";
 import { razorpay } from "@/lib/razorpay";
 import { suggestReply } from "@/lib/ai/suggest-reply";
 import { getTelegramClient } from "./client";
@@ -97,16 +97,6 @@ async function updateSyncCursor(
     .run(lastSyncedMessageId, ts, conversationId);
 }
 
-async function getIncomingMessageCount(contactId: number): Promise<number> {
-  const db = await getDb();
-  const row = (await db
-    .prepare(
-      "SELECT COUNT(*) AS count FROM messages m INNER JOIN conversations c ON m.conversation_id = c.id WHERE c.contact_id = ? AND m.direction = 'incoming'",
-    )
-    .get(contactId)) as { count: number };
-  return row?.count ?? 0;
-}
-
 async function hasUserPaid(contactId: number): Promise<boolean> {
   const db = await getDb();
   const row = (await db
@@ -136,11 +126,13 @@ async function setConvState(
 }
 
 async function getOfferSettings() {
-  const [offerPrice, offerMessage] = await Promise.all([
+  const [offerPrice, offerMessage, aiMode, automatedReplies] = await Promise.all([
     getSetting("offerPrice", 499),
     getSetting("offerMessage", "Hey! You've been enjoying the chat so here's something special 🔥\n\nUnlock premium access for exclusive content, behind-the-scenes, and unlimited chat."),
+    getSetting<ReplyMode>("aiMode", "auto"),
+    getSetting<boolean>("automatedReplies", true),
   ]);
-  return { offerPrice, offerMessage };
+  return { offerPrice, offerMessage, aiMode, automatedReplies };
 }
 
 function hoursSince(isoString: string | null): number {
@@ -176,7 +168,7 @@ async function createContactFromDialog(entity: Api.User): Promise<ContactWithCon
 
 async function sendAiReply(
   contactId: number,
-  mode: "casual" | "premium" = "casual",
+  mode: ReplyMode = "casual",
 ): Promise<void> {
   const messages = await getMessagesByContactId(contactId);
   const recent = messages.slice(-20);
@@ -268,7 +260,6 @@ async function getLockStatus(): Promise<{ isPolling: boolean, lastUpdated: strin
 }
 
 export async function pollIncomingMessages(): Promise<PollSummary> {
-  console.error("[TRACE] POLL ENTRY");
   const summary: PollSummary = {
     dialogsChecked: 0,
     newMessages: 0,
@@ -279,6 +270,10 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
   };
 
   const startTime = Date.now();
+
+  // Read operator-controlled settings once before the poll loop
+  const offerSettings = await getOfferSettings();
+  const { automatedReplies, aiMode } = offerSettings;
 
   try {
     // Task: Prevent concurrent polls with stale lock protection - Now inside try/catch
@@ -308,9 +303,8 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     try {
       await ensureConnected();
       const client = await getTelegramClient();
-      
-      const me = await client.getMe();
-      console.error(`[POLL_START] account=${me instanceof Api.User ? me.username || me.id : "unknown"}`);
+
+      await client.getMe(); // validate session is alive
 
       const knownContacts = await listContactConversations();
       const knownMap = new Map<string, ContactWithConv>();
@@ -320,24 +314,18 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
       for await (const dialog of client.iterDialogs()) {
         const entity = dialog.entity;
-        
-        console.error(`[DIALOG] title="${dialog.name}" username=${entity instanceof Api.User ? entity.username : "n/a"} id=${entity?.id}`);
 
         // Skip non-users, bots, self early before counting against the quota
         if (!(entity instanceof Api.User)) {
-          console.error(`[SKIP] reason=not-user title="${dialog.name}" type=${(entity as { className?: string })?.className || "unknown"}`);
           continue;
         }
         if (entity.bot) {
-          console.error("[SKIP] reason=bot");
           continue;
         }
         if (entity.deleted) {
-          console.error("[SKIP] reason=deleted");
           continue;
         }
         if (entity.self) {
-          console.error("[SKIP] reason=self");
           continue;
         }
 
@@ -348,7 +336,6 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         }
 
         summary.dialogsChecked++;
-        // console.log(`[${summary.dialogsChecked}] title="${dialog.name}" username=${entity.username} id=${entity.id}`);
 
         const telegramId = entity.id.toString();
         let contact = knownMap.get(telegramId);
@@ -364,8 +351,6 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             continue;
           }
         }
-
-        console.error(`[CONTACT] id=${contact.id} telegramId=${contact.telegram_id}`);
 
         // Task E: Offer Expiry
         if (contact.conv_state === "OFFER_SENT") {
@@ -391,71 +376,65 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         let maxId = minId;
         const peer = buildPeer(contact.telegram_id, contact.telegram_access_hash);
 
-        console.error(`[MESSAGES] peer=${contact.telegram_id} minId=${minId}`);
-
         try {
           for await (const message of client.iterMessages(peer, {
             minId,
             reverse: true,
           })) {
-            // Safely extract properties for logging before strict TS narrowing
+            // Safely extract id before strict TS narrowing
             const msgId = (message as { id?: number }).id;
-            const className = (message as { className?: string }).className || "Unknown";
 
             if (!msgId) {
-              console.error(`[SKIPPED_MESSAGE] reason=no-id className=${className}`);
               continue;
             }
             if (msgId > maxId) maxId = msgId;
-            
+
             if (!(message instanceof Api.Message)) {
-              console.error(`[SKIPPED_MESSAGE] messageId=${msgId} reason=not-api-message className=${className}`);
               continue;
             }
             if (message.out) {
-              console.error(`[SKIPPED_MESSAGE] messageId=${msgId} reason=outgoing`);
               continue;
             }
 
             const text = message.message?.trim() || (message.media ? "[Media]" : "");
             if (!text) {
-              console.error(`[SKIPPED_MESSAGE] messageId=${msgId} reason=empty-text-no-media`);
               continue;
             }
 
             const saved = await createMessage(contact.id, text, "incoming", msgId);
             if (!saved) {
-              console.error(`[SKIPPED_MESSAGE] messageId=${msgId} reason=save-failed`);
               summary.errors.push(`Failed to save message for contact ${contact.id}`);
               continue;
             }
-            console.error(`[IMPORTED] messageId=${msgId}`);
             summary.newMessages++;
 
             // Task D: Update lead score
             await recalculateLeadScore(contact.id);
 
             try {
-              const count = await getIncomingMessageCount(contact.id);
-
-              if (contact.conv_state === "PAID") {
-                await sendAiReply(contact.id, "casual");
-                summary.repliesSent++;
-              } else if (contact.conv_state === "OFFER_SENT") {
-                if (await shouldSendLockedResponse(contact.id)) {
-                  await sendLockedResponse(contact.id);
-                  summary.remindersSent++;
-                }
-              } else {
-                // Task C: Intent-based offer trigger
-                const hasIntent = hasPurchaseIntent(text);
-                if (hasIntent || count > 5) {
-                  await sendPremiumOffer(contact.id);
-                  summary.offersSent++;
-                  contact.conv_state = "OFFER_SENT";
-                } else {
+              if (automatedReplies) {
+                if (contact.conv_state === "PAID") {
+                  // Post-purchase: casual tone regardless of funnel mode
                   await sendAiReply(contact.id, "casual");
                   summary.repliesSent++;
+                } else if (contact.conv_state === "OFFER_SENT") {
+                  if (await shouldSendLockedResponse(contact.id)) {
+                    await sendLockedResponse(contact.id);
+                    summary.remindersSent++;
+                  }
+                } else {
+                  // FREE_CHAT: respect operator aiMode setting.
+                  // Intent-based offer trigger fires first; AI phase system handles
+                  // rapport-building and soft pitching naturally via "auto" mode.
+                  const hasIntent = hasPurchaseIntent(text);
+                  if (hasIntent) {
+                    await sendPremiumOffer(contact.id);
+                    summary.offersSent++;
+                    contact.conv_state = "OFFER_SENT";
+                  } else {
+                    await sendAiReply(contact.id, aiMode);
+                    summary.repliesSent++;
+                  }
                 }
               }
             } catch (e) {
@@ -465,6 +444,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             }
           }
         } catch (e) {
+          console.error(`[POLL] Message iteration error for contact ${contact.id}:`, e);
           summary.errors.push(
             `Iteration error for contact ${contact.id}: ${e instanceof Error ? e.message : String(e)}`,
           );
@@ -491,6 +471,5 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     }
   }
 
-  console.error("[TRACE] BEFORE RETURN", JSON.stringify(summary));
   return summary;
 }

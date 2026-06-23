@@ -52,6 +52,7 @@ export async function POST(request: Request) {
           .get(`%razorpay_payment:${paymentId}%`);
           
         if (!existing) {
+          // purchase insert + conv_state='PAID' + revenue update all in one transaction
           try {
             await createPurchase({
               contactId,
@@ -59,20 +60,17 @@ export async function POST(request: Request) {
               purchaseDate: new Date().toISOString().split("T")[0],
               kind: "ppv",
               note,
+              markPaid: true,
             });
-            const ts = new Date().toISOString();
-            await db
-              .prepare("UPDATE contacts SET conv_state = 'PAID', updated_at = ? WHERE id = ?")
-              .run(ts, contactId);
 
             // Task D: Update lead score
             await recalculateLeadScore(contactId);
           } catch (error) {
-            console.error("[Razorpay Webhook] Transaction failed:", error);
+            console.error("[Razorpay Webhook] Payment record failed:", error);
             throw error;
           }
 
-          // Task A: Send Telegram confirmation
+          // Task A: Send Telegram confirmation (best-effort, never fails the webhook)
           try {
             await sendTelegramMessage(
               contactId,

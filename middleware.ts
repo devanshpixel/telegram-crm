@@ -30,12 +30,17 @@ export function middleware(request: NextRequest) {
     });
   }
 
-  // Require x-cron-secret for cron endpoints
+  // Authenticate cron endpoints.
+  // Vercel Cron automatically sends `Authorization: Bearer <CRON_SECRET>`.
+  // We also accept an explicit `x-cron-secret` header for manual/curl invocations.
   if (CRON_PATHS.some((p) => pathname.startsWith(p))) {
     if (!cronSecret) {
       return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 500 });
     }
-    if (request.headers.get("x-cron-secret") !== cronSecret) {
+    const authHeader = request.headers.get("authorization");
+    const bearerMatch = authHeader === `Bearer ${cronSecret}`;
+    const headerMatch = request.headers.get("x-cron-secret") === cronSecret;
+    if (!bearerMatch && !headerMatch) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return response;

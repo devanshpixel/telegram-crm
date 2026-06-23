@@ -1,0 +1,27 @@
+Current branch: final-recovery
+
+HEAD commit:
+7903533
+
+Local branch ahead of origin/main by 6 commits.
+
+Important stash:
+stash@{0} = backup-before-final-audit
+
+Verified:
+- Current model = google/gemini-flash-1.5
+- Flirty mode exists
+- Webhook transaction fix exists in stash
+- AI rewrite status not fully verified
+- Do NOT run:
+  git restore .
+  git reset --hard
+  git clean -fd
+  git stash pop
+
+Next session:
+1. Inspect lib/ai/suggest-reply.ts
+2. Inspect stash AI changes
+3. Verify actual AI reply flow
+4. Decide which stash changes to keep
+5. Commit and push
