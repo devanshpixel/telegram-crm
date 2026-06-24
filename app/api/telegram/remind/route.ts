@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { sendLockedResponse } from "@/src/lib/telegram/pollMessages";
 
-export async function POST(req: Request) {
-  // Defense-in-depth auth (middleware already enforces this). Accept either
-  // Vercel's `Authorization: Bearer <CRON_SECRET>` or an explicit
-  // `x-cron-secret` header, mirroring middleware.ts.
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+async function handle(req: Request) {
+  // Defense-in-depth auth (middleware also enforces this). Accept Vercel's
+  // `Authorization: Bearer <CRON_SECRET>` (GET) or `x-cron-secret` (POST).
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const authHeader = req.headers.get("authorization");
@@ -44,3 +46,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const GET = handle;
+export const POST = handle;

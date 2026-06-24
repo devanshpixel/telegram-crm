@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { razorpay } from "@/lib/razorpay";
 import { getMediaById } from "@/lib/db/service";
+import { getAppUrl } from "@/lib/app-url";
 
 export async function POST(request: Request) {
   try {
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     const notes: Record<string, string> = { contactId: String(contactId) };
     if (mediaId) notes.mediaId = String(mediaId);
 
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
+    const appUrl = getAppUrl();
     const paymentLink = await razorpay.paymentLink.create({
       amount: Math.round(resolvedAmount * 100),
       currency: "INR",

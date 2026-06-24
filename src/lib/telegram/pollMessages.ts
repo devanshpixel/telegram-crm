@@ -13,11 +13,14 @@ import type { ConversationRow } from "@/lib/db/types";
 import type { ConvState, ReplyMode } from "@/types";
 import { razorpay } from "@/lib/razorpay";
 import { suggestReply } from "@/lib/ai/suggest-reply";
+import { getAppUrl } from "@/lib/app-url";
 import { getTelegramClient } from "./client";
 import { sendTelegramMessage } from "./sendMessage";
 
 const MAX_DIALOGS_PER_POLL = 500;
-const POLL_TIMEOUT_MS = 60000;
+// Keep under the Vercel function maxDuration (60s) so the poll exits cleanly
+// and releases the lock before the platform kills the invocation.
+const POLL_TIMEOUT_MS = 50000;
 
 export interface PollSummary {
   dialogsChecked: number;
@@ -169,11 +172,35 @@ async function createContactFromDialog(entity: Api.User): Promise<ContactWithCon
 async function sendAiReply(
   contactId: number,
   mode: ReplyMode = "casual",
-): Promise<void> {
+): Promise<{ offerSent: boolean }> {
   const messages = await getMessagesByContactId(contactId);
   const recent = messages.slice(-20);
-  const reply = await suggestReply(recent, mode);
+  let reply = await suggestReply(recent, mode);
+
+  // The AI persona emits a literal "[LINK]" token when it decides to convert
+  // the fan (sales/conversion phase). Nothing else substitutes it, so we MUST
+  // replace it with a real payment link here — otherwise the fan receives a
+  // dead "[LINK]" placeholder and can never pay (lost sale on the hottest lead).
+  if (reply.includes("[LINK]")) {
+    try {
+      const link = await createPaymentLink(contactId);
+      reply = reply.replace(/\[LINK\]/g, link).trim();
+      await sendTelegramMessage(contactId, reply);
+      await setConvState(contactId, "OFFER_SENT", nowIso());
+      return { offerSent: true };
+    } catch (e) {
+      // Never ship the raw placeholder. Strip it and send a clean nudge.
+      console.error(
+        `[POLL] Payment link creation failed during [LINK] substitution (contact ${contactId}):`,
+        e,
+      );
+      reply = reply.replace(/\[LINK\]/g, "").replace(/\s{2,}/g, " ").trim();
+      if (!reply) reply = "ek sec babe... sending you something 💫";
+    }
+  }
+
   await sendTelegramMessage(contactId, reply);
+  return { offerSent: false };
 }
 
 export async function createPaymentLink(
@@ -181,7 +208,7 @@ export async function createPaymentLink(
   overrideAmount?: number,
 ): Promise<string> {
   if (!razorpay) throw new Error("Razorpay not configured");
-  const appUrl = process.env.APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
   const settings = await getOfferSettings();
   const amount = overrideAmount ?? settings.offerPrice;
   const paymentLink = await razorpay.paymentLink.create({
@@ -227,9 +254,17 @@ async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
 }
 
 function hasPurchaseIntent(text: string): boolean {
-  const keywords = ["buy", "price", "payment", "premium", "vip", "exclusive", "subscription", "unlock", "video", "content"];
+  // Must cover every "ready to buy" signal, including the ones the AI's own
+  // sales-mode detector reacts to (cost, pay, kitna, how much, join, link,
+  // membership). Otherwise those messages skip the clean offer path and fall
+  // through to the AI, which would emit the "[LINK]" conversion token.
+  const keywords = [
+    "buy", "price", "cost", "pay", "payment", "premium", "vip", "exclusive",
+    "subscription", "membership", "unlock", "join", "link", "how much",
+    "kitna", "kitne", "video", "content",
+  ];
   const lower = text.toLowerCase();
-  return keywords.some(kw => lower.includes(kw));
+  return keywords.some((kw) => lower.includes(kw));
 }
 
 async function checkOfferExpiry(contactId: number, offerSentAt: string | null): Promise<boolean> {
@@ -432,8 +467,14 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                     summary.offersSent++;
                     contact.conv_state = "OFFER_SENT";
                   } else {
-                    await sendAiReply(contact.id, aiMode);
-                    summary.repliesSent++;
+                    const { offerSent } = await sendAiReply(contact.id, aiMode);
+                    if (offerSent) {
+                      // AI converted via [LINK] → real offer was sent.
+                      summary.offersSent++;
+                      contact.conv_state = "OFFER_SENT";
+                    } else {
+                      summary.repliesSent++;
+                    }
                   }
                 }
               }
