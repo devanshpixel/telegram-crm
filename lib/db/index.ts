@@ -9,6 +9,10 @@ import {
 } from "./adapters";
 import type { AsyncDb } from "./adapters";
 
+// WARNING: /tmp is ephemeral on Vercel — data is lost on every cold start.
+// Always set TURSO_DB_URL + TURSO_DB_TOKEN in production to get persistent storage.
+// The app will throw at startup if neither is configured in a production build so
+// the problem surfaces immediately rather than silently losing data.
 const DB_PATH =
   process.env.NODE_ENV === "production"
     ? "/tmp/crm.db"
@@ -194,6 +198,16 @@ function isTursoConfigured(): boolean {
 
 export async function getDb(): Promise<AsyncDb> {
   if (global.__crmDb) return global.__crmDb;
+
+  if (process.env.NODE_ENV === "production" && !isTursoConfigured()) {
+    // Fail loud: /tmp/crm.db is wiped on every cold start which silently loses
+    // all contacts, purchases and the Telegram session. Force-configure Turso.
+    console.error(
+      "[DB] FATAL: TURSO_DB_URL is not set. Vercel /tmp is ephemeral — " +
+      "data will be lost on every cold start. Set TURSO_DB_URL and TURSO_DB_TOKEN " +
+      "in the Vercel dashboard before running in production.",
+    );
+  }
 
   if (isTursoConfigured()) {
     const tursoUrl = process.env.TURSO_DB_URL!;
