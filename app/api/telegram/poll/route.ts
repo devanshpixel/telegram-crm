@@ -21,6 +21,12 @@ async function handle(req: Request) {
 
   try {
     const summary = await pollIncomingMessages();
+    console.log(
+      `[Poll] dialogs=${summary.dialogsChecked} new=${summary.newMessages} replies=${summary.repliesSent} offers=${summary.offersSent} errors=${summary.errors.length}`,
+    );
+    if (summary.errors.length > 0) {
+      console.error("[Poll] errors:", JSON.stringify(summary.errors));
+    }
     return NextResponse.json(summary);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Poll failed";
