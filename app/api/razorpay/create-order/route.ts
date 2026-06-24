@@ -39,14 +39,17 @@ export async function POST(request: Request) {
     const paymentLink = await razorpay.paymentLink.create({
       amount: Math.round(resolvedAmount * 100),
       currency: "INR",
-      description: "CRM PPV Unlock",
+      description: "Nayra Premium Unlock",
       customer: {
-        name: "CRM Customer",
+        name: "Fan",
       },
       notes,
       callback_url: `${appUrl}?checkout=success`,
       callback_method: "get",
-    });
+      // Per-link checkout brand override (no Razorpay approval needed) so the
+      // fan sees "Nayra Premium" instead of the registered account name.
+      options: { checkout: { name: "Nayra Premium" } },
+    } as Parameters<typeof razorpay.paymentLink.create>[0]);
 
     return NextResponse.json({
       paymentLinkUrl: (paymentLink as { short_url: string }).short_url,

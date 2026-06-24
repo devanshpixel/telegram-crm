@@ -214,12 +214,15 @@ export async function createPaymentLink(
   const paymentLink = await razorpay.paymentLink.create({
     amount: Math.round(amount * 100),
     currency: "INR",
-    description: "Premium Chat Unlock",
+    description: "Nayra Premium Unlock",
     customer: { name: "Fan" },
     notes: { contactId: String(contactId) },
     callback_url: `${appUrl}?checkout=success`,
     callback_method: "get",
-  });
+    // Per-link checkout brand override so the fan sees "Nayra Premium" at
+    // checkout instead of the registered Razorpay account name.
+    options: { checkout: { name: "Nayra Premium" } },
+  } as Parameters<typeof razorpay.paymentLink.create>[0]);
   return (paymentLink as { short_url: string }).short_url;
 }
 
