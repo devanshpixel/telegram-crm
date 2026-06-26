@@ -491,6 +491,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
           // Batched reply: one response per contact per poll regardless of
           // how many messages arrived (BUG-5 fix).
+          let replyFailed = false;
           if (incomingMessages.length > 0 && automatedReplies) {
             await recalculateLeadScore(contact.id);
 
@@ -520,20 +521,21 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                 }
               }
             } catch (e) {
+              replyFailed = true;
               summary.errors.push(
                 `Response error for contact ${contact.id}: ${e instanceof Error ? e.message : String(e)}`,
               );
             }
+          }
+
+          if (!replyFailed && maxId > minId) {
+            await updateSyncCursor(conversation.id, maxId);
           }
         } catch (e) {
           console.error(`[POLL] Message iteration error for contact ${contact.id}:`, e);
           summary.errors.push(
             `Iteration error for contact ${contact.id}: ${e instanceof Error ? e.message : String(e)}`,
           );
-        }
-
-        if (maxId > minId) {
-          await updateSyncCursor(conversation.id, maxId);
         }
       }
     } catch (e) {
