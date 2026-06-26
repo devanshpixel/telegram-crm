@@ -94,7 +94,7 @@ Examples:
 |---|------|--------|
 | 1 | **Make production storage safe** — BUG-2 (throw on no Turso in prod), BUG-1 (Turso transactions), missing indexes | DONE |
 | 2 | **Harden the money path** — BUG-3 (webhook idempotency), BUG-4 (payment reconciliation) | DONE |
-| 3 | **Improve conversation conversion quality** — BUG-5 (one reply per burst), BUG-8 (Hinglish locked copy), [LINK] robustness | PENDING |
+| 3 | **Improve conversation conversion quality** — BUG-5 (one reply per burst), BUG-8 (Hinglish locked copy), [LINK] robustness | DONE |
 | 4 | **Fix currency consistency** to INR — BUG-6 | PENDING |
 | 5 | **Add automated tests** — webhook, purchase/unlock, poll state machine, middleware | PENDING |
 | 6 | **Complete extension PPV loop** — gallery + upload + unlock UI | PENDING |
@@ -125,6 +125,16 @@ Examples:
 | Build | PASS | `npx tsc --noEmit` exits clean |
 | Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 
+## Batch 3: Conversation conversion quality
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| BUG-5: one reply per contact per poll | VERIFIED | `pollMessages.ts` — replies moved outside inner message loop; incoming messages batched in array |
+| BUG-8: Hinglish locked copy | VERIFIED | `pollMessages.ts:240` — "Baby, this chat is locked now 😘💕" replaces "Premium chat is locked" |
+| [LINK] case-insensitive | VERIFIED | `pollMessages.ts:184,187,197` — `match(/\[link\]/i)` + `replace(/\[link\]/gi)` |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+
 ------------------------------------------------------------------------
 
 # Blockers
@@ -138,17 +148,14 @@ None.
 Completed:
   - Batch 1: Production storage safety (BUG-2, BUG-1, 3 missing indexes)
   - Batch 2: Money path hardening (BUG-3 atomic webhook, BUG-4 reconciliation route)
+  - Batch 3: Conversation quality (BUG-5 batch replies, BUG-8 Hinglish copy, [LINK] CI)
   - TASKS.md updated with execution plan
-
-In Progress:
-  - (none — ready for next task)
 
 Blocked:
   - None
 
 Next Highest Priority:
-  Task 3: Improve conversation conversion quality (BUG-5 one reply per burst,
-           BUG-8 Hinglish locked copy, [LINK] robustness)
+  Task 4: Fix currency consistency to INR (BUG-6)
 
 ------------------------------------------------------------------------
 

@@ -181,10 +181,11 @@ async function sendAiReply(
   // the fan (sales/conversion phase). Nothing else substitutes it, so we MUST
   // replace it with a real payment link here — otherwise the fan receives a
   // dead "[LINK]" placeholder and can never pay (lost sale on the hottest lead).
-  if (reply.includes("[LINK]")) {
+  const linkMatch = reply.match(/\[link\]/i);
+  if (linkMatch) {
     try {
       const link = await createPaymentLink(contactId);
-      reply = reply.replace(/\[LINK\]/g, link).trim();
+      reply = reply.replace(/\[link\]/gi, link).trim();
       await sendTelegramMessage(contactId, reply);
       await setConvState(contactId, "OFFER_SENT", nowIso());
       return { offerSent: true };
@@ -194,7 +195,7 @@ async function sendAiReply(
         `[POLL] Payment link creation failed during [LINK] substitution (contact ${contactId}):`,
         e,
       );
-      reply = reply.replace(/\[LINK\]/g, "").replace(/\s{2,}/g, " ").trim();
+      reply = reply.replace(/\[link\]/gi, "").replace(/\s{2,}/g, " ").trim();
       if (!reply) reply = "ek sec babe... sending you something 💫";
     }
   }
@@ -237,7 +238,7 @@ async function sendPremiumOffer(contactId: number): Promise<void> {
 
 export async function sendLockedResponse(contactId: number): Promise<void> {
   const link = await createPaymentLink(contactId);
-  const text = `Premium chat is locked. Unlock here: ${link}`;
+  const text = `Baby, this chat is locked now 😘💕 Unlock here for my exclusive content: ${link}`;
   await sendTelegramMessage(contactId, text);
   const db = await getDb();
   const ts = nowIso();
@@ -415,11 +416,12 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         const peer = buildPeer(contact.telegram_id, contact.telegram_access_hash);
 
         try {
+          const incomingMessages: { text: string }[] = [];
+
           for await (const message of client.iterMessages(peer, {
             minId,
             reverse: true,
           })) {
-            // Safely extract id before strict TS narrowing
             const msgId = (message as { id?: number }).id;
 
             if (!msgId) {
@@ -444,40 +446,37 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
               summary.errors.push(`Failed to save message for contact ${contact.id}`);
               continue;
             }
+            incomingMessages.push({ text });
             summary.newMessages++;
+          }
 
-            // Task D: Update lead score
+          // Batched reply: one response per contact per poll regardless of
+          // how many messages arrived (BUG-5 fix).
+          if (incomingMessages.length > 0 && automatedReplies) {
             await recalculateLeadScore(contact.id);
 
             try {
-              if (automatedReplies) {
-                if (contact.conv_state === "PAID") {
-                  // Post-purchase: casual tone regardless of funnel mode
-                  await sendAiReply(contact.id, "casual");
-                  summary.repliesSent++;
-                } else if (contact.conv_state === "OFFER_SENT") {
-                  if (await shouldSendLockedResponse(contact.id)) {
-                    await sendLockedResponse(contact.id);
-                    summary.remindersSent++;
-                  }
+              if (contact.conv_state === "PAID") {
+                await sendAiReply(contact.id, "casual");
+                summary.repliesSent++;
+              } else if (contact.conv_state === "OFFER_SENT") {
+                if (await shouldSendLockedResponse(contact.id)) {
+                  await sendLockedResponse(contact.id);
+                  summary.remindersSent++;
+                }
+              } else {
+                const hasIntent = incomingMessages.some((m) => hasPurchaseIntent(m.text));
+                if (hasIntent) {
+                  await sendPremiumOffer(contact.id);
+                  summary.offersSent++;
+                  contact.conv_state = "OFFER_SENT";
                 } else {
-                  // FREE_CHAT: respect operator aiMode setting.
-                  // Intent-based offer trigger fires first; AI phase system handles
-                  // rapport-building and soft pitching naturally via "auto" mode.
-                  const hasIntent = hasPurchaseIntent(text);
-                  if (hasIntent) {
-                    await sendPremiumOffer(contact.id);
+                  const { offerSent } = await sendAiReply(contact.id, aiMode);
+                  if (offerSent) {
                     summary.offersSent++;
                     contact.conv_state = "OFFER_SENT";
                   } else {
-                    const { offerSent } = await sendAiReply(contact.id, aiMode);
-                    if (offerSent) {
-                      // AI converted via [LINK] → real offer was sent.
-                      summary.offersSent++;
-                      contact.conv_state = "OFFER_SENT";
-                    } else {
-                      summary.repliesSent++;
-                    }
+                    summary.repliesSent++;
                   }
                 }
               }
