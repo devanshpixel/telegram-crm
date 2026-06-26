@@ -208,6 +208,17 @@ None.
 | Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 | Tests | PASS | `npm test` — 25/25 passing |
 
+## Batch 11: Production hardening + monitoring
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| Health check endpoint | FIXED | `app/api/health/route.ts` — checks DB, Razorpay, OpenRouter, Telegram session, env vars; returns healthy/degraded with per-check status |
+| Media routes locked out fans | FIXED | `middleware.ts:6` — `/api/media` added to PUBLIC_PATHS; routes have their own access control (isMediaUnlocked) |
+| recalculateLeadScore error skips cursor | FIXED | `pollMessages.ts:501-503` — moved inside reply try/catch; failure sets replyFailed=true preventing updateSyncCursor |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+| Tests | PASS | `npm test` — 25/25 passing |
+
 # Daily Summary
 
 Completed:
@@ -218,13 +229,16 @@ Completed:
   - Batch 8: End-to-end flow audit — 5 production bugs found and fixed
   - Batch 9: Spend segmentation (5 tiers, AI path, aligned thresholds) + money path automated tests (25/25)
   - Batch 10: Deep revenue audit + full production verification — 6 conversation fixes, all systems re-verified
-  - TASKS.md updated
+  - Health check endpoint (/api/health): DB, Razorpay, OpenRouter, Telegram, env vars; CRON_SECRET-gated
+  - Media routes added to PUBLIC_PATHS (fans clicking media links from Telegram got 401)
+  - recalculateLeadScore error in poll no longer silently advances cursor (replyFailed flag)
 
 Blocked:
   - None
 
 Next Highest Priority:
-  All critical paths verified. Ready for production deployment.
+  - Extension PPV loop (icons + packaging for Chrome Web Store)
+  - Secrets hygiene: review scripts/simulate-webhook.ts for hardcoded credentials, clean up real-looking values in .env.example
 
 ------------------------------------------------------------------------
 
