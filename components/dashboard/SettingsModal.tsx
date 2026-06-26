@@ -61,7 +61,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Offer Price (paise)
+              Offer Price (₹)
             </label>
             <input
               type="number"
@@ -72,7 +72,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
             />
             <p className="mt-1 text-xs text-gray-500">
-              In paise (e.g. 499 = ₹4.99). Default: 499
+              In rupees (e.g. 499 = ₹499). Default: 499. First-timers get 70% of this.
             </p>
           </div>
 
@@ -89,7 +89,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Message sent with the payment link. Use {"{link}"} for the payment URL.
+              Message sent before the payment link.
             </p>
           </div>
 

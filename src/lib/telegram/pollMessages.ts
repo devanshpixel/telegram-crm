@@ -229,7 +229,8 @@ export async function createPaymentLink(
 
 async function sendPremiumOffer(contactId: number): Promise<void> {
   const settings = await getOfferSettings();
-  const link = await createPaymentLink(contactId, settings.offerPrice);
+  const amount = await selectOfferAmount(contactId, settings.offerPrice);
+  const link = await createPaymentLink(contactId, amount);
   const text = `${settings.offerMessage}\n\n👉 ${link}`;
   await sendTelegramMessage(contactId, text);
   await setConvState(contactId, "OFFER_SENT", nowIso());
@@ -237,7 +238,9 @@ async function sendPremiumOffer(contactId: number): Promise<void> {
 
 
 export async function sendLockedResponse(contactId: number): Promise<void> {
-  const link = await createPaymentLink(contactId);
+  const settings = await getOfferSettings();
+  const amount = await selectOfferAmount(contactId, settings.offerPrice);
+  const link = await createPaymentLink(contactId, amount);
   const text = `Baby, this chat is locked now 😘💕 Unlock here for my exclusive content: ${link}`;
   await sendTelegramMessage(contactId, text);
   const db = await getDb();
@@ -258,17 +261,30 @@ async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
 }
 
 function hasPurchaseIntent(text: string): boolean {
-  // Must cover every "ready to buy" signal, including the ones the AI's own
-  // sales-mode detector reacts to (cost, pay, kitna, how much, join, link,
-  // membership). Otherwise those messages skip the clean offer path and fall
-  // through to the AI, which would emit the "[LINK]" conversion token.
-  const keywords = [
+  const lower = text.toLowerCase();
+  const direct = [
     "buy", "price", "cost", "pay", "payment", "premium", "vip", "exclusive",
     "subscription", "membership", "unlock", "join", "link", "how much",
-    "kitna", "kitne", "video", "content",
+    "kitna", "kitne", "video", "content", "send link",
   ];
-  const lower = text.toLowerCase();
-  return keywords.some((kw) => lower.includes(kw));
+  const indirect = [
+    "chahiye", "do na", "bhej de", "dikha", "want", "need", "show me",
+    "let me see", "i want", "mujhe", "de do",
+  ];
+  const urgency = ["right now", "fast", "quick", "jaldi", "abhi"];
+  if (direct.some((kw) => lower.includes(kw))) return true;
+  if (urgency.some((kw) => lower.includes(kw)) && indirect.some((kw) => lower.includes(kw))) return true;
+  return false;
+}
+
+async function selectOfferAmount(contactId: number, basePrice: number): Promise<number> {
+  const db = await getDb();
+  const row = await db
+    .prepare("SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM purchases WHERE contact_id = ?")
+    .get(contactId) as { count: number; total: number };
+  if (row.count === 0) return Math.round(basePrice * 0.7);
+  if (row.total >= 1500) return Math.round(basePrice * 1.5);
+  return basePrice;
 }
 
 async function checkOfferExpiry(contactId: number, offerSentAt: string | null): Promise<boolean> {

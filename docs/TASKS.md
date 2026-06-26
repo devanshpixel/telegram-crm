@@ -135,17 +135,31 @@ Examples:
 | Build | PASS | `npx tsc --noEmit` exits clean |
 | Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 
-## Batch 4: Currency consistency (BUG-6)
+## Batch 5: Conversation engine
 
 | Task | Status | How Verified |
 |------|--------|-------------|
-| BUG-5: one reply per contact per poll | VERIFIED | `pollMessages.ts` — replies moved outside inner message loop; incoming messages batched in array |
-| BUG-8: Hinglish locked copy | VERIFIED | `pollMessages.ts:240` — "Baby, this chat is locked now 😘💕" replaces "Premium chat is locked" |
-| [LINK] case-insensitive | VERIFIED | `pollMessages.ts:184,187,197` — `match(/\[link\]/i)` + `replace(/\[link\]/gi)` |
+| Nayra persona improved | VERIFIED | `suggest-reply.ts:6-18` — mirror energy, unpredictable, generic-free |
+| All 7 funnel phases enhanced | VERIFIED | `suggest-reply.ts:20-49` — specific, emotionally aware, actionable |
+| Objection detection | VERIFIED | `suggest-reply.ts:117-123` — `hasObjection()` function |
+| Auto mode routes objections to PHASE_6 | VERIFIED | `suggest-reply.ts:163-165` |
+| Mode prompts updated | VERIFIED | `suggest-reply.ts:52-81` — flirty, sales, reengagement, premium |
 | Build | PASS | `npx tsc --noEmit` exits clean |
 | Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 
-## Batch 4: Currency consistency (BUG-6)
+## Batch 6: Intent detection + offer ladder
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| Expanded intent keywords | VERIFIED | `pollMessages.ts:262-276` — direct + indirect + urgency signals |
+| Tiered offer pricing | VERIFIED | `pollMessages.ts:278-285` — `selectOfferAmount()`: 70% for first-timers, 150% for high-spenders |
+| Premium offer uses tiered price | VERIFIED | `pollMessages.ts:233` — `sendPremiumOffer` calls `selectOfferAmount` |
+| Locked response uses tiered price | VERIFIED | `pollMessages.ts:243` — `sendLockedResponse` calls `selectOfferAmount` |
+| Settings label fix | VERIFIED | `SettingsModal.tsx` — ₹ instead of paise, correct description |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+
+## Batch 7: Currency consistency (BUG-6)
 
 | Task | Status | How Verified |
 |------|--------|-------------|
@@ -167,16 +181,17 @@ None.
 # Daily Summary
 
 Completed:
-  - Batch 1: Production storage safety (BUG-2, BUG-1, 3 missing indexes)
-  - Batch 2: Money path hardening (BUG-3 atomic webhook, BUG-4 reconciliation route)
-  - Batch 3: Conversation quality (BUG-5 batch replies, BUG-8 Hinglish copy, [LINK] CI)
+  - Batches 1-4: Production safety, Money path, Conversation quality, Currency consistency
+  - Batch 5: Conversation engine (persona, phases, objections, mode prompts)
+  - Batch 6: Intent detection (expanded keywords) + multi-offer ladder (tiered pricing)
+  - Batch 7: Settings label fix (₹ not paise)
   - TASKS.md updated with execution plan
 
 Blocked:
   - None
 
 Next Highest Priority:
-  Task 5: Add automated tests (webhook, purchase/unlock, poll state machine, middleware)
+  Reminder engine improvements (Phase 6) or Re-engagement (Phase 7)
 
 ------------------------------------------------------------------------
 
