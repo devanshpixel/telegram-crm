@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { razorpay, WEBHOOK_SECRET } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
-import { createPurchase, recalculateLeadScore } from "@/lib/db/service";
+import { createPurchase, recalculateLeadScore, recordPaid, recordUpsell } from "@/lib/db/service";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 
 export async function POST(request: Request) {
@@ -61,6 +61,7 @@ export async function POST(request: Request) {
 
           // Lead score update
           await recalculateLeadScore(contactId);
+          await recordPaid(contactId);
 
           // Send Telegram confirmation (best-effort, never fails the webhook)
           try {
@@ -68,10 +69,43 @@ export async function POST(request: Request) {
             const mediaLink = mediaId
               ? `\n\nView it here: ${appUrl}/api/media/${mediaId}/file?contactId=${contactId}`
               : "";
+
+            const contact = await db.prepare("SELECT upsell_count, total_spent FROM contacts WHERE id = ?").get(contactId) as { upsell_count: number; total_spent: number } | undefined;
+            const upsellCount = contact?.upsell_count ?? 0;
+            const totalSpent = contact?.total_spent ?? 0;
+
+            // Upsell ladder: offer next tier after purchase
+            // Every completed purchase triggers an upsell offer 24h later via the post-purchase lifecycle
+            // The confirmation message hints at more content
             await sendTelegramMessage(
               contactId,
-              `✅ Payment successful! Your premium access has been unlocked${mediaLink}. Thank you for your support! ❤️`
+              `✅ Payment successful! Your premium access has been unlocked${mediaLink}. Thank you for your support! ❤️\n\nps... i've got something even more special for my favs. ask me about it 😉`
             );
+
+            // For first purchase, also send immediate upsell if total spent < 1000
+            if (upsellCount === 0 && totalSpent < 1000) {
+              const upsellPrice = Math.round(499 * 0.6);
+              const appUrl2 = process.env.APP_URL || `http://localhost:3000`;
+              const razorpay = (await import("@/lib/razorpay")).razorpay;
+              if (razorpay) {
+                const upsellLink = await razorpay.paymentLink.create({
+                  amount: Math.round(upsellPrice * 100),
+                  currency: "INR",
+                  description: "VIP Bundle Upgrade",
+                  customer: { name: "Fan" },
+                  notes: { contactId: String(contactId) },
+                  callback_url: `${appUrl2}/api/checkout/success`,
+                  callback_method: "get",
+                  options: { checkout: { name: "Nayra Premium" } },
+                } as Parameters<typeof razorpay.paymentLink.create>[0]);
+                const upsellUrl = (upsellLink as { short_url: string }).short_url;
+                await sendTelegramMessage(
+                  contactId,
+                  `🔥 special offer for our newest VIP: get the full bundle at just ₹${upsellPrice} — this is a one-time offer just for you!\n\n👉 ${upsellUrl}`
+                );
+                await recordUpsell(contactId, upsellPrice);
+              }
+            }
           } catch (e) {
             console.error(`[Razorpay Webhook] Failed to send Telegram confirmation to ${contactId}:`, e);
           }

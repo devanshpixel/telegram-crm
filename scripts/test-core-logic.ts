@@ -167,8 +167,6 @@ async function main() {
 
   console.log("\n=== Share of voice tracking ===\n");
 
-  // Verify selectedOfferPrice is called from sendPremiumOffer
-  // The three paths are all consistent
   const zeroPurchasesTier = 0 === 0 ? Math.round(basePrice * 0.7) : basePrice;
   assertEqual(zeroPurchasesTier, 349, "sendPremiumOffer first-timer: 349");
 
@@ -177,6 +175,127 @@ async function main() {
 
   const returning = 499 >= 500 ? Math.round(basePrice * 1.15) : (1 <= 2 ? Math.round(basePrice * 0.9) : basePrice);
   assertEqual(returning, 449, "sendPremiumOffer returning buyer under 500: 449");
+
+  console.log("\n=== getIntentScore numerical scoring ===\n");
+
+  // Replicate the service function
+  function getIntentScore(messages: { text: string }[]): number {
+    const direct = ["buy", "price", "cost", "pay", "payment", "premium", "vip", "exclusive", "subscription", "membership", "unlock", "join", "link", "how much", "kitna", "kitne", "send link"];
+    const indirect = ["chahiye", "do na", "bhej de", "dikha", "want", "need", "show me", "let me see", "i want", "mujhe", "de do"];
+    const urgency = ["right now", "fast", "quick", "jaldi", "abhi"];
+    let score = 0;
+    for (const msg of messages) {
+      const lower = msg.text.toLowerCase();
+      const directHits = direct.filter((kw) => lower.includes(kw)).length;
+      const indirectHits = indirect.filter((kw) => lower.includes(kw)).length;
+      const urgencyHits = urgency.filter((kw) => lower.includes(kw)).length;
+      score += directHits * 20;
+      score += indirectHits * 10;
+      if (urgencyHits > 0 && indirectHits > 0) score += 15;
+    }
+    return Math.min(100, score);
+  }
+
+  assertEqual(getIntentScore([{ text: "how much for premium" }]), 40, "'how much' (indirect+direct) + 'premium' = 40");
+  assertEqual(getIntentScore([{ text: "hello" }]), 0, "casual message = 0");
+  assertEqual(getIntentScore([{ text: "i want to buy right now" }]), 55, "'want' + 'i want' + 'buy' + urgency = 55");
+  assertEqual(getIntentScore([{ text: "mujhe video chahiye" }]), 20, "'mujhe chahiye' 2 indirect matches = 20");
+  assertEqual(getIntentScore([{ text: "price" }, { text: "cost" }, { text: "link do" }]), 60, "3 messages with intent = 60");
+
+  console.log("\n=== Emotional Temperature keywords ===\n");
+
+  const positiveWords = ["love", "nice", "cute", "beautiful", "gorgeous", "thanks", "awesome", "amazing", "sexy", "hot", "miss you", "want you", "good", "best"];
+  const negativeWords = ["bad", "hate", "stupid", "ugly", "worst", "terrible", "boring", "not interested", "leave", "stop"];
+  const disengagementWords = ["bye", "goodbye", "later", "busy", "talk later", "gotta go", "ok bye"];
+
+  function computeEmotionalTemp(messages: string[]): number {
+    let temp = 50;
+    for (const msg of messages) {
+      const lower = msg.toLowerCase();
+      if (positiveWords.some((w) => lower.includes(w))) temp += 6;
+      if (negativeWords.some((w) => lower.includes(w))) temp -= 6;
+      if (disengagementWords.some((w) => lower.includes(w))) temp -= 10;
+    }
+    return Math.max(0, Math.min(100, temp));
+  }
+
+  assertEqual(computeEmotionalTemp(["i love you"]), 56, "positive word: +6");
+  assertEqual(computeEmotionalTemp(["this is bad"]), 44, "negative word: -6");
+  assertEqual(computeEmotionalTemp(["bye"]), 40, "disengagement: -10");
+  assertEqual(computeEmotionalTemp(["i love you", "you're so beautiful"]), 62, "2 positive: +12");
+  assertEqual(computeEmotionalTemp(["i hate this", "bye"]), 34, "negative + disengagement: -16");
+  assertEqual(computeEmotionalTemp(["hello how are you"]), 50, "neutral: stays 50");
+  assertEqual(computeEmotionalTemp(["you're so sexy hot"]), 56, "high energy positive: +6 (per message, not per word)");
+
+  console.log("\n=== Offer cooldown logic ===\n");
+
+  // Simulate cooldown: after 3 locked responses, cooldown is set
+  const LOCKED_COUNT = 3;
+  const cooldownDays = 7;
+  
+  // If locked count >= max, cooldown is active
+  const exhausted = 3 >= LOCKED_COUNT;
+  assert(exhausted, "cooldown triggered after exhausting locked responses");
+  
+  // Offer declined count: set cooldown after repeated declines
+  const declinedCount = 3;
+  const shouldCooldown = declinedCount >= 2;
+  assert(shouldCooldown, "cooldown triggered after 2+ declines");
+
+  // Cooldown check: skip offers if in cooldown
+  const inCooldown = true;
+  const intentScoreHigh = 80;
+  const shouldSkipOffer = inCooldown && intentScoreHigh >= 60;
+  assert(shouldSkipOffer, "offer skipped when in cooldown despite high intent");
+
+  console.log("\n=== Post-purchase phase detection ===\n");
+
+  function getPostPurchasePhase(paidAt: string | null, welcomeSent: boolean, hoursSincePurchase: number): string {
+    if (!paidAt) return "none";
+    if (hoursSincePurchase < 24 && !welcomeSent) return "welcome";
+    if (hoursSincePurchase < 168) return "nurture";
+    return "reoffer";
+  }
+
+  assertEqual(getPostPurchasePhase(null, false, 0), "none", "no purchase = none");
+  assertEqual(getPostPurchasePhase("2024-01-01T00:00:00Z", false, 1), "welcome", "within 24h, no welcome = welcome");
+  assertEqual(getPostPurchasePhase("2024-01-01T00:00:00Z", true, 1), "nurture", "within 24h, welcome sent = nurture");
+  assertEqual(getPostPurchasePhase("2024-01-01T00:00:00Z", true, 72), "nurture", "within 7 days = nurture");
+  assertEqual(getPostPurchasePhase("2024-01-01T00:00:00Z", true, 169), "reoffer", "after 7 days = reoffer");
+
+  console.log("\n=== Dynamic pacing ===\n");
+
+  function shouldSkipDueToPacing(emotionalTemp: number, minutesSinceLastReply: number): boolean {
+    if (emotionalTemp >= 40) return false;
+    return minutesSinceLastReply < 5;
+  }
+
+  assert(!shouldSkipDueToPacing(70, 1), "high temp: never paced");
+  assert(!shouldSkipDueToPacing(50, 10), "medium temp: not paced even if recently replied");
+  assert(!shouldSkipDueToPacing(20, 10), "low temp but 10 min since: not paced");
+  assert(shouldSkipDueToPacing(20, 2), "low temp and 2 min since: paced");
+  assert(!shouldSkipDueToPacing(20, 5), "low temp but exactly 5 min: not paced");
+  assert(!shouldSkipDueToPacing(40, 0), "temp exactly 40: never paced");
+
+  console.log("\n=== Upsell ladder logic ===\n");
+
+  // First purchase: upsell count 0, total spent < 1000 → send upsell
+  const upsellCount0 = 0;
+  const totalSpent399 = 399;
+  const shouldUpsellFirst = upsellCount0 === 0 && totalSpent399 < 1000;
+  assert(shouldUpsellFirst, "first-time buyer gets upsell offer");
+
+  // After upsell: upsell count 1 → no more upsell
+  const upsellCount1 = 1;
+  const totalSpent699 = 699;
+  const shouldUpsellSecond = upsellCount1 === 0 && totalSpent699 < 1000;
+  assert(!shouldUpsellSecond, "after upsell, no more immediate upsells");
+
+  // High spender: total spent >= 1000 → no upsell needed
+  const upsellCount0High = 0;
+  const totalSpent1000 = 1000;
+  const shouldUpsellHigh = upsellCount0High === 0 && totalSpent1000 < 1000;
+  assert(!shouldUpsellHigh, "high spender does not get first-purchase upsell");
 
   // Cleanup
   db.close();

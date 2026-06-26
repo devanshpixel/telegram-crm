@@ -147,4 +147,14 @@ CREATE INDEX IF NOT EXISTS idx_broadcasts_trigger_created_at ON broadcasts(trigg
 CREATE INDEX IF NOT EXISTS idx_purchases_purchase_date ON purchases(purchase_date);
 CREATE INDEX IF NOT EXISTS idx_contacts_created_at ON contacts(created_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_last_purchase_date ON contacts(last_purchase_date);
+
+-- V2 columns (safe to re-run; IF NOT EXISTS handled by try-catch in migration)
+ALTER TABLE contacts ADD COLUMN emotional_temp REAL DEFAULT 50;
+ALTER TABLE contacts ADD COLUMN relationship_score INTEGER DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN offer_declined_count INTEGER DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN offer_cooldown_until TEXT;
+ALTER TABLE contacts ADD COLUMN paid_at TEXT;
+ALTER TABLE contacts ADD COLUMN post_purchase_welcome_sent INTEGER DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN last_upsell_at TEXT;
+ALTER TABLE contacts ADD COLUMN upsell_count INTEGER DEFAULT 0;
 `;

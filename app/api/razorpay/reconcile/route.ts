@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { razorpay } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
-import { createPurchase, recalculateLeadScore } from "@/lib/db/service";
+import { createPurchase, recalculateLeadScore, recordPaid, recordUpsell } from "@/lib/db/service";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 
 export const dynamic = "force-dynamic";
@@ -87,16 +87,46 @@ async function handle(req: Request) {
         });
 
         await recalculateLeadScore(contactId);
+        await recordPaid(contactId);
 
         try {
           const appUrl = process.env.APP_URL || `http://localhost:3000`;
           const mediaLink = typeof notes.mediaId === "string"
             ? `\n\nView it here: ${appUrl}/api/media/${notes.mediaId}/file?contactId=${contactId}`
             : "";
+
+          const contact2 = await db.prepare("SELECT upsell_count, total_spent FROM contacts WHERE id = ?").get(contactId) as { upsell_count: number; total_spent: number } | undefined;
+          const upsellCount = contact2?.upsell_count ?? 0;
+          const totalSpent = contact2?.total_spent ?? 0;
+
           await sendTelegramMessage(
             contactId,
-            `✅ Payment successful! Your premium access has been unlocked${mediaLink}. Thank you for your support! ❤️`
+            `✅ Payment successful! Your premium access has been unlocked${mediaLink}. Thank you for your support! ❤️\n\nps... i've got something even more special for my favs. ask me about it 😉`
           );
+
+          if (upsellCount === 0 && totalSpent < 1000) {
+            const upsellPrice = Math.round(499 * 0.6);
+            const appUrl2 = process.env.APP_URL || `http://localhost:3000`;
+            const razorpayLocal = (await import("@/lib/razorpay")).razorpay;
+            if (razorpayLocal) {
+              const upsellLink = await razorpayLocal.paymentLink.create({
+                amount: Math.round(upsellPrice * 100),
+                currency: "INR",
+                description: "VIP Bundle Upgrade",
+                customer: { name: "Fan" },
+                notes: { contactId: String(contactId) },
+                callback_url: `${appUrl2}/api/checkout/success`,
+                callback_method: "get",
+                options: { checkout: { name: "Nayra Premium" } },
+              } as Parameters<typeof razorpayLocal.paymentLink.create>[0]);
+              const upsellUrl = (upsellLink as { short_url: string }).short_url;
+              await sendTelegramMessage(
+                contactId,
+                `🔥 special offer for our newest VIP: get the full bundle at just ₹${upsellPrice} — this is a one-time offer just for you!\n\n👉 ${upsellUrl}`
+              );
+              await recordUpsell(contactId, upsellPrice);
+            }
+          }
         } catch (e) {
           console.error(`[Reconcile] Failed to send confirmation to ${contactId}:`, e);
         }

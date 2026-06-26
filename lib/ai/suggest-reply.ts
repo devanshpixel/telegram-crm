@@ -178,11 +178,14 @@ export function buildTranscript(
 const OBJECTION_WORDS = [
   "too much", "expensive", " costly", "no money", "nahi hai paisa", "free",
   "sample", "send first", "trust nahi", "scam", "fake", "later", "sochunga",
-  "wait", "not now", "next time", "baad mein", "dekhunga",
+  "wait", "not now", "next time", "baad mein", "dekhunga", "nahi", "no thanks",
+  "not interested", "pass", "ok ok", "not now", "nhi chahiye", "tension mat le",
+  "overpriced", "rip off", "dukh", "aaj nahi",
 ];
 
 export function detectMode(
   messages: { text: string; direction: "incoming" | "outgoing" }[],
+  emotionalTemp: number = 50,
 ): Exclude<ReplyMode, "auto"> {
   const lastIncoming = messages.filter((m) => m.direction === "incoming").slice(-3);
   const text = lastIncoming.map((m) => m.text.toLowerCase()).join(" ");
@@ -194,6 +197,9 @@ export function detectMode(
   if (salesWords.some((w) => text.includes(w))) return "sales";
   if (intentWords.some((w) => text.includes(w))) return "flirty";
   if (flirtWords.some((w) => text.includes(w))) return "flirty";
+
+  // If emotional temp is high, be warmer/more playful
+  if (emotionalTemp >= 70) return "flirty";
 
   return "casual";
 }
@@ -221,6 +227,8 @@ function getFallbackReply(): string {
 export async function suggestReply(
   messages: { text: string; direction: "incoming" | "outgoing" }[],
   mode: ReplyMode = "auto",
+  emotionalTemp: number = 50,
+  intentScore: number = 0,
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -228,7 +236,7 @@ export async function suggestReply(
   }
 
   const transcript = buildTranscript(messages);
-  const resolvedMode: Exclude<ReplyMode, "auto"> = mode === "auto" ? detectMode(messages) : mode;
+  const resolvedMode: Exclude<ReplyMode, "auto"> = mode === "auto" ? detectMode(messages, emotionalTemp) : mode;
   
   let systemPrompt: string;
   
@@ -238,8 +246,14 @@ export async function suggestReply(
     const lastText = messages.filter(m => m.direction === "incoming").slice(-1).map(m => m.text.toLowerCase()).join(" ");
     const linkRequested = /send link|link do|payment kar|pay karna|ready.*buy|ready.*pay|join kar|send.*payment/i.test(lastText);
 
-    if (linkRequested || (resolvedMode === "sales" && incomingCount > 5)) {
-      // Fan explicitly asked for the link or deep in sales convo → convert
+    // Emotional temperature aware phase routing:
+    // High temp + high intent → accelerate to offer
+    // Low temp → stay in rapport/qualification longer
+    const effectiveCount = emotionalTemp >= 70 ? incomingCount + 2 : emotionalTemp <= 30 ? incomingCount - 1 : incomingCount;
+    const adjustedCount = Math.max(0, effectiveCount);
+
+    if (linkRequested || intentScore >= 70 || (resolvedMode === "sales" && effectiveCount > 5)) {
+      // Fan explicitly asked for the link, high intent, or deep in sales convo → convert
       systemPrompt = SYSTEM_PERSONA + "\n\n" + getPhasePrompt("PHASE_7_CONVERSION");
     } else if (objected) {
       // Fan raised an objection — handle immediately regardless of count
@@ -247,13 +261,13 @@ export async function suggestReply(
     } else if (resolvedMode === "sales") {
       // Fan asked about price/join → offer
       systemPrompt = SYSTEM_PERSONA + "\n\n" + getPhasePrompt("PHASE_5_OFFER");
-    } else if (incomingCount > 6) {
+    } else if (adjustedCount > 6) {
       systemPrompt = SYSTEM_PERSONA + "\n\n" + getPhasePrompt("PHASE_5_OFFER");
-    } else if (incomingCount > 4) {
+    } else if (adjustedCount > 4) {
       systemPrompt = SYSTEM_PERSONA + "\n\n" + getPhasePrompt("PHASE_4_INTEREST");
-    } else if (incomingCount > 2) {
+    } else if (adjustedCount > 2) {
       systemPrompt = SYSTEM_PERSONA + "\n\n" + getPhasePrompt("PHASE_3_QUALIFICATION");
-    } else if (incomingCount > 1) {
+    } else if (adjustedCount > 1) {
       systemPrompt = SYSTEM_PERSONA + "\n\n" + getPhasePrompt("PHASE_2_RAPPORT");
     } else {
       systemPrompt = SYSTEM_PERSONA + "\n\n" + getPhasePrompt("PHASE_1_FIRST_CONTACT");

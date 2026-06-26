@@ -8,6 +8,14 @@ import {
   getSetting,
   updateSetting,
   recalculateLeadScore,
+  updateEmotionalTemp,
+  updateRelationshipScore,
+  getIntentScore,
+  isInOfferCooldown,
+  setOfferCooldown,
+  incrementOfferDeclined,
+  getPostPurchasePhase,
+  markWelcomeSent,
 } from "@/lib/db/service";
 import type { ConversationRow } from "@/lib/db/types";
 import type { ConvState, ReplyMode } from "@/types";
@@ -172,10 +180,12 @@ async function createContactFromDialog(entity: Api.User): Promise<ContactWithCon
 async function sendAiReply(
   contactId: number,
   mode: ReplyMode = "casual",
+  emotionalTemp: number = 50,
+  intentScore: number = 0,
 ): Promise<{ offerSent: boolean }> {
   const messages = await getMessagesByContactId(contactId);
   const recent = messages.slice(-20);
-  let reply = await suggestReply(recent, mode);
+  let reply = await suggestReply(recent, mode, emotionalTemp, intentScore);
 
   // The AI persona emits a literal "[LINK]" token when it decides to convert
   // the fan (sales/conversion phase). Nothing else substitutes it, so we MUST
@@ -254,6 +264,7 @@ export async function sendLockedResponse(contactId: number): Promise<void> {
 
   if (count >= LOCKED_MESSAGES.length) {
     await setConvState(contactId, "FREE_CHAT");
+    await setOfferCooldown(contactId, 7);
     return;
   }
 
@@ -270,6 +281,18 @@ export async function sendLockedResponse(contactId: number): Promise<void> {
     .run(ts, ts, contactId);
 }
 
+async function shouldSkipDueToPacing(contactId: number, emotionalTemp: number): Promise<boolean> {
+  // Dynamic pacing: low-engagement contacts get replies less frequently
+  if (emotionalTemp >= 40) return false;
+  const db = await getDb();
+  const row = await db
+    .prepare("SELECT updated_at FROM conversations WHERE contact_id = ?")
+    .get(contactId) as { updated_at: string } | undefined;
+  if (!row) return false;
+  const minutesSince = (Date.now() - new Date(row.updated_at).getTime()) / 60000;
+  return minutesSince < 5;
+}
+
 async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
   const db = await getDb();
   const row = (await db
@@ -278,29 +301,12 @@ async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
   if (!row) return false;
   if ((row.locked_response_count ?? 0) >= LOCKED_MESSAGES.length) {
     await setConvState(contactId, "FREE_CHAT");
+    await setOfferCooldown(contactId, 7);
     return false;
   }
   if (!row.last_locked_response_at) return true;
   const h = hoursSince(row.last_locked_response_at);
   return h >= 24;
-}
-
-function hasPurchaseIntent(text: string): boolean {
-  const lower = text.toLowerCase();
-  const direct = [
-    "buy", "price", "cost", "pay", "payment", "premium", "vip", "exclusive",
-    "subscription", "membership", "unlock", "join", "link", "how much",
-    "kitna", "kitne", "video", "content", "send link", "meeting", "voice",
-    "custom", "photos",
-  ];
-  const indirect = [
-    "chahiye", "do na", "bhej de", "dikha", "want", "need", "show me",
-    "let me see", "i want", "mujhe", "de do",
-  ];
-  const urgency = ["right now", "fast", "quick", "jaldi", "abhi"];
-  if (direct.some((kw) => lower.includes(kw))) return true;
-  if (urgency.some((kw) => lower.includes(kw)) && indirect.some((kw) => lower.includes(kw))) return true;
-  return false;
 }
 
 async function selectOfferAmount(contactId: number, basePrice: number): Promise<number> {
@@ -501,29 +507,59 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           if (incomingMessages.length > 0 && automatedReplies) {
             try {
               await recalculateLeadScore(contact.id);
+              const emotionalTemp = await updateEmotionalTemp(contact.id);
+              const intentScore = await getIntentScore(incomingMessages);
+              await updateRelationshipScore(contact.id);
 
-              if (contact.conv_state === "PAID") {
-                await sendAiReply(contact.id, "casual");
-                summary.repliesSent++;
-              } else if (contact.conv_state === "OFFER_SENT") {
-                if (await shouldSendLockedResponse(contact.id)) {
-                  await sendLockedResponse(contact.id);
-                  summary.remindersSent++;
-                }
-              } else {
-                const hasIntent = incomingMessages.some((m) => hasPurchaseIntent(m.text));
-                if (hasIntent) {
+              const skipReply = await shouldSkipDueToPacing(contact.id, emotionalTemp);
+
+              if (!skipReply && contact.conv_state === "PAID") {
+                const phase = await getPostPurchasePhase(contact.id);
+                if (phase === "welcome") {
+                  const welcomeMsg = "you're officially my VIP now 😘💕 i don't let everyone in here, so feel special. want to see what else i've got for my favs?";
+                  await sendTelegramMessage(contact.id, welcomeMsg);
+                  await markWelcomeSent(contact.id);
+                  summary.repliesSent++;
+                } else if (phase === "reoffer") {
                   await sendPremiumOffer(contact.id);
                   summary.offersSent++;
                   contact.conv_state = "OFFER_SENT";
                 } else {
-                  const { offerSent } = await sendAiReply(contact.id, aiMode);
+                  await sendAiReply(contact.id, "casual", emotionalTemp, intentScore);
+                  summary.repliesSent++;
+                }
+              } else if (!skipReply && contact.conv_state === "OFFER_SENT") {
+                if (await shouldSendLockedResponse(contact.id)) {
+                  await sendLockedResponse(contact.id);
+                  summary.remindersSent++;
+                }
+              } else if (!skipReply) {
+                const inCooldown = await isInOfferCooldown(contact.id);
+
+                if (intentScore >= 60 && !inCooldown) {
+                  await sendPremiumOffer(contact.id);
+                  summary.offersSent++;
+                  contact.conv_state = "OFFER_SENT";
+                } else if (intentScore >= 30) {
+                  const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore);
                   if (offerSent) {
                     summary.offersSent++;
                     contact.conv_state = "OFFER_SENT";
                   } else {
                     summary.repliesSent++;
                   }
+                } else {
+                  const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore);
+                  if (offerSent) {
+                    summary.offersSent++;
+                    contact.conv_state = "OFFER_SENT";
+                  } else {
+                    summary.repliesSent++;
+                  }
+                }
+
+                if (contact.conv_state === "OFFER_SENT" && intentScore < 20) {
+                  await incrementOfferDeclined(contact.id);
                 }
               }
             } catch (e) {

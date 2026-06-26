@@ -237,8 +237,9 @@ export async function createContact(input: CreateContactInput): Promise<ContactP
           name, username, avatar, avatar_color, phone, email, company, location,
           joined_at, revenue, revenue_trend, lead_score, lead_status, is_online,
           ppv_count, telegram_id, telegram_access_hash, total_spent, vip_level,
-          fan_status, fan_score, last_purchase_date, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          fan_status, fan_score, last_purchase_date, emotional_temp, relationship_score,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 50, 0, ?, ?)`,
       )
       .run(
         input.name,
@@ -1686,4 +1687,221 @@ export async function deleteMedia(id: number): Promise<boolean> {
   } catch {
   }
   return true;
+}
+
+const POSITIVE_WORDS = ["love", "nice", "cute", "beautiful", "gorgeous", "thanks", "thank", "awesome", "amazing", "wonderful", "great", "sweet", "pretty", "sexy", "hot", "miss you", "want you", "good", "best"];
+const NEGATIVE_WORDS = ["bad", "hate", "stupid", "ugly", "worst", "terrible", "awful", "no", "don't", "dont", "not interested", "leave", "stop", "boring", "waste"];
+const HIGH_ENERGY_WORDS = ["sexy", "hot", "miss you", "want you", "die", "crazy", "wild", "🔥", "❤️", "😍", "😘", "💕"];
+const DISENGAGEMENT_WORDS = ["bye", "goodbye", "later", "busy", "talk later", "gotta go", "hh", "ok bye", "tata", "night", "sleep"];
+
+export async function updateEmotionalTemp(contactId: number): Promise<number> {
+  const db = await getDb();
+  const last5 = await db
+    .prepare(
+      "SELECT text FROM messages m INNER JOIN conversations c ON m.conversation_id = c.id WHERE c.contact_id = ? AND m.direction = 'incoming' ORDER BY m.created_at DESC LIMIT 5"
+    )
+    .all(contactId) as { text: string }[];
+
+  let temp = 50;
+  for (const msg of last5) {
+    const lower = msg.text.toLowerCase();
+    if (POSITIVE_WORDS.some((w) => lower.includes(w))) temp += 6;
+    if (HIGH_ENERGY_WORDS.some((w) => lower.includes(w))) temp += 8;
+    if (NEGATIVE_WORDS.some((w) => lower.includes(w))) temp -= 6;
+    if (DISENGAGEMENT_WORDS.some((w) => lower.includes(w))) temp -= 10;
+  }
+
+  temp = Math.max(0, Math.min(100, temp));
+
+  await db
+    .prepare("UPDATE contacts SET emotional_temp = ?, updated_at = ? WHERE id = ?")
+    .run(temp, nowIso(), contactId);
+
+  return temp;
+}
+
+export async function updateRelationshipScore(contactId: number): Promise<number> {
+  const db = await getDb();
+  const contact = await db.prepare("SELECT * FROM contacts WHERE id = ?").get(contactId) as ContactRow | undefined;
+  if (!contact) return 0;
+
+  let score = 0;
+
+  const msgCount = await db
+    .prepare("SELECT COUNT(*) AS count FROM messages m INNER JOIN conversations c ON m.conversation_id = c.id WHERE c.contact_id = ?")
+    .get(contactId) as { count: number };
+  score += Math.min(msgCount.count, 20);
+
+  if (contact.created_at) {
+    const daysSince = (Date.now() - new Date(contact.created_at).getTime()) / 86400000;
+    score += Math.min(Math.floor(daysSince), 15);
+  }
+
+  const purchaseRow = await db
+    .prepare("SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM purchases WHERE contact_id = ?")
+    .get(contactId) as { count: number; total: number };
+  if (purchaseRow.count > 0) {
+    score += 30;
+    score += Math.min(purchaseRow.count * 5, 10);
+  }
+
+  score += Math.floor((contact.emotional_temp - 50) * 0.3);
+
+  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+
+  await db
+    .prepare("UPDATE contacts SET relationship_score = ?, updated_at = ? WHERE id = ?")
+    .run(finalScore, nowIso(), contactId);
+
+  return finalScore;
+}
+
+export async function incrementOfferDeclined(contactId: number): Promise<void> {
+  const db = await getDb();
+  await db
+    .prepare("UPDATE contacts SET offer_declined_count = offer_declined_count + 1, updated_at = ? WHERE id = ?")
+    .run(nowIso(), contactId);
+}
+
+export async function setOfferCooldown(contactId: number, cooldownDays: number = 7): Promise<void> {
+  const db = await getDb();
+  const until = new Date(Date.now() + cooldownDays * 86400000).toISOString();
+  await db
+    .prepare("UPDATE contacts SET offer_cooldown_until = ?, updated_at = ? WHERE id = ?")
+    .run(until, nowIso(), contactId);
+}
+
+export async function getOfferCooldownRemaining(contactId: number): Promise<number> {
+  const db = await getDb();
+  const row = await db
+    .prepare("SELECT offer_cooldown_until FROM contacts WHERE id = ?")
+    .get(contactId) as { offer_cooldown_until: string | null } | undefined;
+  if (!row?.offer_cooldown_until) return 0;
+  const remaining = new Date(row.offer_cooldown_until).getTime() - Date.now();
+  return Math.max(0, Math.ceil(remaining / 86400000));
+}
+
+export async function isInOfferCooldown(contactId: number): Promise<boolean> {
+  return (await getOfferCooldownRemaining(contactId)) > 0;
+}
+
+export type PostPurchasePhase = "welcome" | "nurture" | "reoffer" | "none";
+
+export async function getPostPurchasePhase(contactId: number): Promise<PostPurchasePhase> {
+  const db = await getDb();
+  const row = await db
+    .prepare("SELECT paid_at, post_purchase_welcome_sent, last_upsell_at FROM contacts WHERE id = ?")
+    .get(contactId) as { paid_at: string | null; post_purchase_welcome_sent: number; last_upsell_at: string | null } | undefined;
+
+  if (!row?.paid_at) return "none";
+
+  const hoursSince = (Date.now() - new Date(row.paid_at).getTime()) / 3600000;
+
+  if (hoursSince < 24 && !row.post_purchase_welcome_sent) return "welcome";
+  if (hoursSince < 168) return "nurture";
+  return "reoffer";
+}
+
+export async function markWelcomeSent(contactId: number): Promise<void> {
+  const db = await getDb();
+  await db
+    .prepare("UPDATE contacts SET post_purchase_welcome_sent = 1, updated_at = ? WHERE id = ?")
+    .run(nowIso(), contactId);
+}
+
+export async function recordPaid(contactId: number): Promise<void> {
+  const db = await getDb();
+  const ts = nowIso();
+  await db
+    .prepare("UPDATE contacts SET paid_at = COALESCE(paid_at, ?), conv_state = 'PAID', updated_at = ? WHERE id = ?")
+    .run(ts, ts, contactId);
+}
+
+export async function recordUpsell(contactId: number, amount: number): Promise<void> {
+  const db = await getDb();
+  const ts = nowIso();
+  await db
+    .prepare("UPDATE contacts SET upsell_count = upsell_count + 1, last_upsell_at = ?, updated_at = ? WHERE id = ?")
+    .run(ts, ts, contactId);
+  await createPurchase({
+    contactId,
+    amount,
+    purchaseDate: ts.split("T")[0],
+    kind: "upsell",
+    note: `upsell_${ts}`,
+    markPaid: true,
+  });
+}
+
+export async function getIntentScore(messages: { text: string }[]): Promise<number> {
+  const direct = [
+    "buy", "price", "cost", "pay", "payment", "premium", "vip", "exclusive",
+    "subscription", "membership", "unlock", "join", "link", "how much",
+    "kitna", "kitne", "send link", "meeting", "voice", "custom", "photos",
+  ];
+  const indirect = [
+    "chahiye", "do na", "bhej de", "dikha", "want", "need", "show me",
+    "let me see", "i want", "mujhe", "de do",
+  ];
+  const urgency = ["right now", "fast", "quick", "jaldi", "abhi"];
+
+  let score = 0;
+  for (const msg of messages) {
+    const lower = msg.text.toLowerCase();
+    const directHits = direct.filter((kw) => lower.includes(kw)).length;
+    const indirectHits = indirect.filter((kw) => lower.includes(kw)).length;
+    const urgencyHits = urgency.filter((kw) => lower.includes(kw)).length;
+
+    score += directHits * 20;
+    score += indirectHits * 10;
+    if (urgencyHits > 0 && indirectHits > 0) score += 15;
+  }
+
+  return Math.min(100, score);
+}
+
+export async function getRevenueAnalytics(): Promise<{
+  conversionRate: number;
+  offerAcceptanceByTier: Record<string, { sent: number; purchased: number; rate: number }>;
+  aov: number;
+  ltv: number;
+  repeatPurchaseRate: number;
+}> {
+  const db = await getDb();
+
+  const totalOffers = (await db
+    .prepare("SELECT COUNT(*) AS count FROM contacts WHERE offer_sent = 1")
+    .get() as { count: number }).count;
+
+  const totalBuyers = (await db
+    .prepare("SELECT COUNT(DISTINCT contact_id) AS count FROM purchases")
+    .get() as { count: number }).count;
+
+  const conversionRate = totalOffers > 0 ? Math.round((totalBuyers / totalOffers) * 100) : 0;
+
+  const aovRow = await db
+    .prepare("SELECT COALESCE(AVG(amount), 0) AS avg FROM purchases")
+    .get() as { avg: number };
+  const aov = Math.round(aovRow.avg);
+
+  const ltvRow = await db
+    .prepare("SELECT COALESCE(AVG(total_spent), 0) AS avg FROM contacts WHERE total_spent > 0")
+    .get() as { avg: number };
+  const ltv = Math.round(ltvRow.avg);
+
+  const totalBuyersCount = (await db
+    .prepare("SELECT COUNT(DISTINCT contact_id) AS count FROM purchases")
+    .get() as { count: number }).count;
+  const repeatBuyers = (await db
+    .prepare("SELECT COUNT(*) AS count FROM (SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) > 1)")
+    .get() as { count: number }).count;
+  const repeatPurchaseRate = totalBuyersCount > 0 ? Math.round((repeatBuyers / totalBuyersCount) * 100) : 0;
+
+  return {
+    conversionRate,
+    offerAcceptanceByTier: {},
+    aov,
+    ltv,
+    repeatPurchaseRate,
+  };
 }

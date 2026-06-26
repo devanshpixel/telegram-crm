@@ -28,6 +28,14 @@ export interface ContactRow {
   conv_state: string;
   offer_sent_at: string | null;
   last_locked_response_at: string | null;
+  emotional_temp: number;
+  relationship_score: number;
+  offer_declined_count: number;
+  offer_cooldown_until: string | null;
+  paid_at: string | null;
+  post_purchase_welcome_sent: number;
+  last_upsell_at: string | null;
+  upsell_count: number;
 }
 
 export interface ConversationRow {

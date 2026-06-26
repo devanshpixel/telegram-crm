@@ -219,7 +219,33 @@ None.
 | Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 | Tests | PASS | `npm test` — 25/25 passing |
 
-## Batch 12: Conversation engine quality + secrets hygiene
+## Batch 13: V2 Revenue Engine — Emotional Temperature, Intent Scoring, Post-Purchase Lifecycle, Upsell Ladder, Abandonment Recovery, Analytics
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| Schema: added emotional_temp, relationship_score, offer_declined_count, offer_cooldown_until, paid_at, post_purchase_welcome_sent, last_upsell_at, upsell_count columns | DONE | `lib/db/schema.ts:151-158` — ALTER TABLE statements; `lib/db/types.ts:32-35` — ContactRow fields |
+| Service: updateEmotionalTemp() — sentiment analysis on last 5 messages | DONE | `lib/db/service.ts:1691-1711` — positive (+6), negative (-6), disengagement (-10), high-energy (+8) keywords |
+| Service: updateRelationshipScore() — composite from messages, days, purchases, emotional temp | DONE | `lib/db/service.ts:1713-1737` — message count (max 20), days since (max 15), purchase bonus (30+), temp contribution |
+| Service: getIntentScore() — numerical 0-100 scoring | DONE | `lib/db/service.ts:1785-1806` — direct (20pt), indirect (10pt), urgency+indirect bonus (15pt) |
+| Service: offer cooldown (incrementOfferDeclined, setOfferCooldown, isInOfferCooldown) | DONE | `lib/db/service.ts:1739-1757` — tracks declined count, sets/checks cooldown period |
+| Service: post-purchase phases (getPostPurchasePhase, markWelcomeSent, recordPaid) | DONE | `lib/db/service.ts:1759-1783` — welcome (<24h), nurture (1-7d), reoffer (>7d) |
+| Service: recordUpsell() — tracks upsell purchases | DONE | `lib/db/service.ts:1771-1783` — creates upsell purchase row, increments upsell_count |
+| Service: getRevenueAnalytics() — conversion rate, AOV, LTV, repeat purchase rate | DONE | `lib/db/service.ts:1808-1846` — all key revenue metrics |
+| Conversation Engine V2: emotional temp-aware phase routing | DONE | `lib/ai/suggest-reply.ts:235-240` — effectiveCount adjusted by emotional temp (high=+2, low=-1) |
+| Conversation Engine V2: intent score thresholds (>=60 direct offer, >=30 sales mode, <30 casual) | DONE | `pollMessages.ts:507-518` — three-tier scoring replaces boolean hasPurchaseIntent |
+| Emotional temperature updates on every incoming message | DONE | `pollMessages.ts:478-481` — updateEmotionalTemp + getIntentScore + updateRelationshipScore per poll cycle |
+| Dynamic conversation pacing: skip low-temp contacts recently replied | DONE | `pollMessages.ts:76-85` — shouldSkipDueToPacing(): temp<40 + replied<5min → skip |
+| Offer cooldown: exhausted locked responses set 7-day cooldown | DONE | `pollMessages.ts:249,266` — setOfferCooldown when locked count exhausted or declined |
+| Post-purchase lifecycle: welcome → nurture → reoffer in poll loop | DONE | `pollMessages.ts:487-505` — PAID state checked for phase, welcome sent once, reoffer after 7d |
+| Upsell ladder in webhook: first-purchase upsell at 60% price | DONE | `webhook/route.ts:72-95` — immediate upsell offer for first-time buyers |
+| Upsell ladder in reconcile: same logic for recovered payments | DONE | `reconcile/route.ts:89-120` — same upsell logic on reconciliation |
+| Abandonment recovery cron: remind unpaid link creators after 30min | DONE | `app/api/razorpay/recover/route.ts` — new cron, queries Razorpay for created links >30min old, sends reminder once |
+| Revenue analytics API route | DONE | `app/api/analytics/revenue/route.ts` — conversion rate, AOV, LTV, repeat purchase rate, emotional temp averages |
+| Middleware: recover route in CRON_PATHS | DONE | `middleware.ts:9` — added `/api/razorpay/recover` |
+| Tests: 29 new V2 tests (intent scoring, emotional temp, cooldown, post-purchase phases, pacing, upsell ladder) | DONE | `scripts/test-core-logic.ts` — 54 total tests (was 25), all passing |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+| Tests | PASS | `npm test` — 54/54 passing |
 
 | Task | Status | How Verified |
 |------|--------|-------------|
@@ -237,10 +263,19 @@ None.
 # Daily Summary
 
 Completed:
-  - All 12 batches complete
-  - Conversation engine: prompt variants, banned phrases, expanded intent keywords
-  - Secrets hygiene: hardcoded credentials removed from scripts and .env.example
-  - Production bug hunt: all critical paths verified (poll lock, webhook, reconciliation, payment idempotency, cursor safety, DB connection pooling)
+  - Batch 13: V2 Revenue Engine (10 features, all verified)
+    - Emotional Temperature system: per-message sentiment tracking (0-100)
+    - Purchase Intent scoring: numerical (0-100) replaces boolean matching
+    - Relationship score: composite from messages, purchases, engagement depth
+    - Dynamic conversation pacing: adaptive reply cadence based on engagement
+    - Offer cooldown logic: 7-day pause after declined offers
+    - Post-purchase lifecycle: welcome → nurture → reoffer (7-day cycle)
+    - Upsell ladder: first-purchase upsell at 60% price via webhook + reconcile
+    - Checkout abandonment recovery: new cron, 30min+ unpaid link reminders
+    - Revenue analytics API: conversion rate, AOV, LTV, repeat purchase rate
+    - Conversation Engine V2: emotional temp + intent score aware phase routing
+  - 29 new tests added (54 total, up from 25)
+  - Clean TSC, clean lint
 
 Blocked:
   - None
