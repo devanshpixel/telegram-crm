@@ -95,7 +95,7 @@ Examples:
 | 1 | **Make production storage safe** — BUG-2 (throw on no Turso in prod), BUG-1 (Turso transactions), missing indexes | DONE |
 | 2 | **Harden the money path** — BUG-3 (webhook idempotency), BUG-4 (payment reconciliation) | DONE |
 | 3 | **Improve conversation conversion quality** — BUG-5 (one reply per burst), BUG-8 (Hinglish locked copy), [LINK] robustness | DONE |
-| 4 | **Fix currency consistency** to INR — BUG-6 | PENDING |
+| 4 | **Fix currency consistency** to INR — BUG-6 | DONE |
 | 5 | **Add automated tests** — webhook, purchase/unlock, poll state machine, middleware | PENDING |
 | 6 | **Complete extension PPV loop** — gallery + upload + unlock UI | PENDING |
 | 7 | **Secrets & hygiene** — rotate committed keys, prune artifacts, quiet logging, rewrite stale docs | PENDING |
@@ -135,6 +135,27 @@ Examples:
 | Build | PASS | `npx tsc --noEmit` exits clean |
 | Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 
+## Batch 4: Currency consistency (BUG-6)
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| BUG-5: one reply per contact per poll | VERIFIED | `pollMessages.ts` — replies moved outside inner message loop; incoming messages batched in array |
+| BUG-8: Hinglish locked copy | VERIFIED | `pollMessages.ts:240` — "Baby, this chat is locked now 😘💕" replaces "Premium chat is locked" |
+| [LINK] case-insensitive | VERIFIED | `pollMessages.ts:184,187,197` — `match(/\[link\]/i)` + `replace(/\[link\]/gi)` |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+
+## Batch 4: Currency consistency (BUG-6)
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| formatCurrency uses INR | VERIFIED | `lib/utils.ts:40-54` — `currency: "INR"`, locale `en-IN` |
+| Follow-up hint prefix `$` → `₹` | VERIFIED | `lib/db/service.ts:1473` — `₹` prefix |
+| Description text `$` → `₹` | VERIFIED | `lib/db/service.ts:1526` — "₹200+" |
+| Lead score tier adjusted for INR | VERIFIED | `lib/db/service.ts:1639` — `+1 per ₹100` (was per $10) |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+
 ------------------------------------------------------------------------
 
 # Blockers
@@ -155,7 +176,7 @@ Blocked:
   - None
 
 Next Highest Priority:
-  Task 4: Fix currency consistency to INR (BUG-6)
+  Task 5: Add automated tests (webhook, purchase/unlock, poll state machine, middleware)
 
 ------------------------------------------------------------------------
 

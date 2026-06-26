@@ -39,16 +39,16 @@ export function formatTime(dateInput: Date | string): string {
 
 export function formatCurrency(amount: number, compact = false): string {
   if (compact && amount >= 1000) {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat("en-IN", {
       style: "currency",
-      currency: "USD",
+      currency: "INR",
       notation: "compact",
       maximumFractionDigits: 1,
     }).format(amount);
   }
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
     maximumFractionDigits: 0,
   }).format(amount);
 }

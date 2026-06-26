@@ -1470,7 +1470,7 @@ async function getFollowUpHighSpenderInactive(minSpent: number, days: number, li
       days_since: number;
     }[];
   return rows.map((r) =>
-    mapFollowUpRow({ ...r, hint_value: `$${r.total_spent.toFixed(0)}` }),
+    mapFollowUpRow({ ...r, hint_value: `₹${r.total_spent.toFixed(0)}` }),
   );
 }
 
@@ -1523,7 +1523,7 @@ export async function getFollowUps(limit: number = 10): Promise<FollowUpData> {
     {
       key: "high_spender_inactive",
       title: "High spender inactive",
-      description: "Top spenders (≥$200) silent for 30+ days",
+      description: "Top spenders (₹200+) silent for 30+ days",
       count: 0,
       items: await getFollowUpHighSpenderInactive(200, 30, limit),
     },
@@ -1636,7 +1636,7 @@ export async function recalculateLeadScore(contactId: number): Promise<number> {
   
   if (purchaseRow.count > 0) {
     score += 30; // Customer bonus
-    score += Math.min(Math.floor(purchaseRow.total / 10), 20); // +1 per $10, max +20
+    score += Math.min(Math.floor(purchaseRow.total / 100), 20); // +1 per ₹100, max +20
   }
 
   // 3. Intent keywords in last 5 messages
