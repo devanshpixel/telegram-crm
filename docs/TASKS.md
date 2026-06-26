@@ -93,7 +93,7 @@ Examples:
 | # | Task | Status |
 |---|------|--------|
 | 1 | **Make production storage safe** — BUG-2 (throw on no Turso in prod), BUG-1 (Turso transactions), missing indexes | DONE |
-| 2 | **Harden the money path** — BUG-3 (webhook idempotency), BUG-4 (payment reconciliation) | PENDING |
+| 2 | **Harden the money path** — BUG-3 (webhook idempotency), BUG-4 (payment reconciliation) | DONE |
 | 3 | **Improve conversation conversion quality** — BUG-5 (one reply per burst), BUG-8 (Hinglish locked copy), [LINK] robustness | PENDING |
 | 4 | **Fix currency consistency** to INR — BUG-6 | PENDING |
 | 5 | **Add automated tests** — webhook, purchase/unlock, poll state machine, middleware | PENDING |
@@ -115,6 +115,16 @@ Examples:
 | Build | PASS | `npx tsc --noEmit` exits clean |
 | Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 
+## Batch 2: Money path hardening
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| BUG-3: atomic webhook idempotency | VERIFIED | `lib/db/service.ts` — idempotency check moved inside `createPurchase` transaction; `paymentId` param |
+| BUG-4: payment reconciliation route | VERIFIED | `app/api/razorpay/reconcile/route.ts` — new cron endpoint, same CRON_SECRET gate as poll/remind |
+| Recon middleware gate | VERIFIED | `middleware.ts:9` — `/api/razorpay/reconcile` added to `CRON_PATHS` |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+
 ------------------------------------------------------------------------
 
 # Blockers
@@ -126,9 +136,8 @@ None.
 # Daily Summary
 
 Completed:
-  - BUG-2: Production DB guard now throws instead of logging
-  - BUG-1: Turso transactions now execute on the tx handle
-  - Missing indexes added to SCHEMA_SQL (3 indexes)
+  - Batch 1: Production storage safety (BUG-2, BUG-1, 3 missing indexes)
+  - Batch 2: Money path hardening (BUG-3 atomic webhook, BUG-4 reconciliation route)
   - TASKS.md updated with execution plan
 
 In Progress:
@@ -138,7 +147,8 @@ Blocked:
   - None
 
 Next Highest Priority:
-  Task 2: Harden the money path (BUG-3 webhook idempotency, BUG-4 payment reconciliation)
+  Task 3: Improve conversation conversion quality (BUG-5 one reply per burst,
+           BUG-8 Hinglish locked copy, [LINK] robustness)
 
 ------------------------------------------------------------------------
 

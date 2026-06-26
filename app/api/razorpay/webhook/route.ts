@@ -47,30 +47,22 @@ export async function POST(request: Request) {
           ? `media_unlock:${mediaId}:razorpay_payment:${paymentId}`
           : `razorpay_payment:${paymentId}`;
 
-        const existing = await db
-          .prepare("SELECT id FROM purchases WHERE note LIKE ?")
-          .get(`%razorpay_payment:${paymentId}%`);
-          
-        if (!existing) {
-          // purchase insert + conv_state='PAID' + revenue update all in one transaction
-          try {
-            await createPurchase({
-              contactId,
-              amount: amountPaid / 100,
-              purchaseDate: new Date().toISOString().split("T")[0],
-              kind: "ppv",
-              note,
-              markPaid: true,
-            });
+        // Atomic check-and-insert inside the transaction (see createPurchase paymentId param)
+        try {
+          await createPurchase({
+            contactId,
+            amount: amountPaid / 100,
+            purchaseDate: new Date().toISOString().split("T")[0],
+            kind: "ppv",
+            note,
+            markPaid: true,
+            paymentId,
+          });
 
-            // Task D: Update lead score
-            await recalculateLeadScore(contactId);
-          } catch (error) {
-            console.error("[Razorpay Webhook] Payment record failed:", error);
-            throw error;
-          }
+          // Lead score update
+          await recalculateLeadScore(contactId);
 
-          // Task A: Send Telegram confirmation (best-effort, never fails the webhook)
+          // Send Telegram confirmation (best-effort, never fails the webhook)
           try {
             await sendTelegramMessage(
               contactId,
@@ -79,6 +71,9 @@ export async function POST(request: Request) {
           } catch (e) {
             console.error(`[Razorpay Webhook] Failed to send Telegram confirmation to ${contactId}:`, e);
           }
+        } catch (error) {
+          console.error("[Razorpay Webhook] Payment record failed:", error);
+          throw error;
         }
       }
     }

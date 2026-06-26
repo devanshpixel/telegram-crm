@@ -510,6 +510,8 @@ export interface CreatePurchaseInput {
   note?: string;
   kind?: string;
   markPaid?: boolean;
+  /** Razorpay payment ID for atomic idempotency check inside the transaction */
+  paymentId?: string;
 }
 
 export async function createPurchase(input: CreatePurchaseInput): Promise<Purchase> {
@@ -520,6 +522,18 @@ export async function createPurchase(input: CreatePurchaseInput): Promise<Purcha
   if (!contact) throw new Error("Contact not found");
 
   const insertAndUpdateStats = db.transaction(async () => {
+    if (input.paymentId) {
+      const existing = await db
+        .prepare("SELECT id FROM purchases WHERE note LIKE ?")
+        .get(`%razorpay_payment:${input.paymentId}%`);
+      if (existing) {
+        const row = await db
+          .prepare("SELECT * FROM purchases WHERE id = ?")
+          .get((existing as { id: number }).id) as import("./types").PurchaseRow;
+        return row;
+      }
+    }
+
     const result = await db
       .prepare(
         `INSERT INTO purchases (contact_id, amount, purchase_date, note, kind, created_at)

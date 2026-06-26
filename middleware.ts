@@ -6,7 +6,7 @@ import type { NextRequest } from "next/server";
 const PUBLIC_PATHS = ["/api/razorpay/webhook"];
 
 // Scheduler endpoints — authenticated with CRON_SECRET (not the CRM key).
-const CRON_PATHS = ["/api/telegram/poll", "/api/telegram/remind"];
+const CRON_PATHS = ["/api/telegram/poll", "/api/telegram/remind", "/api/razorpay/reconcile"];
 
 const SESSION_COOKIE = "crm_session";
 
