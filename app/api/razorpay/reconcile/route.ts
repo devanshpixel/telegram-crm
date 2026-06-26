@@ -89,9 +89,13 @@ async function handle(req: Request) {
         await recalculateLeadScore(contactId);
 
         try {
+          const appUrl = process.env.APP_URL || `http://localhost:3000`;
+          const mediaLink = typeof notes.mediaId === "string"
+            ? `\n\nView it here: ${appUrl}/api/media/${notes.mediaId}/file?contactId=${contactId}`
+            : "";
           await sendTelegramMessage(
             contactId,
-            "✅ Payment successful! Your premium access has been unlocked. Thank you for your support! ❤️"
+            `✅ Payment successful! Your premium access has been unlocked${mediaLink}. Thank you for your support! ❤️`
           );
         } catch (e) {
           console.error(`[Reconcile] Failed to send confirmation to ${contactId}:`, e);
