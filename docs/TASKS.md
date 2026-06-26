@@ -190,6 +190,18 @@ None.
 | Build | PASS | `npx tsc --noEmit` exits clean |
 | Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 
+## Batch 9: Spend segmentation + automated tests
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| Tiered pricing applies to AI [LINK] path | FIXED | `pollMessages.ts:187-189` — `sendAiReply` now calls `selectOfferAmount` before `createPaymentLink` |
+| Granular pricing tiers (5 tiers) | FIXED | `pollMessages.ts:303-313` — 70% first-timer, 90% ≤2 purchases/<₹500, 115% ₹500-1499, 150% ₹1500+ |
+| High spender threshold aligned ₹1500 | FIXED | `service.ts:1535` — follow-up list threshold ₹200→₹1500 |
+| Core logic automated tests | FIXED | `scripts/test-core-logic.ts` — 25 tests: pricing tiers, intent keywords, unlock matching, purchase idempotency |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+| Tests | PASS | `npm test` — 25/25 passing |
+
 # Daily Summary
 
 Completed:
@@ -198,13 +210,14 @@ Completed:
   - Batch 6: Intent detection (expanded keywords) + multi-offer ladder (tiered pricing)
   - Batch 7: Settings label fix (₹ not paise)
   - Batch 8: End-to-end flow audit — 5 production bugs found and fixed
-  - TASKS.md updated with verification log
+  - Batch 9: Spend segmentation (5 tiers, AI path, aligned thresholds) + money path automated tests (25/25)
+  - TASKS.md updated
 
 Blocked:
   - None
 
 Next Highest Priority:
-  Flow verification complete — proceed to automated testing (Batch 5 via execution plan)
+  Production is stable, flow is verified, tests pass — ready for deployment.
 
 ------------------------------------------------------------------------
 
