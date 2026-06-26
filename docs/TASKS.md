@@ -219,26 +219,37 @@ None.
 | Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 | Tests | PASS | `npm test` — 25/25 passing |
 
+## Batch 12: Conversation engine quality + secrets hygiene
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| Prompt variants per phase (3 each, randomly selected) | DONE | `suggest-reply.ts:24-128` — `PHASE_VARIANTS` with 3 prompts per phase, `pick()` + `getPhasePrompt()` |
+| Banned phrase rule added | DONE | `suggest-reply.ts:19` — 'NEVER ask "would you like to buy", "reply YES", or "interested?" |
+| Expand detectMode keywords | DONE | `suggest-reply.ts:110-112` — added exclusive, meeting, voice, custom, photos |
+| Expand hasPurchaseIntent keywords | DONE | `pollMessages.ts:291-294` — added meeting, voice, custom, photos |
+| Secrets hygiene: hardcoded credentials removed | DONE | `scripts/simulate-webhook.ts` — WEBHOOK_SECRET now reads from env, CRM_API_KEY header removed (unnecessary) |
+| .env.example placeholder CRM_API_KEY | DONE | Changed to `change-me-to-at-least-32-random-hex-chars` |
+| .env.example uncommented Turso config | DONE | Turso lines no longer commented out |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+| Tests | PASS | `npm test` — 25/25 passing |
+
 # Daily Summary
 
 Completed:
-  - Batches 1-4: Production safety, Money path, Conversation quality, Currency consistency
-  - Batch 5: Conversation engine (persona, phases, objections, mode prompts)
-  - Batch 6: Intent detection (expanded keywords) + multi-offer ladder (tiered pricing)
-  - Batch 7: Settings label fix (₹ not paise)
-  - Batch 8: End-to-end flow audit — 5 production bugs found and fixed
-  - Batch 9: Spend segmentation (5 tiers, AI path, aligned thresholds) + money path automated tests (25/25)
-  - Batch 10: Deep revenue audit + full production verification — 6 conversation fixes, all systems re-verified
-  - Health check endpoint (/api/health): DB, Razorpay, OpenRouter, Telegram, env vars; CRON_SECRET-gated
-  - Media routes added to PUBLIC_PATHS (fans clicking media links from Telegram got 401)
-  - recalculateLeadScore error in poll no longer silently advances cursor (replyFailed flag)
+  - All 12 batches complete
+  - Conversation engine: prompt variants, banned phrases, expanded intent keywords
+  - Secrets hygiene: hardcoded credentials removed from scripts and .env.example
+  - Production bug hunt: all critical paths verified (poll lock, webhook, reconciliation, payment idempotency, cursor safety, DB connection pooling)
 
 Blocked:
   - None
 
 Next Highest Priority:
-  - Extension PPV loop (icons + packaging for Chrome Web Store)
-  - Secrets hygiene: review scripts/simulate-webhook.ts for hardcoded credentials, clean up real-looking values in .env.example
+  - Production deployment (Vercel dashboard, env vars, Turso setup)
+  - Chrome Web Store extension submission (needs real branding assets)
+  - Telegram login session (needs OTP)
+  - Razorpay webhook configuration
 
 ------------------------------------------------------------------------
 
