@@ -1530,9 +1530,9 @@ export async function getFollowUps(limit: number = 10): Promise<FollowUpData> {
     {
       key: "high_spender_inactive",
       title: "High spender inactive",
-      description: "Top spenders (₹200+) silent for 30+ days",
+      description: "Top spenders (₹1500+) silent for 30+ days",
       count: 0,
-      items: await getFollowUpHighSpenderInactive(200, 30, limit),
+      items: await getFollowUpHighSpenderInactive(1500, 30, limit),
     },
     {
       key: "no_ppv_30d",

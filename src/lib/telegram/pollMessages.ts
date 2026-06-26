@@ -184,7 +184,9 @@ async function sendAiReply(
   const linkMatch = reply.match(/\[link\]/i);
   if (linkMatch) {
     try {
-      const link = await createPaymentLink(contactId);
+      const settings = await getOfferSettings();
+      const amount = await selectOfferAmount(contactId, settings.offerPrice);
+      const link = await createPaymentLink(contactId, amount);
       reply = reply.replace(/\[link\]/gi, link).trim();
       await sendTelegramMessage(contactId, reply);
       await setConvState(contactId, "OFFER_SENT", nowIso());
@@ -305,8 +307,11 @@ async function selectOfferAmount(contactId: number, basePrice: number): Promise<
   const row = await db
     .prepare("SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM purchases WHERE contact_id = ?")
     .get(contactId) as { count: number; total: number };
+
   if (row.count === 0) return Math.round(basePrice * 0.7);
   if (row.total >= 1500) return Math.round(basePrice * 1.5);
+  if (row.total >= 500) return Math.round(basePrice * 1.15);
+  if (row.count <= 2) return Math.round(basePrice * 0.9);
   return basePrice;
 }
 
