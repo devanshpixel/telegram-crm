@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   conv_state TEXT NOT NULL DEFAULT 'FREE_CHAT',
   offer_sent_at TEXT,
   last_locked_response_at TEXT,
+  locked_response_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

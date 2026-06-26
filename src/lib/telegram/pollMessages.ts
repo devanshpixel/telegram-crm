@@ -237,25 +237,48 @@ async function sendPremiumOffer(contactId: number): Promise<void> {
 }
 
 
+export const LOCKED_MESSAGES = [
+  `Baby, this chat is locked now 😘💕 Unlock here for my exclusive content: `,
+  `Still thinking? 😏 Meri private stuff is waiting inside... don't miss out: `,
+  `Last chance babe 🥺 After this I'm closing the door for a while. Join fast: `,
+];
+
 export async function sendLockedResponse(contactId: number): Promise<void> {
+  const db = await getDb();
+  const row = await db
+    .prepare("SELECT locked_response_count FROM contacts WHERE id = ?")
+    .get(contactId) as { locked_response_count: number } | undefined;
+  const count = row?.locked_response_count ?? 0;
+
+  if (count >= LOCKED_MESSAGES.length) {
+    await setConvState(contactId, "FREE_CHAT");
+    return;
+  }
+
   const settings = await getOfferSettings();
   const amount = await selectOfferAmount(contactId, settings.offerPrice);
   const link = await createPaymentLink(contactId, amount);
-  const text = `Baby, this chat is locked now 😘💕 Unlock here for my exclusive content: ${link}`;
+  const text = LOCKED_MESSAGES[count] + link;
+
   await sendTelegramMessage(contactId, text);
-  const db = await getDb();
+
   const ts = nowIso();
   await db
-    .prepare("UPDATE contacts SET last_locked_response_at = ?, updated_at = ? WHERE id = ?")
+    .prepare("UPDATE contacts SET last_locked_response_at = ?, locked_response_count = locked_response_count + 1, updated_at = ? WHERE id = ?")
     .run(ts, ts, contactId);
 }
 
 async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
   const db = await getDb();
   const row = (await db
-    .prepare("SELECT last_locked_response_at FROM contacts WHERE id = ?")
-    .get(contactId)) as { last_locked_response_at: string | null } | undefined;
-  if (!row?.last_locked_response_at) return true;
+    .prepare("SELECT last_locked_response_at, locked_response_count FROM contacts WHERE id = ?")
+    .get(contactId)) as { last_locked_response_at: string | null; locked_response_count: number } | undefined;
+  if (!row) return false;
+  if ((row.locked_response_count ?? 0) >= LOCKED_MESSAGES.length) {
+    await setConvState(contactId, "FREE_CHAT");
+    return false;
+  }
+  if (!row.last_locked_response_at) return true;
   const h = hoursSince(row.last_locked_response_at);
   return h >= 24;
 }

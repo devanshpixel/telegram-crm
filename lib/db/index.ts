@@ -140,6 +140,9 @@ function migrateBetterSqlite3(database: any): void {
   if (!columnExists(database, "contacts", "last_locked_response_at")) {
     database.exec("ALTER TABLE contacts ADD COLUMN last_locked_response_at TEXT");
   }
+  if (!columnExists(database, "contacts", "locked_response_count")) {
+    database.exec("ALTER TABLE contacts ADD COLUMN locked_response_count INTEGER NOT NULL DEFAULT 0");
+  }
 
   const settingsTables = database
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'")

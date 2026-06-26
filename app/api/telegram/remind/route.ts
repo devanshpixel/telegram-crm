@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { sendLockedResponse } from "@/src/lib/telegram/pollMessages";
+import { sendLockedResponse, LOCKED_MESSAGES } from "@/src/lib/telegram/pollMessages";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 async function handle(req: Request) {
-  // Defense-in-depth auth (middleware also enforces this). Accept Vercel's
-  // `Authorization: Bearer <CRON_SECRET>` (GET) or `x-cron-secret` (POST).
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const authHeader = req.headers.get("authorization");
@@ -21,9 +19,12 @@ async function handle(req: Request) {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const unpaid = (await db
       .prepare(
-        "SELECT id FROM contacts WHERE conv_state = 'OFFER_SENT' AND (last_locked_response_at IS NULL OR last_locked_response_at < ?)",
+        `SELECT id FROM contacts
+         WHERE conv_state = 'OFFER_SENT'
+           AND locked_response_count < ?
+           AND (last_locked_response_at IS NULL OR last_locked_response_at < ?)`,
       )
-      .all(cutoff)) as { id: number }[];
+      .all(LOCKED_MESSAGES.length, cutoff)) as { id: number }[];
 
     const results: { contactId: number; sent: boolean; error?: string }[] = [];
 
