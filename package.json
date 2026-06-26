@@ -13,6 +13,7 @@
     "db:backup": "tsx scripts/backup.ts",
     "db:rebuild": "npm rebuild better-sqlite3",
     "telegram:login": "tsx scripts/telegram-login.ts",
+    "test": "tsx scripts/test-core-logic.ts",
     "postinstall": "node scripts/verify-sqlite.js"
   },
   "engines": {
