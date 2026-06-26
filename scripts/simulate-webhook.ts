@@ -4,8 +4,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 config({ path: ".env" });
 
-const WEBHOOK_SECRET = "velvet_webhook_2026";
-const CRM_API_KEY = "16be7932a405cf8d";
+const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET ?? "velvet_webhook_2026";
 
 async function main() {
   const payload = {
@@ -41,7 +40,6 @@ async function main() {
       headers: {
         "Content-Type": "application/json",
         "x-razorpay-signature": signature,
-        "x-api-key": CRM_API_KEY
       }
     });
     console.log("Webhook response:", res.data);

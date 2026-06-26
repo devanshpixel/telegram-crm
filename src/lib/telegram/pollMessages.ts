@@ -290,7 +290,8 @@ function hasPurchaseIntent(text: string): boolean {
   const direct = [
     "buy", "price", "cost", "pay", "payment", "premium", "vip", "exclusive",
     "subscription", "membership", "unlock", "join", "link", "how much",
-    "kitna", "kitne", "video", "content", "send link",
+    "kitna", "kitne", "video", "content", "send link", "meeting", "voice",
+    "custom", "photos",
   ];
   const indirect = [
     "chahiye", "do na", "bhej de", "dikha", "want", "need", "show me",
