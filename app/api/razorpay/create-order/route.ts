@@ -44,7 +44,7 @@ export async function POST(request: Request) {
         name: "Fan",
       },
       notes,
-      callback_url: `${appUrl}?checkout=success`,
+      callback_url: `${appUrl}/api/checkout/success`,
       callback_method: "get",
       // Per-link checkout brand override (no Razorpay approval needed) so the
       // fan sees "Nayra Premium" instead of the registered account name.
