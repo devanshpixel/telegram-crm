@@ -498,9 +498,9 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           // how many messages arrived (BUG-5 fix).
           let replyFailed = false;
           if (incomingMessages.length > 0 && automatedReplies) {
-            await recalculateLeadScore(contact.id);
-
             try {
+              await recalculateLeadScore(contact.id);
+
               if (contact.conv_state === "PAID") {
                 await sendAiReply(contact.id, "casual");
                 summary.repliesSent++;
