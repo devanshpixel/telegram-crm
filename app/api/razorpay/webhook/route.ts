@@ -64,9 +64,13 @@ export async function POST(request: Request) {
 
           // Send Telegram confirmation (best-effort, never fails the webhook)
           try {
+            const appUrl = process.env.APP_URL || `http://localhost:3000`;
+            const mediaLink = mediaId
+              ? `\n\nView it here: ${appUrl}/api/media/${mediaId}/file?contactId=${contactId}`
+              : "";
             await sendTelegramMessage(
               contactId,
-              "✅ Payment successful! Your premium access has been unlocked. Thank you for your support! ❤️"
+              `✅ Payment successful! Your premium access has been unlocked${mediaLink}. Thank you for your support! ❤️`
             );
           } catch (e) {
             console.error(`[Razorpay Webhook] Failed to send Telegram confirmation to ${contactId}:`, e);
