@@ -80,19 +80,26 @@ export function createBetterSqlite3Async(dbPath: string): AsyncDb {
 export function createTursoAsync(url: string, authToken?: string): AsyncDb {
   const { createClient } = require("@libsql/client");
   const client = createClient({ url, authToken });
+  let currentTx: { execute: (q: any) => any; executeMultiple: (s: string) => any } | null = null;
+  function execTarget() {
+    if (currentTx) {
+      return { execute: (q: any) => currentTx!.execute(q), executeMultiple: (s: string) => currentTx!.executeMultiple(s) };
+    }
+    return { execute: (q: any) => client.execute(q), executeMultiple: (s: string) => client.executeMultiple(s) };
+  }
   return {
     prepare(sql: string): AsyncStatement {
       return {
         async get(...args: any[]): Promise<any> {
-          const r = await client.execute({ sql, args });
+          const r = await execTarget().execute({ sql, args });
           return r.rows[0];
         },
         async all(...args: any[]): Promise<any[]> {
-          const r = await client.execute({ sql, args });
+          const r = await execTarget().execute({ sql, args });
           return r.rows;
         },
         async run(...args: any[]): Promise<DbResult> {
-          const r = await client.execute({ sql, args });
+          const r = await execTarget().execute({ sql, args });
           return {
             changes: Number(r.rowsAffected),
             lastInsertRowid: r.lastInsertRowid ? Number(r.lastInsertRowid) : 0,
@@ -101,11 +108,12 @@ export function createTursoAsync(url: string, authToken?: string): AsyncDb {
       };
     },
     async exec(sql: string): Promise<void> {
-      await client.executeMultiple(sql);
+      await execTarget().executeMultiple(sql);
     },
     transaction<T>(fn: () => T | Promise<T>): () => Promise<T> {
       return async () => {
         const tx = await client.transaction("write");
+        currentTx = tx;
         try {
           const result = await fn();
           await tx.commit();
@@ -113,6 +121,8 @@ export function createTursoAsync(url: string, authToken?: string): AsyncDb {
         } catch (e) {
           await tx.rollback();
           throw e;
+        } finally {
+          currentTx = null;
         }
       };
     },

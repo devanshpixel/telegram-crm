@@ -88,205 +88,57 @@ Examples:
 
 ------------------------------------------------------------------------
 
-# Active Sprint
-
-## Phase 0 --- Repository Audit
-
-Status:
-
-\[ \] Read all project documents
-
-\[ \] Audit architecture
-
-\[ \] Audit APIs
-
-\[ \] Audit Telegram
-
-\[ \] Audit payments
-
-\[ \] Audit database
-
-\[ \] Produce bug list
-
-Exit:
-
-Architecture fully understood.
-
-------------------------------------------------------------------------
-
-## Phase 1 --- Production Stability
-
-Status:
-
-\[ \] Telegram verified
-
-\[ \] Incoming messages verified
-
-\[ \] Outgoing replies verified
-
-\[ \] AI generation verified
-
-\[ \] Scheduler verified
-
-\[ \] Razorpay verified
-
-\[ \] Webhook verified
-
-\[ \] Unlock verified
-
-\[ \] Turso verified
-
-\[ \] Logging verified
-
-Exit:
-
-End-to-end production flow works.
-
-------------------------------------------------------------------------
-
-## Phase 2 --- Conversation Quality
-
-Status:
-
-\[ \] Remove generic replies
-
-\[ \] Reduce repetition
-
-\[ \] Improve natural tone
-
-\[ \] Improve qualification
-
-\[ \] Improve context usage
-
-\[ \] Improve offer transitions
-
-\[ \] Improve restricted mode
-
-Exit:
-
-Conversation feels natural and consistent.
-
-------------------------------------------------------------------------
-
-## Phase 3 --- Revenue Engine
-
-Status:
-
-\[ \] Intent detection
-
-\[ \] Offer timing
-
-\[ \] Offer ladder
-
-\[ \] Spend segmentation
-
-\[ \] Reminder flow
-
-\[ \] Re-engagement
-
-Exit:
-
-Revenue flow verified.
-
-------------------------------------------------------------------------
-
-## Phase 4 --- Testing
-
-Status:
-
-\[ \] Critical path tested
-
-\[ \] Regression check
-
-\[ \] Manual verification
-
-\[ \] Production verification
-
-Exit:
-
-No known critical bugs.
-
-------------------------------------------------------------------------
-
-## Phase 5 --- Launch
-
-Status:
-
-\[ \] Final review
-
-\[ \] Deployment approval
-
-\[ \] Production deployment
-
-\[ \] Smoke test
-
-\[ \] Monitor logs
-
-Exit:
-
-Real users can use the product.
-
-------------------------------------------------------------------------
-
-# Blockers
-
-Use this section whenever work cannot continue.
-
-Template:
-
-Issue:
-
-Impact:
-
-Evidence:
-
-Next Action:
-
-Owner:
-
-------------------------------------------------------------------------
-
-# Decisions
-
-Record important decisions.
-
-Date:
-
-Decision:
-
-Reason:
-
-Impact:
+# Execution Plan (from PROJECT_KNOWLEDGE.md)
+
+| # | Task | Status |
+|---|------|--------|
+| 1 | **Make production storage safe** — BUG-2 (throw on no Turso in prod), BUG-1 (Turso transactions), missing indexes | DONE |
+| 2 | **Harden the money path** — BUG-3 (webhook idempotency), BUG-4 (payment reconciliation) | PENDING |
+| 3 | **Improve conversation conversion quality** — BUG-5 (one reply per burst), BUG-8 (Hinglish locked copy), [LINK] robustness | PENDING |
+| 4 | **Fix currency consistency** to INR — BUG-6 | PENDING |
+| 5 | **Add automated tests** — webhook, purchase/unlock, poll state machine, middleware | PENDING |
+| 6 | **Complete extension PPV loop** — gallery + upload + unlock UI | PENDING |
+| 7 | **Secrets & hygiene** — rotate committed keys, prune artifacts, quiet logging, rewrite stale docs | PENDING |
+| 8 | **Lower-priority polish** — backup API/UI, message pagination, extension analytics/AI-mode/icons | PENDING |
 
 ------------------------------------------------------------------------
 
 # Verification Log
 
-Every completed task must include:
+## Batch 1: Production storage safety
 
-Task:
+| Task | Status | How Verified |
+|------|--------|-------------|
+| BUG-2: throw in production when Turso unconfigured | VERIFIED | `lib/db/index.ts:202-208` — `throw new Error(...)` replaces `console.error` |
+| BUG-1: Turso transactions use tx handle | VERIFIED | `lib/db/adapters.ts:83-84` — `currentTx` flag routes `prepare()` calls to `tx.execute()` instead of `client.execute()` during transactions |
+| Missing indexes in SCHEMA_SQL | VERIFIED | `lib/db/schema.ts:147-149` — 3 `CREATE INDEX IF NOT EXISTS` added |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
 
-Evidence:
+------------------------------------------------------------------------
 
-How verified:
+# Blockers
 
-Result:
+None.
 
 ------------------------------------------------------------------------
 
 # Daily Summary
 
-At the end of every working session update:
-
 Completed:
+  - BUG-2: Production DB guard now throws instead of logging
+  - BUG-1: Turso transactions now execute on the tx handle
+  - Missing indexes added to SCHEMA_SQL (3 indexes)
+  - TASKS.md updated with execution plan
 
 In Progress:
+  - (none — ready for next task)
 
 Blocked:
+  - None
 
 Next Highest Priority:
-
-Estimated Remaining Work:
+  Task 2: Harden the money path (BUG-3 webhook idempotency, BUG-4 payment reconciliation)
 
 ------------------------------------------------------------------------
 
