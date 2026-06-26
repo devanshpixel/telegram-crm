@@ -175,6 +175,20 @@ export async function getMessagesByContactId(contactId: number): Promise<Message
   if (!conversationId) return [];
 
   const db = await getDb();
+
+  const rows = await db
+    .prepare(
+      "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
+    )
+    .all(conversationId);
+  return (rows as import("./types").MessageRow[]).map(mapMessageRow);
+}
+
+export async function markConversationRead(contactId: number): Promise<void> {
+  const conversationId = await getConversationIdByContactId(contactId);
+  if (!conversationId) return;
+
+  const db = await getDb();
   const ts = nowIso();
 
   const markRead = db.transaction(async () => {
@@ -186,13 +200,6 @@ export async function getMessagesByContactId(contactId: number): Promise<Message
     ).run(ts, conversationId);
   });
   await markRead();
-
-  const rows = await db
-    .prepare(
-      "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
-    )
-    .all(conversationId);
-  return (rows as import("./types").MessageRow[]).map(mapMessageRow);
 }
 
 export interface CreateContactInput {

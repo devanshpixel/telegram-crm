@@ -1,4 +1,4 @@
-import { getMessagesByContactId } from "@/lib/db/service";
+import { getMessagesByContactId, markConversationRead } from "@/lib/db/service";
 import { apiError, apiOk } from "@/lib/api-error";
 
 export async function GET(
@@ -11,7 +11,9 @@ export async function GET(
     if (!Number.isInteger(contactId) || contactId <= 0) {
       return apiError("Invalid contact id");
     }
-    return apiOk(await getMessagesByContactId(contactId));
+    const messages = await getMessagesByContactId(contactId);
+    await markConversationRead(contactId);
+    return apiOk(messages);
   } catch (e) {
     console.error(e);
     return apiError("Failed to load messages", 500);
