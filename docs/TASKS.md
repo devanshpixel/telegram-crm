@@ -178,6 +178,18 @@ None.
 
 ------------------------------------------------------------------------
 
+## Batch 8: End-to-end flow audit (production bugs found & fixed)
+
+| Task | Status | How Verified |
+|------|--------|-------------|
+| Unread count always 0: getMessagesByContactId had mark-read side effect | FIXED | `lib/db/service.ts:173-203` — extracted `markConversationRead()`, getMessages is pure read; callers: messages API route calls mark explicitly, AI/poll callers do not |
+| Cursor advances on reply failure: poll engine advanced sync cursor even when AI/Razorpay failed | FIXED | `pollMessages.ts:528-533` — `replyFailed` flag, cursor only advances on success; idempotent createMessage ensures safe retry |
+| Checkout redirect hits 401: Razorpay callback_url pointed to auth-protected dashboard | FIXED | Created `app/api/checkout/success/route.ts` (public HTML page); added `/api/checkout` to PUBLIC_PATHS; updated both callback URLs |
+| Post-purchase Telegram confirmation missing media link | FIXED | `webhook/route.ts:67-73` — appends `View it here: {url}/api/media/{id}/file?contactId={id}` when mediaId present |
+| Reconcile confirmation also missing media link | FIXED | `reconcile/route.ts:91-98` — same media link appended when mediaId present |
+| Build | PASS | `npx tsc --noEmit` exits clean |
+| Lint | PASS | `npm run lint` — "No ESLint warnings or errors" |
+
 # Daily Summary
 
 Completed:
@@ -185,13 +197,14 @@ Completed:
   - Batch 5: Conversation engine (persona, phases, objections, mode prompts)
   - Batch 6: Intent detection (expanded keywords) + multi-offer ladder (tiered pricing)
   - Batch 7: Settings label fix (₹ not paise)
-  - TASKS.md updated with execution plan
+  - Batch 8: End-to-end flow audit — 5 production bugs found and fixed
+  - TASKS.md updated with verification log
 
 Blocked:
   - None
 
 Next Highest Priority:
-  Reminder engine improvements (Phase 6) or Re-engagement (Phase 7)
+  Flow verification complete — proceed to automated testing (Batch 5 via execution plan)
 
 ------------------------------------------------------------------------
 
