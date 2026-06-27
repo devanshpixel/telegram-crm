@@ -299,6 +299,18 @@ Completed:
   - Runs on every poll cycle via `recalculateBuyerIntelligence(contact.id)`
   - 7 new DB columns, clean TSC, clean lint, 54/54 tests passing
 
+- **CRM Intelligence (complete)** — 7 integrated capabilities computed per contact:
+  - Auto tags: `updateAutoTags()` — 8 rule-based tags (big_spender, high_spender, repeat_buyer, first_time_buyer, recent_buyer, hot_lead, cold_lead, needs_attention), applied/removed dynamically
+  - AI conversation summary: `generateConversationSummary()` — analyzes last 20 messages for topics (purchase_intent, objection, content_request, casual, custom_request), sentiment, and last message snippet
+  - Suggested next action: `suggestNextAction()` — rule engine picks action from 8 strategies (address objection, send offer, re-engage, repair relationship, etc.)
+  - Favorite content type: `updateFavoriteContentType()` — scores purchase notes against photos/videos/custom/voice keywords
+  - Contact health: `recalculateContactHealth()` — composite score from conversation_health (40%), inverted churn_risk (30%), emotional_temp (20%), lifetime_spend_score (10%)
+  - Last objection memory: persisted + surfaced in `getCrmIntelligence()` alongside operator notes
+  - Operator notes integration: `getCrmIntelligence()` returns combined tags + notes + AI summary
+  - API: `GET /api/analytics/crm-intelligence` (summary), `?contactId=N` (per-contact with tags, notes, summary, action, health)
+  - Runs on every poll cycle via `recalculateCrmIntelligence(contact.id)`
+  - 4 new DB columns, 54/54 tests, clean TSC, clean lint
+
 Blocked:
   - None
 

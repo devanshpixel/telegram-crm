@@ -2349,6 +2349,338 @@ export async function getAllBuyerIntelligence(): Promise<{
   };
 }
 
+const AUTO_TAG_RULES: Array<{ tag: string; test: (c: { total_spent: number; last_purchase_date: string | null; lead_classification: string; churn_risk: number; purchase_count: number }) => boolean }> = [
+  { tag: "big_spender", test: (c) => c.total_spent >= 20000 },
+  { tag: "high_spender", test: (c) => c.total_spent >= 5000 },
+  { tag: "repeat_buyer", test: (c) => c.purchase_count >= 2 },
+  { tag: "first_time_buyer", test: (c) => c.purchase_count === 1 },
+  { tag: "recent_buyer", test: (c) => c.last_purchase_date !== null && (Date.now() - new Date(c.last_purchase_date!).getTime()) / 86400000 <= 7 },
+  { tag: "hot_lead", test: (c) => c.lead_classification === "hot" },
+  { tag: "cold_lead", test: (c) => c.lead_classification === "cold" },
+  { tag: "needs_attention", test: (c) => c.churn_risk >= 60 },
+];
+
+export async function updateAutoTags(contactId: number): Promise<string[]> {
+  const db = await getDb();
+  const contact = await db
+    .prepare(
+      `SELECT c.total_spent, c.last_purchase_date, c.lead_classification, c.churn_risk,
+              (SELECT COUNT(*) FROM purchases p WHERE p.contact_id = c.id) AS purchase_count
+       FROM contacts c WHERE c.id = ?`
+    )
+    .get(contactId) as {
+      total_spent: number;
+      last_purchase_date: string | null;
+      lead_classification: string;
+      churn_risk: number;
+      purchase_count: number;
+    } | undefined;
+  if (!contact) return [];
+
+  const existingTags = new Set(await getTagsForContact(contactId));
+  const applied: string[] = [];
+  const ts = nowIso();
+
+  for (const rule of AUTO_TAG_RULES) {
+    if (rule.test(contact) && !existingTags.has(rule.tag)) {
+      try {
+        await db
+          .prepare("INSERT INTO tags (contact_id, name, created_at) VALUES (?, ?, ?)")
+          .run(contactId, rule.tag, ts);
+        await db
+          .prepare("INSERT INTO tag_events (contact_id, tag_name, event_type, created_at) VALUES (?, ?, 'added', ?)")
+          .run(contactId, rule.tag, ts);
+        applied.push(rule.tag);
+      } catch {
+        // tag may already exist from concurrent call
+      }
+    } else if (!rule.test(contact) && existingTags.has(rule.tag)) {
+      await db
+        .prepare("DELETE FROM tags WHERE contact_id = ? AND name = ?")
+        .run(contactId, rule.tag);
+      await db
+        .prepare("INSERT INTO tag_events (contact_id, tag_name, event_type, created_at) VALUES (?, ?, 'removed', ?)")
+        .run(contactId, rule.tag, ts);
+    }
+  }
+
+  return applied;
+}
+
+export async function generateConversationSummary(contactId: number): Promise<string> {
+  const db = await getDb();
+  const conv = await db
+    .prepare("SELECT id FROM conversations WHERE contact_id = ?")
+    .get(contactId) as { id: number } | undefined;
+  if (!conv) {
+    await db.prepare("UPDATE contacts SET ai_conversation_summary = '', updated_at = ? WHERE id = ?")
+      .run(nowIso(), contactId);
+    return "";
+  }
+
+  const recentMsgs = await db
+    .prepare(
+      `SELECT text, direction, created_at FROM messages
+       WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 20`
+    )
+    .all(conv.id) as { text: string; direction: string; created_at: string }[];
+
+  if (recentMsgs.length === 0) {
+    await db.prepare("UPDATE contacts SET ai_conversation_summary = '', updated_at = ? WHERE id = ?")
+      .run(nowIso(), contactId);
+    return "";
+  }
+
+  const incoming = recentMsgs.filter((m) => m.direction === "incoming").map((m) => m.text.toLowerCase());
+
+  const topics: string[] = [];
+  if (incoming.some((t) => /buy|price|cost|pay|premium|link|how much|kitna|chahiye/.test(t))) topics.push("purchase_intent");
+  if (incoming.some((t) => /too much|expensive|costly|nahi|no|not now/.test(t))) topics.push("objection");
+  if (incoming.some((t) => /photo|pic|video|content|exclusive|see/.test(t))) topics.push("content_request");
+  if (incoming.some((t) => /hi|hello|hey|how are you|kaise|kya/.test(t))) topics.push("casual");
+  if (incoming.some((t) => /custom|meet|call|voice|personal/.test(t))) topics.push("custom_request");
+
+  const sentimentLabel =
+    incoming.filter((t) => /love|amazing|beautiful|yes|ok|sure|done|thanks/.test(t)).length >
+    incoming.filter((t) => /no|nahi|not|stop|leave|bye/.test(t)).length
+      ? "positive" : incoming.length > 0 ? "neutral" : "none";
+
+  const msgCount = recentMsgs.length;
+  const contactMsgs = incoming.length;
+  const lastTopic = incoming.length > 0 ? incoming[0].slice(0, 80) : "none";
+
+  const summary =
+    `${msgCount}msgs, ${contactMsgs} from contact. ` +
+    `Topics: ${topics.length > 0 ? topics.join(", ") : "general"}. ` +
+    `Sentiment: ${sentimentLabel}. ` +
+    `Last: "${lastTopic}${lastTopic.length >= 80 ? "..." : ""}"`;
+
+  await db
+    .prepare("UPDATE contacts SET ai_conversation_summary = ?, updated_at = ? WHERE id = ?")
+    .run(summary, nowIso(), contactId);
+
+  return summary;
+}
+
+export async function suggestNextAction(contactId: number): Promise<string> {
+  const db = await getDb();
+  const contact = await db
+    .prepare(
+      `SELECT lead_classification, purchase_probability, churn_risk, conversation_health,
+              total_spent, emotional_temp, last_objection, conv_state
+       FROM contacts WHERE id = ?`
+    )
+    .get(contactId) as {
+      lead_classification: string;
+      purchase_probability: number;
+      churn_risk: number;
+      conversation_health: number;
+      total_spent: number;
+      emotional_temp: number;
+      last_objection: string | null;
+      conv_state: string;
+    } | undefined;
+  if (!contact) return "";
+
+  const conv = await db
+    .prepare("SELECT id FROM conversations WHERE contact_id = ?")
+    .get(contactId) as { id: number } | undefined;
+
+  let daysSinceLastMessage: number | null = null;
+  if (conv) {
+    const lastMsg = await db
+      .prepare("SELECT created_at FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1")
+      .get(conv.id) as { created_at: string } | undefined;
+    if (lastMsg) {
+      daysSinceLastMessage = Math.floor((Date.now() - new Date(lastMsg.created_at).getTime()) / 86400000);
+    }
+  }
+
+  const hasPurchased = contact.total_spent > 0;
+  let action = "";
+
+  if (contact.last_objection) {
+    action = `Address objection: "${contact.last_objection}"`;
+  } else if (!hasPurchased && contact.lead_classification === "hot" && contact.purchase_probability >= 50) {
+    action = "Send purchase offer — high intent detected";
+  } else if (!hasPurchased && daysSinceLastMessage !== null && daysSinceLastMessage >= 3) {
+    action = "Re-engage prospect — no recent activity";
+  } else if (contact.conversation_health < 30) {
+    action = "Repair relationship — low conversation health";
+  } else if (contact.churn_risk >= 50 && hasPurchased) {
+    action = "Send re-engagement offer — high churn risk";
+  } else if (!hasPurchased && contact.emotional_temp >= 55) {
+    action = "Capitalize on positive sentiment — introduce offer";
+  } else if (hasPurchased && daysSinceLastMessage !== null && daysSinceLastMessage <= 3) {
+    action = "Follow up on recent purchase experience";
+  } else if (!hasPurchased) {
+    action = "Continue building rapport — nurture conversation";
+  } else {
+    action = "Maintain engagement — casual check-in";
+  }
+
+  await db
+    .prepare("UPDATE contacts SET suggested_next_action = ?, updated_at = ? WHERE id = ?")
+    .run(action, nowIso(), contactId);
+
+  return action;
+}
+
+export async function updateFavoriteContentType(contactId: number): Promise<string> {
+  const db = await getDb();
+  const purchases = await db
+    .prepare("SELECT note FROM purchases WHERE contact_id = ? ORDER BY created_at DESC LIMIT 10")
+    .all(contactId) as { note: string }[];
+
+  const typeKeywords: Record<string, RegExp[]> = {
+    photos: [/photo/i, /pic/i, /image/i, /gallery/i, /picture/i],
+    videos: [/video/i, /clip/i, /recording/i, /movie/i],
+    custom: [/custom/i, /personal/i, /exclusive/i, /special/i],
+    voice: [/voice/i, /audio/i, /call/i],
+  };
+
+  const scores: Record<string, number> = {};
+  for (const p of purchases) {
+    for (const [type, patterns] of Object.entries(typeKeywords)) {
+      for (const re of patterns) {
+        if (re.test(p.note)) {
+          scores[type] = (scores[type] ?? 0) + 1;
+        }
+      }
+    }
+  }
+
+  const entries = Object.entries(scores);
+  const favorite = entries.length > 0 ? entries.sort((a, b) => b[1] - a[1])[0][0] : "general";
+
+  await db
+    .prepare("UPDATE contacts SET favorite_content_type = ?, updated_at = ? WHERE id = ?")
+    .run(favorite, nowIso(), contactId);
+
+  return favorite;
+}
+
+export async function recalculateContactHealth(contactId: number): Promise<number> {
+  const db = await getDb();
+  const contact = await db
+    .prepare(
+      `SELECT conversation_health, churn_risk, emotional_temp, lifetime_spend_score
+       FROM contacts WHERE id = ?`
+    )
+    .get(contactId) as {
+      conversation_health: number;
+      churn_risk: number;
+      emotional_temp: number;
+      lifetime_spend_score: number;
+    } | undefined;
+  if (!contact) return 50;
+
+  const health = Math.round(
+    contact.conversation_health * 0.4 +
+    (100 - contact.churn_risk) * 0.3 +
+    contact.emotional_temp * 0.2 +
+    contact.lifetime_spend_score * 0.1
+  );
+
+  const clamped = Math.min(100, Math.max(0, health));
+  await db
+    .prepare("UPDATE contacts SET contact_health = ?, updated_at = ? WHERE id = ?")
+    .run(clamped, nowIso(), contactId);
+
+  return clamped;
+}
+
+export async function recalculateCrmIntelligence(contactId: number): Promise<void> {
+  await Promise.all([
+    updateAutoTags(contactId),
+    generateConversationSummary(contactId),
+    suggestNextAction(contactId),
+    updateFavoriteContentType(contactId),
+    recalculateContactHealth(contactId),
+  ]);
+}
+
+export async function getCrmIntelligence(contactId: number): Promise<{
+  tags: string[];
+  aiConversationSummary: string;
+  suggestedNextAction: string;
+  favoriteContentType: string;
+  contactHealth: number;
+  lastObjection: string | null;
+  notes: string;
+} | null> {
+  const db = await getDb();
+  const contact = await db
+    .prepare(
+      `SELECT ai_conversation_summary, suggested_next_action, favorite_content_type,
+              contact_health, last_objection
+       FROM contacts WHERE id = ?`
+    )
+    .get(contactId) as {
+      ai_conversation_summary: string | null;
+      suggested_next_action: string | null;
+      favorite_content_type: string;
+      contact_health: number;
+      last_objection: string | null;
+    } | undefined;
+  if (!contact) return null;
+
+  const [tags, notesText] = await Promise.all([
+    getTagsForContact(contactId),
+    getNotesText(contactId),
+  ]);
+
+  return {
+    tags,
+    aiConversationSummary: contact.ai_conversation_summary ?? "",
+    suggestedNextAction: contact.suggested_next_action ?? "",
+    favoriteContentType: contact.favorite_content_type,
+    contactHealth: contact.contact_health,
+    lastObjection: contact.last_objection,
+    notes: notesText,
+  };
+}
+
+export async function getAllCrmIntelligence(): Promise<{
+  autoTagCounts: Record<string, number>;
+  averageHealth: number;
+  commonNextActions: Record<string, number>;
+  contactsWithObjections: number;
+  contactCount: number;
+}> {
+  const db = await getDb();
+  const contacts = await db
+    .prepare("SELECT id, contact_health, suggested_next_action, last_objection FROM contacts")
+    .all() as { id: number; contact_health: number; suggested_next_action: string | null; last_objection: string | null }[];
+
+  const tags = await db
+    .prepare("SELECT name FROM tags WHERE name IN (?, ?, ?, ?, ?, ?, ?, ?)")
+    .all("big_spender", "high_spender", "repeat_buyer", "first_time_buyer", "recent_buyer", "hot_lead", "cold_lead", "needs_attention") as { name: string }[];
+
+  const autoTagCounts: Record<string, number> = {};
+  for (const t of tags) autoTagCounts[t.name] = (autoTagCounts[t.name] ?? 0) + 1;
+
+  const commonNextActions: Record<string, number> = {};
+  let totalHealth = 0;
+  let contactsWithObjections = 0;
+
+  for (const c of contacts) {
+    totalHealth += c.contact_health;
+    if (c.suggested_next_action) {
+      commonNextActions[c.suggested_next_action] = (commonNextActions[c.suggested_next_action] ?? 0) + 1;
+    }
+    if (c.last_objection) contactsWithObjections++;
+  }
+
+  return {
+    autoTagCounts,
+    averageHealth: contacts.length > 0 ? Math.round(totalHealth / contacts.length) : 50,
+    commonNextActions,
+    contactsWithObjections,
+    contactCount: contacts.length,
+  };
+}
+
 export async function recordObjection(contactId: number, objection: string): Promise<void> {
   const db = await getDb();
   await db.prepare("UPDATE contacts SET last_objection = ?, updated_at = ? WHERE id = ?")

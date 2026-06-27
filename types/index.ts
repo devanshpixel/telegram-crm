@@ -59,6 +59,10 @@ export interface ContactProfile {
   lifetimeSpendScore: number;
   lastObjection: string | null;
   lastSuccessfulOffer: number | null;
+  aiConversationSummary: string | null;
+  suggestedNextAction: string | null;
+  favoriteContentType: string;
+  contactHealth: number;
   purchases?: Purchase[];
 }
 

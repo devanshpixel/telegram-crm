@@ -165,4 +165,8 @@ ALTER TABLE contacts ADD COLUMN conversation_health INTEGER DEFAULT 50;
 ALTER TABLE contacts ADD COLUMN lifetime_spend_score INTEGER DEFAULT 0;
 ALTER TABLE contacts ADD COLUMN last_objection TEXT;
 ALTER TABLE contacts ADD COLUMN last_successful_offer REAL;
+ALTER TABLE contacts ADD COLUMN ai_conversation_summary TEXT;
+ALTER TABLE contacts ADD COLUMN suggested_next_action TEXT;
+ALTER TABLE contacts ADD COLUMN favorite_content_type TEXT DEFAULT '';
+ALTER TABLE contacts ADD COLUMN contact_health INTEGER DEFAULT 50;
 `;

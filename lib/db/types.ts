@@ -44,6 +44,10 @@ export interface ContactRow {
   lifetime_spend_score: number;
   last_objection: string | null;
   last_successful_offer: number | null;
+  ai_conversation_summary: string | null;
+  suggested_next_action: string | null;
+  favorite_content_type: string;
+  contact_health: number;
 }
 
 export interface ConversationRow {

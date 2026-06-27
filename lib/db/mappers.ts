@@ -66,6 +66,10 @@ export function mapContactToProfile(
     lifetimeSpendScore: contact.lifetime_spend_score,
     lastObjection: contact.last_objection,
     lastSuccessfulOffer: contact.last_successful_offer,
+    aiConversationSummary: contact.ai_conversation_summary,
+    suggestedNextAction: contact.suggested_next_action,
+    favoriteContentType: contact.favorite_content_type,
+    contactHealth: contact.contact_health,
   };
 }
 
