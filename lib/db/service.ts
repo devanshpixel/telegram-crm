@@ -239,7 +239,7 @@ export async function createContact(input: CreateContactInput): Promise<ContactP
           ppv_count, telegram_id, telegram_access_hash, total_spent, vip_level,
           fan_status, fan_score, last_purchase_date, emotional_temp, relationship_score,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 50, 0, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, 50, 0, ?, ?)`,
       )
       .run(
         input.name,

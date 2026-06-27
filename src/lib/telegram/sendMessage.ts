@@ -58,16 +58,19 @@ export async function sendTelegramMessage(
 
   for (let attempt = 1; attempt <= FLOOD_RETRY_MAX; attempt++) {
     try {
+      console.log(`[PIPELINE:7] Sending Telegram message — contactId=${contactId} attempt=${attempt} length=${trimmedText.length} peer=${contact.telegram_id}`);
       const sent = await client.sendMessage(peer, { message: trimmedText });
 
       if (!(sent instanceof Api.Message) || !sent.id) {
         throw new Error("Failed to send Telegram message");
       }
 
+      console.log(`[PIPELINE:7] Telegram send SUCCESS — sentMsgId=${sent.id} contactId=${contactId}`);
       const saved = await createMessage(contactId, trimmedText, "outgoing", sent.id);
       if (!saved) {
         throw new Error(`No conversation found for contact ${contactId}`);
       }
+      console.log(`[PIPELINE:7] Outgoing message saved to DB — savedId=${saved.id} contactId=${contactId}`);
 
       return saved;
     } catch (err: unknown) {

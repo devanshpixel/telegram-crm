@@ -175,6 +175,7 @@ async function sendAiReply(
   const messages = await getMessagesByContactId(contactId);
   const recent = messages.slice(-20);
   let reply = await suggestReply(recent, mode, emotionalTemp, intentScore);
+  console.log(`[PIPELINE:6] AI reply generated — contactId=${contactId} mode=${mode} reply="${reply.slice(0, 80)}"`);
 
   // The AI persona emits a literal "[LINK]" token when it decides to convert
   // the fan (sales/conversion phase). Nothing else substitutes it, so we MUST
@@ -433,15 +434,17 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       await ensureConnected();
       const client = await getTelegramClient();
 
-      await client.getMe(); // validate session is alive
+      const me = await client.getMe(); // validate session is alive
+      console.log(`[PIPELINE:1] Telegram connected — self userId=${me?.id} username=${me?.username ?? "—"}`);
 
       const knownContacts = await listContactConversations();
+      console.log(`[PIPELINE:2] Poll started — ${knownContacts.length} known contacts in DB`);
       const knownMap = new Map<string, ContactWithConv>();
       for (const c of knownContacts) {
         knownMap.set(c.telegram_id, c);
       }
 
-      for await (const dialog of client.iterDialogs()) {
+      for await (const dialog of client.iterDialogs({ folder: 0 })) {
         const entity = dialog.entity;
 
         // Skip non-users, bots, self early before counting against the quota
@@ -473,12 +476,15 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           try {
             contact = await createContactFromDialog(entity);
             knownMap.set(telegramId, contact);
+            console.log(`[PIPELINE:3] New contact created — contactId=${contact.id} telegramId=${telegramId} name=${formatUserName(entity)}`);
           } catch (e) {
             summary.errors.push(
               `Failed to create contact for ${telegramId}: ${e instanceof Error ? e.message : String(e)}`,
             );
             continue;
           }
+        } else {
+          console.log(`[PIPELINE:3] Known contact — contactId=${contact.id} telegramId=${telegramId} cursor=${contact.last_synced_message_id}`);
         }
 
         // Task E: Offer Expiry
@@ -531,6 +537,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
               summary.errors.push(`Failed to save message for contact ${contact.id}`);
               continue;
             }
+            console.log(`[PIPELINE:4] Message saved to DB — contactId=${contact.id} msgId=${msgId} text="${text.slice(0, 60)}"`);
             incomingMessages.push({ text });
             summary.newMessages++;
           }
@@ -539,6 +546,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           // how many messages arrived (BUG-5 fix).
           let replyFailed = false;
           if (incomingMessages.length > 0 && automatedReplies) {
+            console.log(`[PIPELINE:5] ${incomingMessages.length} new message(s) for contactId=${contact.id} conv_state=${contact.conv_state} — computing reply`);
             try {
               await recalculateLeadScore(contact.id);
               await recalculateSpendSegment(contact.id);
@@ -549,6 +557,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
               await updateRelationshipScore(contact.id);
 
               const skipReply = await shouldSkipDueToPacing(contact.id, emotionalTemp);
+              console.log(`[PIPELINE:5] contactId=${contact.id} emotionalTemp=${emotionalTemp} intentScore=${intentScore} skipReply=${skipReply}`);
 
               if (!skipReply && contact.conv_state === "PAID") {
                 const phase = await getPostPurchasePhase(contact.id);
@@ -622,6 +631,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
           if (!replyFailed && maxId > minId) {
             await updateSyncCursor(contact.conversation_id, maxId);
+            console.log(`[PIPELINE:8] Sync cursor advanced — convId=${contact.conversation_id} ${minId} → ${maxId}`);
           }
         } catch (e) {
           console.error(`[POLL] Message iteration error for contact ${contact.id}:`, e);
