@@ -37,6 +37,13 @@ export interface ContactRow {
   last_upsell_at: string | null;
   upsell_count: number;
   spend_segment: string;
+  lead_classification: string;
+  purchase_probability: number;
+  churn_risk: number;
+  conversation_health: number;
+  lifetime_spend_score: number;
+  last_objection: string | null;
+  last_successful_offer: number | null;
 }
 
 export interface ConversationRow {

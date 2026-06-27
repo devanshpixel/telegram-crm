@@ -288,6 +288,17 @@ Completed:
   - Run on every poll cycle + every purchase (webhook + reconcile)
   - Clean TSC, clean lint, 54/54 tests passing
 
+- **Buyer Intelligence (complete)** — computed per-contact intelligence with 7 fields:
+  - Lead classification: `recalculateBuyerIntelligence()` computes HOT/WARM/COLD from emotional temp, lead score, message recency, purchase recency, recent intent signals
+  - Purchase probability (0-100): weighted from emotional temp, lead score, recency, purchase history
+  - Churn risk (0-100): weighted from emotional temp, relationship score, message recency, purchase recency, declined offers
+  - Conversation health (0-100): baseline 50, adjusted by emotional temp delta, relationship score, message recency
+  - Lifetime spend score (0-100): tiered by total_spent thresholds (₹500/₹1500/₹5000/₹20000)
+  - Last objection + last successful offer: persisted, settable via `recordObjection()` / `recordSuccessfulOffer()`
+  - API: `GET /api/analytics/buyer-intelligence` (summary), `?contactId=N` (per-contact)
+  - Runs on every poll cycle via `recalculateBuyerIntelligence(contact.id)`
+  - 7 new DB columns, clean TSC, clean lint, 54/54 tests passing
+
 Blocked:
   - None
 

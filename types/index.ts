@@ -52,6 +52,13 @@ export interface ContactProfile {
   fanStatus: "active" | "inactive" | "churned" | "new";
   fanScore: number;
   lastPurchaseDate: string | null;
+  leadClassification: "hot" | "warm" | "cold";
+  purchaseProbability: number;
+  churnRisk: number;
+  conversationHealth: number;
+  lifetimeSpendScore: number;
+  lastObjection: string | null;
+  lastSuccessfulOffer: number | null;
   purchases?: Purchase[];
 }
 

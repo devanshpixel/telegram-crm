@@ -18,6 +18,7 @@ import {
   incrementOfferDeclined,
   getPostPurchasePhase,
   markWelcomeSent,
+  recalculateBuyerIntelligence,
 } from "@/lib/db/service";
 
 import type { ConversationRow } from "@/lib/db/types";
@@ -552,6 +553,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             try {
               await recalculateLeadScore(contact.id);
               await recalculateSpendSegment(contact.id);
+              await recalculateBuyerIntelligence(contact.id);
               const emotionalTemp = await updateEmotionalTemp(contact.id);
               const intentScore = await getIntentScore(incomingMessages);
               await updateRelationshipScore(contact.id);

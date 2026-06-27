@@ -59,6 +59,13 @@ export function mapContactToProfile(
     fanStatus: contact.fan_status as ContactProfile["fanStatus"],
     fanScore: contact.fan_score,
     lastPurchaseDate: contact.last_purchase_date,
+    leadClassification: contact.lead_classification as ContactProfile["leadClassification"],
+    purchaseProbability: contact.purchase_probability,
+    churnRisk: contact.churn_risk,
+    conversationHealth: contact.conversation_health,
+    lifetimeSpendScore: contact.lifetime_spend_score,
+    lastObjection: contact.last_objection,
+    lastSuccessfulOffer: contact.last_successful_offer,
   };
 }
 

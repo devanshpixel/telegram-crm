@@ -2126,3 +2126,237 @@ export async function getRevenueAnalytics(): Promise<{
     repeatPurchaseRate,
   };
 }
+
+export type LeadClassification = "cold" | "warm" | "hot";
+
+function classifyLead(
+  emotionalTemp: number,
+  leadScore: number,
+  daysSinceLastMessage: number | null,
+  daysSinceLastPurchase: number | null,
+  recentIntent: boolean,
+): LeadClassification {
+  const score =
+    (emotionalTemp / 100) * 30 +
+    (leadScore / 100) * 25 +
+    (daysSinceLastMessage !== null && daysSinceLastMessage <= 3 ? 20 : daysSinceLastMessage !== null && daysSinceLastMessage <= 7 ? 10 : 0) +
+    (daysSinceLastPurchase !== null && daysSinceLastPurchase <= 14 ? 15 : 0) +
+    (recentIntent ? 10 : 0);
+  if (score >= 60) return "hot";
+  if (score >= 30) return "warm";
+  return "cold";
+}
+
+function calcPurchaseProbability(
+  emotionalTemp: number,
+  leadScore: number,
+  daysSinceLastMessage: number | null,
+  hasPurchased: boolean,
+  daysSinceLastPurchase: number | null,
+): number {
+  let p = 0;
+  p += (emotionalTemp / 100) * 30;
+  p += (leadScore / 100) * 25;
+  if (daysSinceLastMessage !== null && daysSinceLastMessage <= 1) p += 20;
+  else if (daysSinceLastMessage !== null && daysSinceLastMessage <= 3) p += 15;
+  else if (daysSinceLastMessage !== null && daysSinceLastMessage <= 7) p += 5;
+  if (!hasPurchased) p += 10;
+  else if (daysSinceLastPurchase !== null && daysSinceLastPurchase >= 30) p += 15;
+  return Math.min(100, Math.max(0, Math.round(p)));
+}
+
+function calcChurnRisk(
+  emotionalTemp: number,
+  relationshipScore: number,
+  daysSinceLastMessage: number | null,
+  daysSinceLastPurchase: number | null,
+  declinedCount: number,
+  hasPurchased: boolean,
+): number {
+  let r = 0;
+  if (emotionalTemp < 30) r += 25;
+  else if (emotionalTemp < 45) r += 15;
+  if (relationshipScore < 0) r += 20;
+  if (daysSinceLastMessage !== null && daysSinceLastMessage > 14) r += 20;
+  else if (daysSinceLastMessage !== null && daysSinceLastMessage > 7) r += 10;
+  if (hasPurchased && daysSinceLastPurchase !== null && daysSinceLastPurchase > 60) r += 15;
+  else if (hasPurchased && daysSinceLastPurchase !== null && daysSinceLastPurchase > 30) r += 10;
+  r += Math.min(declinedCount * 5, 15);
+  return Math.min(100, Math.max(0, r));
+}
+
+function calcConversationHealth(
+  emotionalTemp: number,
+  relationshipScore: number,
+  daysSinceLastMessage: number | null,
+): number {
+  let h = 50;
+  h += (emotionalTemp - 50) * 0.5;
+  h += relationshipScore * 2;
+  if (daysSinceLastMessage !== null && daysSinceLastMessage <= 1) h += 10;
+  else if (daysSinceLastMessage !== null && daysSinceLastMessage <= 3) h += 5;
+  else if (daysSinceLastMessage !== null && daysSinceLastMessage > 14) h -= 15;
+  else if (daysSinceLastMessage !== null && daysSinceLastMessage > 7) h -= 5;
+  return Math.min(100, Math.max(0, Math.round(h)));
+}
+
+function calcLifetimeSpendScore(totalSpent: number): number {
+  if (totalSpent >= 20000) return 100;
+  if (totalSpent >= 5000) return 85;
+  if (totalSpent >= 1500) return 65;
+  if (totalSpent >= 500) return 45;
+  if (totalSpent > 0) return 25;
+  return 0;
+}
+
+export async function recalculateBuyerIntelligence(contactId: number): Promise<void> {
+  const db = await getDb();
+  const contact = await db
+    .prepare("SELECT emotional_temp, lead_score, relationship_score, total_spent, last_purchase_date, offer_declined_count, conv_state FROM contacts WHERE id = ?")
+    .get(contactId) as {
+      emotional_temp: number;
+      lead_score: number;
+      relationship_score: number;
+      total_spent: number;
+      last_purchase_date: string | null;
+      offer_declined_count: number;
+      conv_state: string;
+    } | undefined;
+  if (!contact) return;
+
+  const conv = await db
+    .prepare("SELECT id FROM conversations WHERE contact_id = ?")
+    .get(contactId) as { id: number } | undefined;
+
+  let daysSinceLastMessage: number | null = null;
+  let recentIntent = false;
+  if (conv) {
+    const lastMsg = await db
+      .prepare("SELECT created_at FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1")
+      .get(conv.id) as { created_at: string } | undefined;
+    if (lastMsg) {
+      daysSinceLastMessage = Math.floor((Date.now() - new Date(lastMsg.created_at).getTime()) / 86400000);
+      const recentMsgs = await db
+        .prepare("SELECT text FROM messages WHERE conversation_id = ? AND created_at >= datetime('now', '-3 days') AND direction = 'incoming' LIMIT 5")
+        .all(conv.id) as { text: string }[];
+      const intentKw = ["buy", "price", "cost", "pay", "premium", "link", "want", "need", "chahiye", "kitna", "how much"];
+      recentIntent = recentMsgs.some((m) => intentKw.some((kw) => m.text.toLowerCase().includes(kw)));
+    }
+  }
+
+  const hasPurchased = contact.total_spent > 0;
+  const daysSinceLastPurchase =
+    contact.last_purchase_date
+      ? Math.floor((Date.now() - new Date(contact.last_purchase_date).getTime()) / 86400000)
+      : null;
+
+  const classification = classifyLead(
+    contact.emotional_temp, contact.lead_score, daysSinceLastMessage, daysSinceLastPurchase, recentIntent,
+  );
+  const purchaseProbability = calcPurchaseProbability(
+    contact.emotional_temp, contact.lead_score, daysSinceLastMessage, hasPurchased, daysSinceLastPurchase,
+  );
+  const churnRisk = calcChurnRisk(
+    contact.emotional_temp, contact.relationship_score, daysSinceLastMessage, daysSinceLastPurchase, contact.offer_declined_count, hasPurchased,
+  );
+  const conversationHealth = calcConversationHealth(contact.emotional_temp, contact.relationship_score, daysSinceLastMessage);
+  const lifetimeSpendScore = calcLifetimeSpendScore(contact.total_spent);
+
+  await db
+    .prepare(
+      `UPDATE contacts SET lead_classification = ?, purchase_probability = ?, churn_risk = ?,
+       conversation_health = ?, lifetime_spend_score = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(classification, purchaseProbability, churnRisk, conversationHealth, lifetimeSpendScore, nowIso(), contactId);
+}
+
+export async function getBuyerIntelligence(contactId: number): Promise<{
+  leadClassification: LeadClassification;
+  purchaseProbability: number;
+  churnRisk: number;
+  conversationHealth: number;
+  lifetimeSpendScore: number;
+  lastObjection: string | null;
+  lastSuccessfulOffer: number | null;
+} | null> {
+  const db = await getDb();
+  const row = await db
+    .prepare(
+      `SELECT lead_classification, purchase_probability, churn_risk, conversation_health,
+              lifetime_spend_score, last_objection, last_successful_offer
+       FROM contacts WHERE id = ?`
+    )
+    .get(contactId) as {
+      lead_classification: string;
+      purchase_probability: number;
+      churn_risk: number;
+      conversation_health: number;
+      lifetime_spend_score: number;
+      last_objection: string | null;
+      last_successful_offer: number | null;
+    } | undefined;
+  if (!row) return null;
+  return {
+    leadClassification: row.lead_classification as LeadClassification,
+    purchaseProbability: row.purchase_probability,
+    churnRisk: row.churn_risk,
+    conversationHealth: row.conversation_health,
+    lifetimeSpendScore: row.lifetime_spend_score,
+    lastObjection: row.last_objection,
+    lastSuccessfulOffer: row.last_successful_offer,
+  };
+}
+
+export async function getAllBuyerIntelligence(): Promise<{
+  leadClassification: Record<string, number>;
+  atRiskCount: number;
+  highPurchaseProbabilityCount: number;
+  averageChurnRisk: number;
+  averageConversationHealth: number;
+}> {
+  const db = await getDb();
+  const rows = await db
+    .prepare(
+      `SELECT lead_classification, churn_risk, purchase_probability, conversation_health
+       FROM contacts`
+    )
+    .all() as {
+      lead_classification: string;
+      churn_risk: number;
+      purchase_probability: number;
+      conversation_health: number;
+    }[];
+  const classification: Record<string, number> = { hot: 0, warm: 0, cold: 0 };
+  let atRiskCount = 0;
+  let highPurchaseProbabilityCount = 0;
+  let totalChurnRisk = 0;
+  let totalConversationHealth = 0;
+  for (const r of rows) {
+    classification[r.lead_classification] = (classification[r.lead_classification] ?? 0) + 1;
+    if (r.churn_risk >= 50) atRiskCount++;
+    if (r.purchase_probability >= 60) highPurchaseProbabilityCount++;
+    totalChurnRisk += r.churn_risk;
+    totalConversationHealth += r.conversation_health;
+  }
+  const count = rows.length || 1;
+  return {
+    leadClassification: classification,
+    atRiskCount,
+    highPurchaseProbabilityCount,
+    averageChurnRisk: Math.round(totalChurnRisk / count),
+    averageConversationHealth: Math.round(totalConversationHealth / count),
+  };
+}
+
+export async function recordObjection(contactId: number, objection: string): Promise<void> {
+  const db = await getDb();
+  await db.prepare("UPDATE contacts SET last_objection = ?, updated_at = ? WHERE id = ?")
+    .run(objection, nowIso(), contactId);
+}
+
+export async function recordSuccessfulOffer(contactId: number, amount: number): Promise<void> {
+  const db = await getDb();
+  await db.prepare("UPDATE contacts SET last_successful_offer = ?, updated_at = ? WHERE id = ?")
+    .run(amount, nowIso(), contactId);
+}
