@@ -311,6 +311,20 @@ Completed:
   - Runs on every poll cycle via `recalculateCrmIntelligence(contact.id)`
   - 4 new DB columns, 54/54 tests, clean TSC, clean lint
 
+- **Revenue Analytics (complete)** — production metrics endpoint with 10 metrics:
+  - Revenue by offer: grouped by 5 amount tiers (under ₹100 to ₹1000+)
+  - Revenue by segment: per-segment contact count + revenue
+  - Funnel conversion: total contacts → engaged → offer sent → purchased → repeat → whale, with 4 conversion rates
+  - Reminder conversion: contacts with locked responses → purchased after
+  - Re-engagement conversion: purchases after 14+ days of silence
+  - Repeat purchase rate: buyers with 2+ purchases vs total buyers
+  - LTV: average total_spent across buyers
+  - AOV: average purchase amount across all purchases
+  - Top buyers: top 10 by total_spent with purchase count
+  - Top offers: top 5 by total revenue with amount + count
+  - `GET /api/analytics/revenue` — single endpoint, no vanity metrics
+  - 54/54 tests, clean TSC, clean lint
+
 Blocked:
   - None
 
