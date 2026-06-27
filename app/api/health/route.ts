@@ -50,12 +50,7 @@ export async function GET() {
   }
 
   // 5. Environment
-  const missing: string[] = [];
-  if (!process.env.CRM_API_KEY) missing.push("CRM_API_KEY");
-  if (!process.env.CRON_SECRET) missing.push("CRON_SECRET");
-  if (!process.env.RAZORPAY_WEBHOOK_SECRET) missing.push("RAZORPAY_WEBHOOK_SECRET");
-  if (!process.env.TELEGRAM_API_ID || !process.env.TELEGRAM_API_HASH) missing.push("TELEGRAM_API_ID/HASH");
-  checks.env = missing.length === 0 ? "all required vars set" : `missing: ${missing.join(", ")}`;
+  checks.env = process.env.CRM_API_KEY && process.env.CRON_SECRET ? "configured" : "missing required vars";
 
   return NextResponse.json({
     status: healthy ? "healthy" : "degraded",

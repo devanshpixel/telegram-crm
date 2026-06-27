@@ -75,6 +75,7 @@ interface ContactWithConv {
   last_synced_message_id: number;
   conv_state: ConvState;
   offer_sent_at: string | null;
+  paid: number;
 }
 
 async function listContactConversations(): Promise<ContactWithConv[]> {
@@ -82,7 +83,8 @@ async function listContactConversations(): Promise<ContactWithConv[]> {
   const rows = await db
     .prepare(
       `SELECT c.id, c.telegram_id, c.telegram_access_hash, c.conv_state, c.offer_sent_at,
-              conv.id AS conversation_id, conv.last_synced_message_id
+              conv.id AS conversation_id, conv.last_synced_message_id,
+              (SELECT COUNT(*) FROM purchases WHERE contact_id = c.id) AS paid
        FROM contacts c
        INNER JOIN conversations conv ON conv.contact_id = c.id
        WHERE c.telegram_id IS NOT NULL AND c.telegram_access_hash IS NOT NULL`,
@@ -351,11 +353,7 @@ async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
   if (!row) return false;
   const segment = row.spend_segment ?? "default";
   const messages = await getSegmentLockedMessages(segment);
-  if ((row.locked_response_count ?? 0) >= messages.length) {
-    await setConvState(contactId, "FREE_CHAT");
-    await setOfferCooldown(contactId, 7);
-    return false;
-  }
+  if ((row.locked_response_count ?? 0) >= messages.length) return false;
   if (!row.last_locked_response_at) return true;
   const intervalHours = await getSegmentLockedInterval(segment);
   const h = hoursSince(row.last_locked_response_at);
@@ -496,19 +494,12 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           }
         }
 
-        const conversation = await getConversationByContactId(contact.id);
-        if (!conversation) {
-          summary.errors.push(`No conversation for contact ${contact.id}`);
-          continue;
-        }
-
-        const paid = await hasUserPaid(contact.id);
-        if (paid && contact.conv_state !== "PAID") {
+        if (contact.paid && contact.conv_state !== "PAID") {
           await setConvState(contact.id, "PAID");
           contact.conv_state = "PAID";
         }
 
-        const minId = conversation.last_synced_message_id || 0;
+        const minId = contact.last_synced_message_id || 0;
         let maxId = minId;
         const peer = buildPeer(contact.telegram_id, contact.telegram_access_hash);
 
@@ -518,13 +509,13 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           for await (const message of client.iterMessages(peer, {
             minId,
             reverse: true,
+            limit: 50,
           })) {
             const msgId = (message as { id?: number }).id;
 
             if (!msgId) {
               continue;
             }
-            if (msgId > maxId) maxId = msgId;
 
             if (!(message instanceof Api.Message)) {
               continue;
@@ -537,6 +528,8 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             if (!text) {
               continue;
             }
+
+            if (msgId > maxId) maxId = msgId;
 
             const saved = await createMessage(contact.id, text, "incoming", msgId);
             if (!saved) {
@@ -581,6 +574,19 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                 if (await shouldSendLockedResponse(contact.id)) {
                   await sendLockedResponse(contact.id);
                   summary.remindersSent++;
+                } else {
+                  const ldb = await getDb();
+                  const row = await ldb
+                    .prepare("SELECT locked_response_count, spend_segment FROM contacts WHERE id = ?")
+                    .get(contact.id) as { locked_response_count: number; spend_segment: string } | undefined;
+                  if (row) {
+                    const slug = row.spend_segment ?? "default";
+                    const msgs = await getSegmentLockedMessages(slug);
+                    if ((row.locked_response_count ?? 0) >= msgs.length) {
+                      await setConvState(contact.id, "FREE_CHAT");
+                      await setOfferCooldown(contact.id, 7);
+                    }
+                  }
                 }
               } else if (!skipReply) {
                 const inCooldown = await isInOfferCooldown(contact.id);
@@ -620,7 +626,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           }
 
           if (!replyFailed && maxId > minId) {
-            await updateSyncCursor(conversation.id, maxId);
+            await updateSyncCursor(contact.conversation_id, maxId);
           }
         } catch (e) {
           console.error(`[POLL] Message iteration error for contact ${contact.id}:`, e);

@@ -72,12 +72,12 @@ async function handle(req: Request) {
           .get(contactId) as { id: number; name: string } | undefined;
         if (!contact) continue;
 
-        const reminderText = `hey ${contact.name || "there"} 😊 noticed you started your unlock — still interested? the link's waiting if you want it. let me know if you hit any issues 💕`;
-        await sendTelegramMessage(contactId, reminderText);
-
         await db
           .prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, '1', ?)")
           .run(`recover_sent:${link.id}`, new Date().toISOString());
+
+        const reminderText = `hey ${contact.name || "there"} 😊 noticed you started your unlock — still interested? the link's waiting if you want it. let me know if you hit any issues 💕`;
+        await sendTelegramMessage(contactId, reminderText);
 
         reminded.push({ linkId: link.id, contactId, sent: true });
       } catch (e) {
@@ -90,7 +90,7 @@ async function handle(req: Request) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Recovery failed";
     console.error("[Recover] Fatal error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Recovery failed" }, { status: 500 });
   }
 }
 

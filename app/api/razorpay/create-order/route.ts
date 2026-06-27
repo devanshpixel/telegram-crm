@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { razorpay } from "@/lib/razorpay";
-import { getMediaById } from "@/lib/db/service";
+import { getMediaById, getSetting } from "@/lib/db/service";
 import { getAppUrl } from "@/lib/app-url";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const contactId = Number(body.contactId);
-    const amount = Number(body.amount);
     const mediaId = body.mediaId ? Number(body.mediaId) : undefined;
 
     if (!Number.isInteger(contactId) || contactId <= 0) {
@@ -20,13 +19,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Razorpay is not configured" }, { status: 500 });
     }
 
-    let resolvedAmount = amount;
+    let resolvedAmount: number;
     if (mediaId !== undefined) {
       const media = await getMediaById(mediaId);
       if (!media) {
         return NextResponse.json({ error: "Media not found" }, { status: 404 });
       }
       resolvedAmount = media.price;
+    } else {
+      resolvedAmount = await getSetting("offerPrice", 499);
     }
     if (typeof resolvedAmount !== "number" || resolvedAmount <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });

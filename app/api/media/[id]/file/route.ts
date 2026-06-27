@@ -39,11 +39,12 @@ export async function GET(
     }
 
     const buffer = fs.readFileSync(filePath);
+    const safeName = media.originalName.replace(/["\r\n]/g, "_");
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": media.mimeType,
         "Content-Length": String(buffer.length),
-        "Content-Disposition": `inline; filename="${media.originalName}"`,
+        "Content-Disposition": `inline; filename="${safeName}"`,
       },
     });
   } catch (e) {

@@ -170,7 +170,7 @@ export async function getConversationIdByContactId(
   return row?.id ?? null;
 }
 
-export async function getMessagesByContactId(contactId: number): Promise<Message[]> {
+export async function getMessagesByContactId(contactId: number, limit = 50): Promise<Message[]> {
   const conversationId = await getConversationIdByContactId(contactId);
   if (!conversationId) return [];
 
@@ -178,10 +178,10 @@ export async function getMessagesByContactId(contactId: number): Promise<Message
 
   const rows = await db
     .prepare(
-      "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
+      "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?",
     )
-    .all(conversationId);
-  return (rows as import("./types").MessageRow[]).map(mapMessageRow);
+    .all(conversationId, limit);
+  return (rows as import("./types").MessageRow[]).reverse().map(mapMessageRow);
 }
 
 export async function markConversationRead(contactId: number): Promise<void> {
@@ -250,11 +250,7 @@ export async function createContact(input: CreateContactInput): Promise<ContactP
         input.email ?? "",
         input.company ?? "",
         input.location ?? "",
-        new Date().toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }),
+        nowIso(),
         input.revenue ?? 0,
         input.isOnline ? 1 : 0,
         input.telegramId ?? null,
@@ -883,7 +879,7 @@ export async function getFollowUpAudienceCount(segmentKey: string): Promise<numb
         await db
           .prepare(
             `SELECT COUNT(*) AS count FROM contacts
-             WHERE total_spent >= 200
+             WHERE total_spent >= 1500
                AND (last_purchase_date IS NULL OR last_purchase_date < date('now', '-30 days'))
                AND updated_at < date('now', '-30 days')`,
           )
@@ -909,8 +905,14 @@ export async function getFollowUpAudienceCount(segmentKey: string): Promise<numb
         await db
           .prepare(
             `SELECT COUNT(*) AS count FROM contacts c
+             INNER JOIN conversations conv ON conv.contact_id = c.id
              LEFT JOIN purchases p ON p.contact_id = c.id
-             WHERE p.id IS NULL`,
+             WHERE c.spend_segment = 'prospect'
+               AND c.conv_state = 'FREE_CHAT'
+               AND p.id IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM messages m WHERE m.conversation_id = conv.id AND m.created_at >= date('now', '-7 days')
+               )`,
           )
           .get() as { count: number }
       ).count;
@@ -1711,7 +1713,11 @@ export async function getFollowUps(limit: number = 10): Promise<FollowUpData> {
     },
   ];
   for (const list of lists) {
-    list.count = list.items.length;
+    try {
+      list.count = await getFollowUpAudienceCount(list.key);
+    } catch {
+      list.count = list.items.length;
+    }
   }
   return { lists };
 }
@@ -1977,20 +1983,12 @@ export async function recordPaid(contactId: number): Promise<void> {
     .run(ts, ts, contactId);
 }
 
-export async function recordUpsell(contactId: number, amount: number): Promise<void> {
+export async function recordUpsell(contactId: number): Promise<void> {
   const db = await getDb();
   const ts = nowIso();
   await db
     .prepare("UPDATE contacts SET upsell_count = upsell_count + 1, last_upsell_at = ?, updated_at = ? WHERE id = ?")
     .run(ts, ts, contactId);
-  await createPurchase({
-    contactId,
-    amount,
-    purchaseDate: ts.split("T")[0],
-    kind: "upsell",
-    note: `upsell_${ts}`,
-    markPaid: true,
-  });
 }
 
 export type SpendSegment = "prospect" | "buyer" | "premium" | "high_value" | "vip" | "whale";
@@ -2026,32 +2024,6 @@ export async function getSpendSegmentMultipliers(segment: SpendSegment): Promise
     case "whale": return 2.0;
     default: return 1.0;
   }
-}
-
-export async function getSegmentBreakdown(): Promise<Record<string, number>> {
-  const db = await getDb();
-  const rows = await db
-    .prepare("SELECT spend_segment, COUNT(*) AS count FROM contacts GROUP BY spend_segment ORDER BY count DESC")
-    .all() as { spend_segment: string; count: number }[];
-  const result: Record<string, number> = {};
-  for (const row of rows) result[row.spend_segment] = row.count;
-  return result;
-}
-
-export async function getSegmentRevenue(): Promise<Record<string, number>> {
-  const db = await getDb();
-  const rows = await db
-    .prepare(`
-      SELECT c.spend_segment, COALESCE(SUM(p.amount), 0) AS total
-      FROM contacts c
-      LEFT JOIN purchases p ON p.contact_id = c.id
-      GROUP BY c.spend_segment
-      ORDER BY total DESC
-    `)
-    .all() as { spend_segment: string; total: number }[];
-  const result: Record<string, number> = {};
-  for (const row of rows) result[row.spend_segment] = row.total;
-  return result;
 }
 
 export async function getIntentScore(messages: { text: string }[]): Promise<number> {
@@ -2110,17 +2082,26 @@ export async function getRevenueAnalytics(): Promise<{
     .get() as { avg: number };
   const ltv = Math.round(ltvRow.avg);
 
-  const totalBuyersCount = (await db
-    .prepare("SELECT COUNT(DISTINCT contact_id) AS count FROM purchases")
-    .get() as { count: number }).count;
   const repeatBuyers = (await db
     .prepare("SELECT COUNT(*) AS count FROM (SELECT contact_id FROM purchases GROUP BY contact_id HAVING COUNT(*) > 1)")
     .get() as { count: number }).count;
-  const repeatPurchaseRate = totalBuyersCount > 0 ? Math.round((repeatBuyers / totalBuyersCount) * 100) : 0;
+  const repeatPurchaseRate = totalBuyers > 0 ? Math.round((repeatBuyers / totalBuyers) * 100) : 0;
+
+  const tiers = await db
+    .prepare("SELECT c.spend_segment, COUNT(*) AS total, COALESCE(SUM(CASE WHEN p.id IS NOT NULL THEN 1 ELSE 0 END), 0) AS purchased FROM (SELECT id, spend_segment FROM contacts WHERE offer_sent = 1) c LEFT JOIN purchases p ON p.contact_id = c.id GROUP BY c.spend_segment")
+    .all() as { spend_segment: string; total: number; purchased: number }[];
+  const offerAcceptanceByTier: Record<string, { sent: number; purchased: number; rate: number }> = {};
+  for (const t of tiers) {
+    offerAcceptanceByTier[t.spend_segment || "unknown"] = {
+      sent: t.total,
+      purchased: t.purchased,
+      rate: t.total > 0 ? Math.round((t.purchased / t.total) * 100) : 0,
+    };
+  }
 
   return {
     conversionRate,
-    offerAcceptanceByTier: {},
+    offerAcceptanceByTier,
     aov,
     ltv,
     repeatPurchaseRate,
@@ -2769,14 +2750,4 @@ export async function getFailedActionStats(): Promise<{
   return { pending, resolved, stale, byType };
 }
 
-export async function recordObjection(contactId: number, objection: string): Promise<void> {
-  const db = await getDb();
-  await db.prepare("UPDATE contacts SET last_objection = ?, updated_at = ? WHERE id = ?")
-    .run(objection, nowIso(), contactId);
-}
 
-export async function recordSuccessfulOffer(contactId: number, amount: number): Promise<void> {
-  const db = await getDb();
-  await db.prepare("UPDATE contacts SET last_successful_offer = ?, updated_at = ? WHERE id = ?")
-    .run(amount, nowIso(), contactId);
-}

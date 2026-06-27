@@ -12,7 +12,6 @@ const CRON_PATHS = [
   "/api/telegram/reengage",
   "/api/razorpay/reconcile",
   "/api/razorpay/recover",
-  "/api/health",
   "/api/automation/stale-leads",
   "/api/automation/failed-unlock",
   "/api/automation/vip-followup",
@@ -84,7 +83,7 @@ export function middleware(request: NextRequest) {
     const res = NextResponse.redirect(url);
     res.cookies.set(SESSION_COOKIE, apiKey, {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
@@ -93,7 +92,11 @@ export function middleware(request: NextRequest) {
   }
 
   if (hasValidCookie || hasValidHeader) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    res.headers.set("X-Content-Type-Options", "nosniff");
+    res.headers.set("X-Frame-Options", "DENY");
+    res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+    return res;
   }
 
   // Unauthorized.

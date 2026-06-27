@@ -1,6 +1,6 @@
 # Known Limitations
 
-> Limitations, risks, and future improvements identified during production audit.
+> Limitations, risks, and future improvements identified during RC audit (updated post-fix).
 
 ---
 
@@ -38,11 +38,12 @@
 
 ---
 
-## 4. Webhook Retries for Permanent Failures
+## 4. Webhook Retries for Permanent Failures  
 
-**Severity:** Low (noisy, not destructive)
+**Severity:** Low (noisy, not destructive)  
 
-**Issue:** When a webhook event references a deleted contact, Razorpay retries the event indefinitely because the endpoint returns HTTP 400. This generates log noise but has no other impact.
+**Issue:** When a webhook event references a deleted contact, Razorpay retries the event indefinitely because the endpoint now returns HTTP 500 (was 400, fixed in RC to enable retries for transient errors).  
+This generates log noise but has no other impact.  
 
 **Future fix:** Return HTTP 200 for permanent failures after logging them.
 

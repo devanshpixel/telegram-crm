@@ -33,27 +33,30 @@ async function handle(req: Request) {
 
   const results: { path: string; status: number; ok: boolean; error?: string }[] = [];
 
-  for (const ep of CRON_ENDPOINTS) {
-    try {
+  const outcomes = await Promise.allSettled(
+    CRON_ENDPOINTS.map(async (ep) => {
       const url = `${baseUrl}${ep.path}`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      const res = await fetch(url, {
-        headers: {
-          "x-cron-secret": secret || "",
-          "Content-Type": "application/json",
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      results.push({ path: ep.path, status: res.status, ok: res.status === ep.expected });
-    } catch (e) {
-      results.push({
-        path: ep.path,
-        status: 0,
-        ok: false,
-        error: e instanceof Error ? e.message : String(e),
-      });
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        const res = await fetch(url, {
+          headers: {
+            "x-cron-secret": secret || "",
+            "Content-Type": "application/json",
+          },
+          signal: controller.signal,
+        });
+        return { path: ep.path, status: res.status, ok: res.status === ep.expected };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }),
+  );
+  for (const o of outcomes) {
+    if (o.status === "fulfilled") {
+      results.push(o.value);
+    } else {
+      results.push({ path: "unknown", status: 0, ok: false, error: o.reason?.message ?? String(o.reason) });
     }
   }
 

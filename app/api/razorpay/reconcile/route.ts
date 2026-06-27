@@ -63,9 +63,10 @@ async function handle(req: Request) {
           continue;
         }
 
+        const escapedPaymentId = paymentId.replace(/[%_]/g, '\\$&');
         const existing = await db
-          .prepare("SELECT id FROM purchases WHERE note LIKE ?")
-          .get(`%razorpay_payment:${paymentId}%`);
+          .prepare("SELECT id FROM purchases WHERE note LIKE ? ESCAPE '\\'")
+          .get(`%razorpay_payment:${escapedPaymentId}%`);
 
         if (existing) continue;
 
@@ -125,7 +126,7 @@ async function handle(req: Request) {
                 contactId,
                 `🔥 special offer for our newest VIP: get the full bundle at just ₹${upsellPrice} — this is a one-time offer just for you!\n\n👉 ${upsellUrl}`
               );
-              await recordUpsell(contactId, upsellPrice);
+              await recordUpsell(contactId);
             }
           }
         } catch (e) {

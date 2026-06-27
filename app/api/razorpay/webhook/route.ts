@@ -104,7 +104,7 @@ export async function POST(request: Request) {
                   contactId,
                   `🔥 special offer for our newest VIP: get the full bundle at just ₹${upsellPrice} — this is a one-time offer just for you!\n\n👉 ${upsellUrl}`
                 );
-                await recordUpsell(contactId, upsellPrice);
+                await recordUpsell(contactId);
               }
             }
           } catch (e) {
@@ -120,6 +120,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true });
   } catch (e) {
     console.error("Razorpay webhook error:", e);
-    return NextResponse.json({ error: "Webhook processing failed" }, { status: 400 });
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 }

@@ -38,9 +38,9 @@ async function handle(req: Request) {
         repliesSent: 0,
         offersSent: 0,
         remindersSent: 0,
-        errors: [`Fatal poll error: ${message}`],
+        errors: ["Fatal poll error"],
       },
-      { status: 200 },
+      { status: 500 },
     );
   }
 }

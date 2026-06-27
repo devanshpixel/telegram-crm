@@ -72,21 +72,6 @@ export interface MessageRow {
   created_at: string;
 }
 
-export interface TagRow {
-  id: number;
-  contact_id: number;
-  name: string;
-  created_at: string;
-}
-
-export interface NoteRow {
-  id: number;
-  contact_id: number;
-  content: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface PurchaseRow {
   id: number;
   contact_id: number;

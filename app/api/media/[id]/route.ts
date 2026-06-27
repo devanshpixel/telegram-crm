@@ -31,7 +31,7 @@ export async function PATCH(
 
     const body = await request.json();
     const price = Number(body.price);
-    if (typeof price !== "number" || price < 0) return apiError("Valid price is required");
+    if (typeof price !== "number" || isNaN(price) || price < 0) return apiError("Valid price is required");
 
     const media = await updateMediaPrice(mediaId, price);
     if (!media) return apiError("Media not found", 404);

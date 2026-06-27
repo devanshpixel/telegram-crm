@@ -22,7 +22,8 @@ async function handle(req: Request) {
         `SELECT id FROM contacts
          WHERE conv_state = 'OFFER_SENT'
            AND locked_response_count < ?
-           AND (last_locked_response_at IS NULL OR last_locked_response_at < ?)`,
+           AND (last_locked_response_at IS NULL OR last_locked_response_at < ?)
+         LIMIT 200`,
       )
       .all(LOCKED_MESSAGES.length, cutoff)) as { id: number }[];
 
@@ -44,7 +45,7 @@ async function handle(req: Request) {
     return NextResponse.json({ reminded: results.length, results });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Reminder job failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Reminder job failed" }, { status: 500 });
   }
 }
 
