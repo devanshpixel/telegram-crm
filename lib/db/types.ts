@@ -36,6 +36,7 @@ export interface ContactRow {
   post_purchase_welcome_sent: number;
   last_upsell_at: string | null;
   upsell_count: number;
+  spend_segment: string;
 }
 
 export interface ConversationRow {

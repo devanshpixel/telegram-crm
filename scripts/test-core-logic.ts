@@ -286,14 +286,14 @@ async function main() {
   assert(shouldUpsellFirst, "first-time buyer gets upsell offer");
 
   // After upsell: upsell count 1 → no more upsell
-  const upsellCount1 = 1;
-  const totalSpent699 = 699;
+  const upsellCount1: number = 1;
+  const totalSpent699: number = 699;
   const shouldUpsellSecond = upsellCount1 === 0 && totalSpent699 < 1000;
   assert(!shouldUpsellSecond, "after upsell, no more immediate upsells");
 
   // High spender: total spent >= 1000 → no upsell needed
-  const upsellCount0High = 0;
-  const totalSpent1000 = 1000;
+  const upsellCount0High: number = 0;
+  const totalSpent1000: number = 1000;
   const shouldUpsellHigh = upsellCount0High === 0 && totalSpent1000 < 1000;
   assert(!shouldUpsellHigh, "high spender does not get first-purchase upsell");
 

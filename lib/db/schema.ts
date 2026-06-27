@@ -157,4 +157,5 @@ ALTER TABLE contacts ADD COLUMN paid_at TEXT;
 ALTER TABLE contacts ADD COLUMN post_purchase_welcome_sent INTEGER DEFAULT 0;
 ALTER TABLE contacts ADD COLUMN last_upsell_at TEXT;
 ALTER TABLE contacts ADD COLUMN upsell_count INTEGER DEFAULT 0;
+ALTER TABLE contacts ADD COLUMN spend_segment TEXT DEFAULT 'prospect';
 `;

@@ -57,6 +57,26 @@ export async function GET() {
       .prepare("SELECT COALESCE(ROUND(AVG(relationship_score), 1), 0) AS avg FROM contacts WHERE relationship_score > 0")
       .get() as { avg: number }).avg;
 
+    const segmentBreakdown = await db
+      .prepare("SELECT spend_segment, COUNT(*) AS count FROM contacts GROUP BY spend_segment ORDER BY count DESC")
+      .all() as { spend_segment: string; count: number }[];
+
+    const segmentRevenue = await db
+      .prepare(`
+        SELECT c.spend_segment, COALESCE(SUM(p.amount), 0) AS total
+        FROM contacts c
+        LEFT JOIN purchases p ON p.contact_id = c.id
+        GROUP BY c.spend_segment
+        ORDER BY total DESC
+      `)
+      .all() as { spend_segment: string; total: number }[];
+
+    const segments: Record<string, { count: number; revenue: number }> = {};
+    for (const s of segmentBreakdown) segments[s.spend_segment] = { count: s.count, revenue: 0 };
+    for (const s of segmentRevenue) {
+      if (segments[s.spend_segment]) segments[s.spend_segment].revenue = s.total;
+    }
+
     return NextResponse.json({
       conversion: {
         offersSent: totalOffers,
@@ -79,6 +99,7 @@ export async function GET() {
         avgEmotionalTemp,
         avgRelationshipScore,
       },
+      segments,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Analytics failed";

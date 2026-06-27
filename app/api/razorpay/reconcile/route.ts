@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { razorpay } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
-import { createPurchase, recalculateLeadScore, recordPaid, recordUpsell } from "@/lib/db/service";
+import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid, recordUpsell } from "@/lib/db/service";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +87,7 @@ async function handle(req: Request) {
         });
 
         await recalculateLeadScore(contactId);
+        await recalculateSpendSegment(contactId);
         await recordPaid(contactId);
 
         try {

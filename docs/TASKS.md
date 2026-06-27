@@ -277,6 +277,17 @@ Completed:
   - 29 new tests added (54 total, up from 25)
   - Clean TSC, clean lint
 
+- **Spend Segmentation (complete)** — production-ready segment system with 6 tiers:
+  - Segment type: `SpendSegment` (`prospect` | `buyer` | `premium` | `high_value` | `vip` | `whale`)
+  - Eligibility rules: `recalculateSpendSegment()` — 0 purchases = prospect, 1x <₹500 = buyer, 2+ or ₹500+ = premium, ₹1500+ = high_value, ₹5000+ = vip, ₹20000+ = whale
+  - Pricing behavior: `getSpendSegmentMultipliers()` — 0.7x / 0.9x / 1.0x / 1.15x / 1.5x / 2.0x
+  - Offer timing: `SEGMENT_LOCKED_INTERVALS` — 12h / 18h / 24h / 36h / 48h / 72h
+  - Reminder copy: `SEGMENT_LOCKED_MESSAGES` — 6 variants with segment-appropriate tone
+  - Re-engagement: 6 segment-specific follow-up queries (prospect_engaged, buyer_inactive, premium_inactive, high_value_inactive, vip_segment_inactive, whale_inactive) in `getFollowUps()`
+  - Analytics: `getSegmentBreakdown()` + `getSegmentRevenue()` in revenue endpoint
+  - Run on every poll cycle + every purchase (webhook + reconcile)
+  - Clean TSC, clean lint, 54/54 tests passing
+
 Blocked:
   - None
 

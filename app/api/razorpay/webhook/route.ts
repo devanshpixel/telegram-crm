@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { razorpay, WEBHOOK_SECRET } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
-import { createPurchase, recalculateLeadScore, recordPaid, recordUpsell } from "@/lib/db/service";
+import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid, recordUpsell } from "@/lib/db/service";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 
 export async function POST(request: Request) {
@@ -59,8 +59,9 @@ export async function POST(request: Request) {
             paymentId,
           });
 
-          // Lead score update
+          // Lead score + segment update
           await recalculateLeadScore(contactId);
+          await recalculateSpendSegment(contactId);
           await recordPaid(contactId);
 
           // Send Telegram confirmation (best-effort, never fails the webhook)

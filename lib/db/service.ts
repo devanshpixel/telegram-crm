@@ -833,7 +833,7 @@ export async function getFollowUpAudience(
     case "no_ppv_30d":
       return audienceToRecipients(await getFollowUpNoPpvInDays(30, capped));
     case "never_purchased":
-      return audienceToRecipients(await getFollowUpNeverPurchased(capped));
+      return audienceToRecipients(await getFollowUpProspectEngaged(capped));
     default:
       return [];
   }
@@ -1482,16 +1482,18 @@ async function getFollowUpHighSpenderInactive(minSpent: number, days: number, li
   );
 }
 
-async function getFollowUpNeverPurchased(limit: number): Promise<FollowUpListItem[]> {
+async function getFollowUpPremiumInactive(limit: number): Promise<FollowUpListItem[]> {
   const db = await getDb();
   const rows = await db
     .prepare(
-      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              CAST(julianday('now') - julianday(c.last_purchase_date) AS INTEGER) AS days_since
        FROM contacts c
-       LEFT JOIN purchases p ON p.contact_id = c.id
-       WHERE p.id IS NULL
-       ORDER BY c.created_at DESC
-       LIMIT ?`,
+       WHERE c.spend_segment = 'premium'
+         AND c.last_purchase_date IS NOT NULL
+         AND c.last_purchase_date < date('now', '-21 days')
+       ORDER BY c.last_purchase_date ASC
+       LIMIT ?`
     )
     .all(limit) as {
       id: number;
@@ -1499,10 +1501,133 @@ async function getFollowUpNeverPurchased(limit: number): Promise<FollowUpListIte
       username: string;
       avatar: string;
       avatar_color: string;
+      days_since: number;
     }[];
-  return rows.map((r) =>
-    mapFollowUpRow({ ...r, days_since: null, hint_value: "no purchases" }),
-  );
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: `${r.days_since}d` }));
+}
+
+async function getFollowUpHighValueInactive(limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              CAST(julianday('now') - julianday(c.last_purchase_date) AS INTEGER) AS days_since
+       FROM contacts c
+       WHERE c.spend_segment = 'high_value'
+         AND c.last_purchase_date IS NOT NULL
+         AND c.last_purchase_date < date('now', '-30 days')
+       ORDER BY c.last_purchase_date ASC
+       LIMIT ?`
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since: number;
+    }[];
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: `${r.days_since}d` }));
+}
+
+async function getFollowUpVipBySegment(limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              CAST(julianday('now') - julianday(c.last_purchase_date) AS INTEGER) AS days_since
+       FROM contacts c
+       WHERE c.spend_segment = 'vip'
+         AND c.last_purchase_date IS NOT NULL
+         AND c.last_purchase_date < date('now', '-45 days')
+       ORDER BY c.last_purchase_date ASC
+       LIMIT ?`
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since: number;
+    }[];
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: `${r.days_since}d` }));
+}
+
+async function getFollowUpWhaleInactive(limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              CAST(julianday('now') - julianday(c.last_purchase_date) AS INTEGER) AS days_since
+       FROM contacts c
+       WHERE c.spend_segment = 'whale'
+         AND c.last_purchase_date IS NOT NULL
+         AND c.last_purchase_date < date('now', '-60 days')
+       ORDER BY c.last_purchase_date ASC
+       LIMIT ?`
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since: number;
+    }[];
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: `${r.days_since}d` }));
+}
+
+async function getFollowUpProspectEngaged(limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              CAST(julianday('now') - julianday(MAX(m.created_at)) AS INTEGER) AS days_since
+       FROM contacts c
+       INNER JOIN conversations conv ON conv.contact_id = c.id
+       LEFT JOIN messages m ON m.conversation_id = conv.id
+       WHERE c.spend_segment = 'prospect'
+         AND c.conv_state = 'FREE_CHAT'
+       GROUP BY c.id
+       HAVING MAX(m.created_at) IS NOT NULL
+          AND MAX(m.created_at) >= date('now', '-7 days')
+       ORDER BY MAX(m.created_at) DESC
+       LIMIT ?`
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since: number;
+    }[];
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: `${r.days_since}d` }));
+}
+
+async function getFollowUpBuyerInactive(limit: number): Promise<FollowUpListItem[]> {
+  const db = await getDb();
+  const rows = await db
+    .prepare(
+      `SELECT c.id, c.name, c.username, c.avatar, c.avatar_color,
+              CAST(julianday('now') - julianday(c.last_purchase_date) AS INTEGER) AS days_since
+       FROM contacts c
+       WHERE c.spend_segment = 'buyer'
+         AND c.last_purchase_date IS NOT NULL
+         AND c.last_purchase_date < date('now', '-14 days')
+       ORDER BY c.last_purchase_date ASC
+       LIMIT ?`
+    )
+    .all(limit) as {
+      id: number;
+      name: string;
+      username: string;
+      avatar: string;
+      avatar_color: string;
+      days_since: number;
+    }[];
+  return rows.map((r) => mapFollowUpRow({ ...r, hint_value: `${r.days_since}d` }));
 }
 
 export async function getFollowUps(limit: number = 10): Promise<FollowUpData> {
@@ -1543,11 +1668,46 @@ export async function getFollowUps(limit: number = 10): Promise<FollowUpData> {
       items: await getFollowUpNoPpvInDays(30, limit),
     },
     {
-      key: "never_purchased",
-      title: "Never purchased",
-      description: "Engaged fans who never bought",
+      key: "prospect_engaged",
+      title: "Prospect — engaged, never bought",
+      description: "Active chatters who haven't purchased yet",
       count: 0,
-      items: await getFollowUpNeverPurchased(limit),
+      items: await getFollowUpProspectEngaged(limit),
+    },
+    {
+      key: "buyer_inactive",
+      title: "Buyer — inactive 14d+",
+      description: "First-time buyers who went quiet",
+      count: 0,
+      items: await getFollowUpBuyerInactive(limit),
+    },
+    {
+      key: "premium_inactive",
+      title: "Premium — inactive 21d+",
+      description: "Repeat buyers (2+ or ₹500+) at risk",
+      count: 0,
+      items: await getFollowUpPremiumInactive(limit),
+    },
+    {
+      key: "high_value_inactive",
+      title: "High Value — inactive 30d+",
+      description: "High-value buyers (₹1500+) at risk",
+      count: 0,
+      items: await getFollowUpHighValueInactive(limit),
+    },
+    {
+      key: "vip_segment_inactive",
+      title: "VIP — inactive 60d+",
+      description: "VIP buyers (₹5000+) at risk",
+      count: 0,
+      items: await getFollowUpVipBySegment(limit),
+    },
+    {
+      key: "whale_inactive",
+      title: "Whale — inactive 90d+",
+      description: "Whale buyers (₹20000+) at risk",
+      count: 0,
+      items: await getFollowUpWhaleInactive(limit),
     },
   ];
   for (const list of lists) {
@@ -1831,6 +1991,67 @@ export async function recordUpsell(contactId: number, amount: number): Promise<v
     note: `upsell_${ts}`,
     markPaid: true,
   });
+}
+
+export type SpendSegment = "prospect" | "buyer" | "premium" | "high_value" | "vip" | "whale";
+
+export async function recalculateSpendSegment(contactId: number): Promise<SpendSegment> {
+  const db = await getDb();
+  const row = await db
+    .prepare("SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM purchases WHERE contact_id = ?")
+    .get(contactId) as { count: number; total: number };
+
+  let segment: SpendSegment = "prospect";
+  if (row.count === 0) segment = "prospect";
+  else if (row.total >= 20000) segment = "whale";
+  else if (row.total >= 5000) segment = "vip";
+  else if (row.total >= 1500) segment = "high_value";
+  else if (row.count >= 2 || row.total >= 500) segment = "premium";
+  else segment = "buyer";
+
+  await db
+    .prepare("UPDATE contacts SET spend_segment = ?, updated_at = ? WHERE id = ?")
+    .run(segment, nowIso(), contactId);
+
+  return segment;
+}
+
+export async function getSpendSegmentMultipliers(segment: SpendSegment): Promise<number> {
+  switch (segment) {
+    case "prospect": return 0.7;
+    case "buyer": return 0.9;
+    case "premium": return 1.0;
+    case "high_value": return 1.15;
+    case "vip": return 1.5;
+    case "whale": return 2.0;
+    default: return 1.0;
+  }
+}
+
+export async function getSegmentBreakdown(): Promise<Record<string, number>> {
+  const db = await getDb();
+  const rows = await db
+    .prepare("SELECT spend_segment, COUNT(*) AS count FROM contacts GROUP BY spend_segment ORDER BY count DESC")
+    .all() as { spend_segment: string; count: number }[];
+  const result: Record<string, number> = {};
+  for (const row of rows) result[row.spend_segment] = row.count;
+  return result;
+}
+
+export async function getSegmentRevenue(): Promise<Record<string, number>> {
+  const db = await getDb();
+  const rows = await db
+    .prepare(`
+      SELECT c.spend_segment, COALESCE(SUM(p.amount), 0) AS total
+      FROM contacts c
+      LEFT JOIN purchases p ON p.contact_id = c.id
+      GROUP BY c.spend_segment
+      ORDER BY total DESC
+    `)
+    .all() as { spend_segment: string; total: number }[];
+  const result: Record<string, number> = {};
+  for (const row of rows) result[row.spend_segment] = row.total;
+  return result;
 }
 
 export async function getIntentScore(messages: { text: string }[]): Promise<number> {

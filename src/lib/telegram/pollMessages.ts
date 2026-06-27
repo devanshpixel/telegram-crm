@@ -10,6 +10,8 @@ import {
   recalculateLeadScore,
   updateEmotionalTemp,
   updateRelationshipScore,
+  recalculateSpendSegment,
+  getSpendSegmentMultipliers,
   getIntentScore,
   isInOfferCooldown,
   setOfferCooldown,
@@ -17,6 +19,7 @@ import {
   getPostPurchasePhase,
   markWelcomeSent,
 } from "@/lib/db/service";
+
 import type { ConversationRow } from "@/lib/db/types";
 import type { ConvState, ReplyMode } from "@/types";
 import { razorpay } from "@/lib/razorpay";
@@ -255,14 +258,71 @@ export const LOCKED_MESSAGES = [
   `Last chance babe 🥺 After this I'm closing the door for a while. Join fast: `,
 ];
 
+const SEGMENT_LOCKED_INTERVALS: Record<string, number> = {
+  prospect: 12,
+  buyer: 18,
+  premium: 24,
+  high_value: 36,
+  vip: 48,
+  whale: 72,
+};
+
+const SEGMENT_LOCKED_MESSAGES: Record<string, string[]> = {
+  prospect: [
+    `hey! this chat is locked now 😘💕 unlock for exclusive content: `,
+    `still here? 😏 my private stuff is waiting... don't miss out: `,
+    `last chance 🥺 closing the door soon. join now: `,
+  ],
+  buyer: [
+    `baby, locked chat time 😘💕 unlock your vip access here: `,
+    `you liked it last time... ready for more? 😏 unlock here: `,
+    `final reminder 🥺 door's closing. grab your access: `,
+  ],
+  premium: [
+    `premium chat locked 😘💕 your exclusive content awaits: `,
+    `still thinking? 😏 the good stuff is inside... unlock: `,
+    `last call babe 🥺 this offer expires soon: `,
+  ],
+  high_value: [
+    `hey you! locked chat for my favs 😘💕 unlock premium: `,
+    `missed you in my vip 😏 the exclusive stuff is waiting: `,
+    `final chance 🥺 this tier won't stay open long: `,
+  ],
+  vip: [
+    `vip access locked 😘💕 your private content is ready: `,
+    `exclusive tier still open 😏 don't let it slip: `,
+    `closing vip doors 🥺 last chance for this tier: `,
+  ],
+  whale: [
+    `my vip lounge is locked 😘💕 your content awaits: `,
+    `whale tier exclusive 😏 the best stuff is inside: `,
+    `final vip call 🥺 doors closing on this tier: `,
+  ],
+  default: [
+    `Baby, this chat is locked now 😘💕 Unlock here for my exclusive content: `,
+    `Still thinking? 😏 Meri private stuff is waiting inside... don't miss out: `,
+    `Last chance babe 🥺 After this I'm closing the door for a while. Join fast: `,
+  ],
+};
+
+async function getSegmentLockedInterval(segment: string): Promise<number> {
+  return SEGMENT_LOCKED_INTERVALS[segment] ?? 24;
+}
+
+async function getSegmentLockedMessages(segment: string): Promise<string[]> {
+  return SEGMENT_LOCKED_MESSAGES[segment] ?? SEGMENT_LOCKED_MESSAGES.default;
+}
+
 export async function sendLockedResponse(contactId: number): Promise<void> {
   const db = await getDb();
   const row = await db
-    .prepare("SELECT locked_response_count FROM contacts WHERE id = ?")
-    .get(contactId) as { locked_response_count: number } | undefined;
+    .prepare("SELECT locked_response_count, spend_segment FROM contacts WHERE id = ?")
+    .get(contactId) as { locked_response_count: number; spend_segment: string } | undefined;
   const count = row?.locked_response_count ?? 0;
+  const segment = row?.spend_segment ?? "default";
 
-  if (count >= LOCKED_MESSAGES.length) {
+  const messages = await getSegmentLockedMessages(segment);
+  if (count >= messages.length) {
     await setConvState(contactId, "FREE_CHAT");
     await setOfferCooldown(contactId, 7);
     return;
@@ -271,55 +331,39 @@ export async function sendLockedResponse(contactId: number): Promise<void> {
   const settings = await getOfferSettings();
   const amount = await selectOfferAmount(contactId, settings.offerPrice);
   const link = await createPaymentLink(contactId, amount);
-  const text = LOCKED_MESSAGES[count] + link;
+  const text = messages[count] + link;
 
   await sendTelegramMessage(contactId, text);
 
   const ts = nowIso();
   await db
-    .prepare("UPDATE contacts SET last_locked_response_at = ?, locked_response_count = locked_response_count + 1, updated_at = ? WHERE id = ?")
+    .prepare("UPDATE contacts SET last_locked_response_at = ?, locked_response_count = locked_response_count + 1, updated_at = ?, WHERE id = ?")
     .run(ts, ts, contactId);
-}
-
-async function shouldSkipDueToPacing(contactId: number, emotionalTemp: number): Promise<boolean> {
-  // Dynamic pacing: low-engagement contacts get replies less frequently
-  if (emotionalTemp >= 40) return false;
-  const db = await getDb();
-  const row = await db
-    .prepare("SELECT updated_at FROM conversations WHERE contact_id = ?")
-    .get(contactId) as { updated_at: string } | undefined;
-  if (!row) return false;
-  const minutesSince = (Date.now() - new Date(row.updated_at).getTime()) / 60000;
-  return minutesSince < 5;
 }
 
 async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
   const db = await getDb();
   const row = (await db
-    .prepare("SELECT last_locked_response_at, locked_response_count FROM contacts WHERE id = ?")
-    .get(contactId)) as { last_locked_response_at: string | null; locked_response_count: number } | undefined;
+    .prepare("SELECT last_locked_response_at, locked_response_count, spend_segment FROM contacts WHERE id = ?")
+    .get(contactId)) as { last_locked_response_at: string | null; locked_response_count: number; spend_segment: string } | undefined;
   if (!row) return false;
-  if ((row.locked_response_count ?? 0) >= LOCKED_MESSAGES.length) {
+  const segment = row.spend_segment ?? "default";
+  const messages = await getSegmentLockedMessages(segment);
+  if ((row.locked_response_count ?? 0) >= messages.length) {
     await setConvState(contactId, "FREE_CHAT");
     await setOfferCooldown(contactId, 7);
     return false;
   }
   if (!row.last_locked_response_at) return true;
+  const intervalHours = await getSegmentLockedInterval(segment);
   const h = hoursSince(row.last_locked_response_at);
-  return h >= 24;
+  return h >= intervalHours;
 }
 
 async function selectOfferAmount(contactId: number, basePrice: number): Promise<number> {
-  const db = await getDb();
-  const row = await db
-    .prepare("SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM purchases WHERE contact_id = ?")
-    .get(contactId) as { count: number; total: number };
-
-  if (row.count === 0) return Math.round(basePrice * 0.7);
-  if (row.total >= 1500) return Math.round(basePrice * 1.5);
-  if (row.total >= 500) return Math.round(basePrice * 1.15);
-  if (row.count <= 2) return Math.round(basePrice * 0.9);
-  return basePrice;
+  const segment = await recalculateSpendSegment(contactId);
+  const multiplier = await getSpendSegmentMultipliers(segment);
+  return Math.round(basePrice * multiplier);
 }
 
 async function checkOfferExpiry(contactId: number, offerSentAt: string | null): Promise<boolean> {
@@ -507,6 +551,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           if (incomingMessages.length > 0 && automatedReplies) {
             try {
               await recalculateLeadScore(contact.id);
+              await recalculateSpendSegment(contact.id);
               const emotionalTemp = await updateEmotionalTemp(contact.id);
               const intentScore = await getIntentScore(incomingMessages);
               await updateRelationshipScore(contact.id);
@@ -598,4 +643,20 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
   }
 
   return summary;
+}
+
+async function shouldSkipDueToPacing(contactId: number, emotionalTemp: number): Promise<boolean> {
+  if (emotionalTemp >= 40) return false;
+  const db = await getDb();
+  const lastMsg = await db
+    .prepare(
+      `SELECT m.created_at FROM messages m
+       JOIN conversations conv ON conv.id = m.conversation_id
+       WHERE conv.contact_id = ?
+       ORDER BY m.created_at DESC LIMIT 1`
+    )
+    .get(contactId) as { created_at: string } | undefined;
+  if (!lastMsg) return false;
+  const elapsed = (Date.now() - new Date(lastMsg.created_at).getTime()) / 1000 / 60;
+  return elapsed < 5;
 }
