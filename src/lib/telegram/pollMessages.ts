@@ -182,16 +182,21 @@ async function sendAiReply(
   // dead "[LINK]" placeholder and can never pay (lost sale on the hottest lead).
   const linkMatch = reply.match(/\[link\]/i);
   if (linkMatch) {
+    let linkSent = false;
     try {
       const settings = await getOfferSettings();
       const amount = await selectOfferAmount(contactId, settings.offerPrice);
       const link = await createPaymentLink(contactId, amount);
       reply = reply.replace(/\[link\]/gi, link).trim();
       await sendTelegramMessage(contactId, reply);
+      linkSent = true;
       await setConvState(contactId, "OFFER_SENT", nowIso());
       return { offerSent: true };
     } catch (e) {
-      // Never ship the raw placeholder. Strip it and send a clean nudge.
+      if (linkSent) {
+        console.error(`[POLL] Post-send state update failed for [LINK] offer (contact ${contactId}):`, e);
+        return { offerSent: true };
+      }
       console.error(
         `[POLL] Payment link creation failed during [LINK] substitution (contact ${contactId}):`,
         e,
@@ -234,7 +239,11 @@ async function sendPremiumOffer(contactId: number): Promise<void> {
   const link = await createPaymentLink(contactId, amount);
   const text = `${settings.offerMessage}\n\n👉 ${link}`;
   await sendTelegramMessage(contactId, text);
-  await setConvState(contactId, "OFFER_SENT", nowIso());
+  try {
+    await setConvState(contactId, "OFFER_SENT", nowIso());
+  } catch (e) {
+    console.error(`[POLL] Failed to update conv_state after premium offer for contact ${contactId}:`, e);
+  }
 }
 
 
@@ -322,9 +331,13 @@ export async function sendLockedResponse(contactId: number): Promise<void> {
   await sendTelegramMessage(contactId, text);
 
   const ts = nowIso();
-  await db
-    .prepare("UPDATE contacts SET last_locked_response_at = ?, locked_response_count = locked_response_count + 1, updated_at = ? WHERE id = ?")
-    .run(ts, ts, contactId);
+  try {
+    await db
+      .prepare("UPDATE contacts SET last_locked_response_at = ?, locked_response_count = locked_response_count + 1, updated_at = ? WHERE id = ?")
+      .run(ts, ts, contactId);
+  } catch (e) {
+    console.error(`[POLL] Failed to update locked response count for contact ${contactId}:`, e);
+  }
 }
 
 async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
@@ -542,7 +555,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                 if (phase === "welcome") {
                   const welcomeMsg = "you're officially my VIP now 😘💕 i don't let everyone in here, so feel special. want to see what else i've got for my favs?";
                   await sendTelegramMessage(contact.id, welcomeMsg);
-                  await markWelcomeSent(contact.id);
+                  try { await markWelcomeSent(contact.id); } catch (e) { console.error(`[POLL] markWelcomeSent failed for ${contact.id}:`, e); }
                   summary.repliesSent++;
                 } else if (phase === "reoffer") {
                   await sendPremiumOffer(contact.id);
@@ -596,7 +609,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                 }
 
                 if (contact.conv_state === "OFFER_SENT" && intentScore < 20) {
-                  await incrementOfferDeclined(contact.id);
+                  try { await incrementOfferDeclined(contact.id); } catch (e) { console.error(`[POLL] incrementOfferDeclined failed for ${contact.id}:`, e); }
                 }
               }
             } catch (e) {

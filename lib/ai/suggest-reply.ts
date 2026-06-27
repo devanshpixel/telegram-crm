@@ -282,6 +282,8 @@ export async function suggestReply(
     : "I just sent my first message. Start with a unique, warm 'hi' in Hinglish (no corporate talk):";
 
   const fetchWithRetry = async (retryCount = 0): Promise<string> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
       const res = await fetch(OPENROUTER_URL, {
         method: "POST",
@@ -298,6 +300,7 @@ export async function suggestReply(
           max_tokens: 100,
           temperature: 0.9,
         }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -319,6 +322,8 @@ export async function suggestReply(
       console.error("[AI_FETCH_ERROR]", err);
       if (retryCount < 1) return fetchWithRetry(retryCount + 1);
       return getFallbackReply();
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
 

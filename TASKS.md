@@ -60,6 +60,21 @@
 - [ ] **Vercel deployment** (dashboard)
 - [ ] **Chrome extension publish** (optional)
 
+## Production Audit Fixes ✅
+
+### Critical (cursor + duplicate replies) ✅
+- Post-send DB failures no longer prevent cursor advancement
+- `sendPremiumOffer`, `sendAiReply` ([LINK] path), `sendLockedResponse`, `markWelcomeSent`, `incrementOfferDeclined` all catch post-send failures locally
+- `sendAiReply` [LINK] path: double-send prevented when `setConvState` fails after message sent
+- No duplicate Telegram replies possible from failed post-send DB operations
+
+### High (AI fetch timeout) ✅
+- OpenRouter fetch wrapped with 15s AbortController timeout
+- Timeout triggers retry, then graceful fallback to canned reply
+
+### Medium (re-engage idempotency) ✅
+- Re-engagement cron uses settings table dedup keys (same pattern as stale-leads, vip/whale followup)
+
 ## Post-Launch
 
 - [ ] Monitor error logs for 24h
@@ -67,4 +82,3 @@
 - [ ] Check payment conversion rate
 - [ ] Add rate limiting (future enhancement)
 - [ ] Add UNIQUE constraint on purchases.payment_id (future enhancement)
-- [ ] Add AI fetch timeout (future enhancement)

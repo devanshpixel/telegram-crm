@@ -39,6 +39,12 @@ async function handle(req: Request) {
 
     for (const contact of candidates) {
       try {
+        const lockKey = `reengage_sent:${contact.id}`;
+        const alreadySent = await db
+          .prepare("SELECT id FROM settings WHERE key = ?")
+          .get(lockKey) as { id: number } | undefined;
+        if (alreadySent) continue;
+
         const messages = await getMessagesByContactId(contact.id);
         if (messages.length === 0) continue;
 
@@ -46,6 +52,9 @@ async function handle(req: Request) {
         await sendTelegramMessage(contact.id, reply);
 
         const ts = new Date().toISOString();
+        await db
+          .prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, '1', ?)")
+          .run(lockKey, ts);
         await db
           .prepare("UPDATE contacts SET updated_at = ? WHERE id = ?")
           .run(ts, contact.id);
