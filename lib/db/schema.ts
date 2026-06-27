@@ -169,4 +169,20 @@ ALTER TABLE contacts ADD COLUMN ai_conversation_summary TEXT;
 ALTER TABLE contacts ADD COLUMN suggested_next_action TEXT;
 ALTER TABLE contacts ADD COLUMN favorite_content_type TEXT DEFAULT '';
 ALTER TABLE contacts ADD COLUMN contact_health INTEGER DEFAULT 50;
+
+CREATE TABLE IF NOT EXISTS failed_actions (
+  id INTEGER PRIMARY KEY,
+  action_type TEXT NOT NULL,
+  contact_id INTEGER NOT NULL,
+  payload TEXT,
+  error TEXT NOT NULL,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  max_retries INTEGER NOT NULL DEFAULT 3,
+  created_at TEXT NOT NULL,
+  last_retry_at TEXT,
+  resolved_at TEXT,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_failed_actions_unresolved ON failed_actions(resolved_at) WHERE resolved_at IS NULL;
 `;

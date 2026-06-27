@@ -2681,6 +2681,94 @@ export async function getAllCrmIntelligence(): Promise<{
   };
 }
 
+export async function enqueueFailedAction(
+  actionType: string,
+  contactId: number,
+  error: string,
+  payload?: string,
+  maxRetries: number = 3,
+): Promise<void> {
+  const db = await getDb();
+  await db
+    .prepare(
+      `INSERT INTO failed_actions (action_type, contact_id, payload, error, retry_count, max_retries, created_at)
+       VALUES (?, ?, ?, ?, 0, ?, ?)`
+    )
+    .run(actionType, contactId, payload ?? null, error, maxRetries, nowIso());
+}
+
+export async function dequeueFailedActions(limit: number = 50): Promise<{
+  id: number;
+  actionType: string;
+  contactId: number;
+  payload: string | null;
+  error: string;
+  retryCount: number;
+}[]> {
+  const db = await getDb();
+  const rows = await db
+    .prepare(
+      `SELECT id, action_type, contact_id, payload, error, retry_count
+       FROM failed_actions
+       WHERE resolved_at IS NULL AND retry_count < max_retries
+       ORDER BY created_at ASC LIMIT ?`
+    )
+    .all(limit) as {
+      id: number;
+      action_type: string;
+      contact_id: number;
+      payload: string | null;
+      error: string;
+      retry_count: number;
+    }[];
+  return rows.map((r) => ({
+    id: r.id,
+    actionType: r.action_type,
+    contactId: r.contact_id,
+    payload: r.payload,
+    error: r.error,
+    retryCount: r.retry_count,
+  }));
+}
+
+export async function completeFailedAction(id: number, success: boolean): Promise<void> {
+  const db = await getDb();
+  const ts = nowIso();
+  if (success) {
+    await db
+      .prepare("UPDATE failed_actions SET resolved_at = ?, last_retry_at = ? WHERE id = ?")
+      .run(ts, ts, id);
+  } else {
+    await db
+      .prepare("UPDATE failed_actions SET retry_count = retry_count + 1, last_retry_at = ? WHERE id = ?")
+      .run(ts, id);
+  }
+}
+
+export async function getFailedActionStats(): Promise<{
+  pending: number;
+  resolved: number;
+  stale: number;
+  byType: Record<string, number>;
+}> {
+  const db = await getDb();
+  const pending = (await db
+    .prepare("SELECT COUNT(*) AS count FROM failed_actions WHERE resolved_at IS NULL AND retry_count < max_retries")
+    .get() as { count: number }).count;
+  const resolved = (await db
+    .prepare("SELECT COUNT(*) AS count FROM failed_actions WHERE resolved_at IS NOT NULL")
+    .get() as { count: number }).count;
+  const stale = (await db
+    .prepare("SELECT COUNT(*) AS count FROM failed_actions WHERE resolved_at IS NULL AND retry_count >= max_retries")
+    .get() as { count: number }).count;
+  const byTypeRows = await db
+    .prepare("SELECT action_type, COUNT(*) AS count FROM failed_actions WHERE resolved_at IS NULL GROUP BY action_type")
+    .all() as { action_type: string; count: number }[];
+  const byType: Record<string, number> = {};
+  for (const r of byTypeRows) byType[r.action_type] = r.count;
+  return { pending, resolved, stale, byType };
+}
+
 export async function recordObjection(contactId: number, objection: string): Promise<void> {
   const db = await getDb();
   await db.prepare("UPDATE contacts SET last_objection = ?, updated_at = ? WHERE id = ?")

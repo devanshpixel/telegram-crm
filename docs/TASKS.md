@@ -325,6 +325,16 @@ Completed:
   - `GET /api/analytics/revenue` — single endpoint, no vanity metrics
   - 54/54 tests, clean TSC, clean lint
 
+- **Automation (complete)** — 8 production automation features:
+  - Stale lead detection: `/api/automation/stale-leads` — identifies contacts with no message in 7+ days, no purchase, FREE_CHAT; sends AI re-engagement message; idempotent via settings KV lock
+  - Failed unlock recovery: `/api/automation/failed-unlock` — fixes contacts with total_spent > 0 but conv_state != 'PAID'; calls `recordPaid()`; idempotent
+  - VIP follow-up: `/api/automation/vip-followup` — VIP segment, no purchase in 45d+; sends one of 3 rotating VIP-pitch messages; idempotent
+  - Whale follow-up: `/api/automation/whale-followup` — Whale segment, no purchase in 60d+; sends one of 3 rotating whale-pitch messages; idempotent
+  - Daily CRM summary: `/api/automation/daily-summary` — new contacts, purchases, revenue today, pending follow-ups, at-risk count, hot leads, segment breakdown, pending retries
+  - Retry queue: `failed_actions` table + `/api/automation/retry-queue` cron — retries 3 action types (send_message, send_locked_response, reengage); max 3 retries per action; `?summary=1` for stats
+  - Production cron verification: `/api/automation/verify-crons` — pings all 12 cron endpoints and reports status/errors
+  - All endpoints: CRON_SECRET auth, idempotent via settings KV locks, 54/54 tests, clean TSC, clean lint
+
 Blocked:
   - None
 

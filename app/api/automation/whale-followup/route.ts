@@ -1,0 +1,75 @@
+import { NextResponse } from "next/server";
+import { getDb } from "@/lib/db";
+import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+async function handle(req: Request) {
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const authHeader = req.headers.get("authorization");
+    const cronHeader = req.headers.get("x-cron-secret");
+    if (authHeader !== `Bearer ${secret}` && cronHeader !== secret) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
+  try {
+    const db = await getDb();
+    const cutoff60d = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+
+    const whales = (await db
+      .prepare(
+        `SELECT c.id, c.name
+         FROM contacts c
+         WHERE c.spend_segment = 'whale'
+           AND (c.last_purchase_date IS NULL OR c.last_purchase_date < ?)
+           AND c.conv_state = 'PAID'
+         ORDER BY c.last_purchase_date ASC NULLS LAST
+         LIMIT 5`
+      )
+      .all(cutoff60d)) as { id: number; name: string }[];
+
+    const messages = [
+      "my absolute favorite 😘💕 been too long — your vip lounge has new content ready for you. want me to send the link?",
+      "whale alert 🐋 miss having you around babe! i've put something special aside just for you.",
+      "you're top tier for a reason 🥺 don't let your vip status go cold — exclusive stuff waiting for you.",
+    ];
+
+    const results: { contactId: number; sent: boolean; error?: string }[] = [];
+
+    for (const contact of whales) {
+      try {
+        const lockKey = `whale_followup:${contact.id}`;
+        const alreadySent = await db
+          .prepare("SELECT id FROM settings WHERE key = ?")
+          .get(lockKey) as { id: number } | undefined;
+        if (alreadySent) continue;
+
+        const msg = messages[Math.floor(Math.random() * messages.length)];
+        await sendTelegramMessage(contact.id, msg);
+
+        await db
+          .prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, '1', ?)")
+          .run(lockKey, new Date().toISOString());
+
+        results.push({ contactId: contact.id, sent: true });
+      } catch (e) {
+        results.push({
+          contactId: contact.id,
+          sent: false,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    return NextResponse.json({ checked: whales.length, sent: results.filter((r) => r.sent).length, results });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Whale follow-up failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export const GET = handle;
+export const POST = handle;
