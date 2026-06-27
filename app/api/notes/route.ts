@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     if (!profile) return apiError("Contact not found", 404);
     return apiOk(profile, 201);
   } catch (e) {
-    console.error(e);
+    console.error("[NotesAdd]", e);
     return apiError("Failed to add note", 500);
   }
 }

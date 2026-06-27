@@ -88,7 +88,7 @@ export async function POST(request: Request): Promise<Response> {
       inflightReengagements.delete(segmentKey);
     }
   } catch (e) {
-    console.error(e);
+    console.error("[ReengagementSend]", e);
     return apiError("Failed to send re-engagement campaign", 500);
   }
 }

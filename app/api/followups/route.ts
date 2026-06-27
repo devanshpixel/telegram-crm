@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
     return apiOk(await getFollowUps(limit));
   } catch (e) {
-    console.error(e);
+    console.error("[FollowUps]", e);
     return apiError("Failed to load follow-up lists", 500);
   }
 }

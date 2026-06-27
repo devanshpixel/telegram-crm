@@ -23,7 +23,7 @@ export async function GET(
     if (!profile) return apiError("Contact not found", 404);
     return apiOk(profile);
   } catch (e) {
-    console.error(e);
+    console.error("[ContactGet]", e);
     return apiError("Failed to load contact", 500);
   }
 }
@@ -56,7 +56,7 @@ export async function PATCH(
     if (!profile) return apiError("Contact not found", 404);
     return apiOk(profile);
   } catch (e) {
-    console.error(e);
+    console.error("[ContactUpdate]", e);
     return apiError("Failed to update contact", 500);
   }
 }
@@ -74,7 +74,7 @@ export async function DELETE(
     if (!deleted) return apiError("Contact not found", 404);
     return apiOk({ success: true });
   } catch (e) {
-    console.error(e);
+    console.error("[ContactDelete]", e);
     return apiError("Failed to delete contact", 500);
   }
 }

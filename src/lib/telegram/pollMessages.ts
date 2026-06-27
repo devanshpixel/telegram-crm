@@ -22,7 +22,6 @@ import {
   recalculateCrmIntelligence,
 } from "@/lib/db/service";
 
-import type { ConversationRow } from "@/lib/db/types";
 import type { ConvState, ReplyMode } from "@/types";
 import { razorpay } from "@/lib/razorpay";
 import { suggestReply } from "@/lib/ai/suggest-reply";
@@ -93,15 +92,6 @@ async function listContactConversations(): Promise<ContactWithConv[]> {
   return rows;
 }
 
-async function getConversationByContactId(
-  contactId: number,
-): Promise<ConversationRow | undefined> {
-  const db = await getDb();
-  return (await db
-    .prepare("SELECT * FROM conversations WHERE contact_id = ?")
-    .get(contactId)) as ConversationRow | undefined;
-}
-
 async function updateSyncCursor(
   conversationId: number,
   lastSyncedMessageId: number,
@@ -113,14 +103,6 @@ async function updateSyncCursor(
       "UPDATE conversations SET last_synced_message_id = ?, updated_at = ? WHERE id = ?",
     )
     .run(lastSyncedMessageId, ts, conversationId);
-}
-
-async function hasUserPaid(contactId: number): Promise<boolean> {
-  const db = await getDb();
-  const row = (await db
-    .prepare("SELECT COUNT(*) AS count FROM purchases WHERE contact_id = ?")
-    .get(contactId)) as { count: number };
-  return (row?.count ?? 0) > 0;
 }
 
 async function setConvState(

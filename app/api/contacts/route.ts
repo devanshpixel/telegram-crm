@@ -5,7 +5,7 @@ export async function GET() {
   try {
     return apiOk(await listChats());
   } catch (e) {
-    console.error(e);
+    console.error("[ContactsList]", e);
     return apiError("Failed to load contacts", 500);
   }
 }
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     });
     return apiOk(profile, 201);
   } catch (e) {
-    console.error(e);
+    console.error("[ContactsCreate]", e);
     return apiError("Failed to create contact", 500);
   }
 }

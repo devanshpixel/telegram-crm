@@ -18,7 +18,7 @@ export async function GET() {
   try {
     return apiOk(await listBroadcasts(20));
   } catch (e) {
-    console.error(e);
+    console.error("[BroadcastsList]", e);
     return apiError("Failed to load broadcasts", 500);
   }
 }
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       inflightBroadcasts.delete(lockKey);
     }
   } catch (e) {
-    console.error(e);
+    console.error("[BroadcastsSend]", e);
     return apiError("Failed to send broadcast", 500);
   }
 }

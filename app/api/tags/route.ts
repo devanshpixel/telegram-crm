@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     if (!profile) return apiError("Contact not found", 404);
     return apiOk(profile, 201);
   } catch (e) {
-    console.error(e);
+    console.error("[TagsAdd]", e);
     return apiError("Failed to add tag", 500);
   }
 }
@@ -45,7 +45,7 @@ export async function DELETE(request: Request) {
     if (!profile) return apiError("Contact not found", 404);
     return apiOk(profile);
   } catch (e) {
-    console.error(e);
+    console.error("[TagsDelete]", e);
     return apiError("Failed to delete tag", 500);
   }
 }

@@ -15,7 +15,7 @@ export async function GET(
     await markConversationRead(contactId);
     return apiOk(messages);
   } catch (e) {
-    console.error(e);
+    console.error("[ContactMessages]", e);
     return apiError("Failed to load messages", 500);
   }
 }

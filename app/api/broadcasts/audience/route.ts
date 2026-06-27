@@ -10,7 +10,7 @@ export async function POST(request: Request) {
 
     return apiOk({ count: await getBroadcastAudienceCount(filters) });
   } catch (e) {
-    console.error(e);
+    console.error("[BroadcastAudience]", e);
     return apiError("Failed to preview broadcast audience", 500);
   }
 }

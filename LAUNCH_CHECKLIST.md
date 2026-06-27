@@ -1,111 +1,83 @@
 # Launch Checklist
 
-> Run through this checklist in order before production launch.
+## Pre-Launch
 
----
+### Code Quality
+- [x] TypeScript: `npx tsc --noEmit` — clean
+- [x] Lint: `npx next lint` — clean
+- [x] Tests: `npm test` — 54/54 pass
+- [x] No TODO/FIXME/HACK/XXX in app code
+- [x] No `@ts-ignore` in app code
+- [x] All error handlers sanitized
 
-## 1. Environment Variables
+### Security
+- [x] Webhook returns 500 (not 400) for transient errors
+- [x] sign-out endpoint is POST-only
+- [x] Health endpoint doesn't leak env var names
+- [x] Error messages sanitized in API responses
+- [ ] **Rotate all secrets in `.env`** (currently committed to git)
+- [ ] **Generate new RAZORPAY_KEY_ID/SECRET** (compromised)
+- [ ] **Generate new TELEGRAM_API_ID/HASH/SESSION** (compromised)
+- [ ] **Generate new CRM_API_KEY** (compromised)
+- [ ] **Generate new CRON_SECRET** (compromised)
+- [ ] **Generate new RAZORPAY_WEBHOOK_SECRET** (compromised)
+- [ ] **Generate new OPENROUTER_API_KEY** (compromised)
+- [ ] **Rotate Vercel OIDC tokens** (compromised via .env files)
+- [ ] Add `.env` to `.gitignore` (prevent future leaks)
 
-- [ ] `TURSO_DB_URL` — set in Vercel dashboard
-- [ ] `TURSO_DB_TOKEN` — set in Vercel dashboard
-- [ ] `CRM_API_KEY` — strong random string (min 32 chars)
-- [ ] `CRON_SECRET` — strong random string (min 32 chars)
-- [ ] `RAZORPAY_KEY_ID` — from Razorpay dashboard
-- [ ] `RAZORPAY_KEY_SECRET` — from Razorpay dashboard
-- [ ] `RAZORPAY_WEBHOOK_SECRET` — from Razorpay webhook settings
-- [ ] `OPENROUTER_API_KEY` — from OpenRouter dashboard
-- [ ] `APP_URL` — production URL (`https://your-domain.vercel.app`)
-- [ ] `MAX_UPLOAD_SIZE` — optional, default 100MB
-- [ ] `TELEGRAM_API_ID` — from my.telegram.org
-- [ ] `TELEGRAM_API_HASH` — from my.telegram.org
-- [ ] `TELEGRAM_PHONE` — bot/account phone number
+### Infrastructure
+- [ ] Deploy to Vercel
+- [ ] Configure Vercel environment variables (all rotated secrets)
+- [ ] Set Vercel CRON_JOBS for all automation endpoints
+- [ ] Configure Razorpay webhook to point to `/api/razorpay/webhook`
+- [ ] Set up custom domain (if applicable)
+- [ ] Enable Vercel logging/monitoring
 
-## 2. Vercel Deployment
+### Telegram
+- [ ] Complete Telegram login (requires OTP)
+- [ ] Verify bot is responding to messages
+- [ ] Run initial poll: `GET /api/telegram/poll`
+- [ ] Verify messages are being ingested
+- [ ] Verify AI replies are being sent
 
-- [ ] Connect GitHub repo to Vercel
-- [ ] Set all environment variables in Vercel dashboard
-- [ ] Deploy to production
-- [ ] Verify health check: `GET {APP_URL}/api/health` returns 200
-- [ ] Verify middleware protects non-public routes: `GET {APP_URL}/api/contacts` without auth returns 401
+### Payment Flow
+- [ ] Create test payment link
+- [ ] Complete test payment
+- [ ] Verify webhook received
+- [ ] Verify contact marked as PAID
+- [ ] Verify upsell flow triggered
+- [ ] Verify media unlock works
+- [ ] Test reconcile endpoint
+- [ ] Test recover endpoint
 
-## 3. Database (Turso)
+### Automation
+- [ ] Verify stale lead detection
+- [ ] Verify failed unlock recovery
+- [ ] Verify VIP follow-up
+- [ ] Verify whale follow-up
+- [ ] Verify daily CRM summary
+- [ ] Verify retry queue
+- [ ] Verify cron verification endpoint
 
-- [ ] Turso DB created and accessible
-- [ ] Schema auto-initialized on first request (CREATE TABLE + ALTER TABLE)
-- [ ] Verify tables exist: `contacts`, `conversations`, `messages`, `purchases`, `media`, `tags`, `notes`, `tag_events`, `broadcasts`, `failed_actions`, `settings`
-- [ ] Backfill run on existing rows (ALTER TABLE defaults applied)
+## Launch Day
 
-## 4. Telegram Session
+### Final Checks
+- [ ] Smoke test all API routes
+- [ ] Smoke test admin dashboard pages
+- [ ] Verify middleware auth works
+- [ ] Check Vercel function logs for errors
+- [ ] Monitor webhook delivery for 5xx responses
+- [ ] Monitor poll engine for message ingestion
 
-- [ ] Run `npm run telegram:login`
-- [ ] Enter phone number
-- [ ] Enter OTP code
-- [ ] Enter 2FA password if enabled
-- [ ] Verify session saved in database
+### Post-Launch Monitoring (24h)
+- [ ] Check no unexpected errors in logs
+- [ ] Verify all cron jobs ran on schedule
+- [ ] Monitor payment conversion rate
+- [ ] Verify media delivery works
+- [ ] Check database connection stability
 
-## 5. Poll Engine
-
-- [ ] Poll cron configured: every 2 minutes
-- [ ] Verify poll returns summary: `POST /api/telegram/poll`
-- [ ] Check logs for message sync
-- [ ] Verify `is_polling` lock prevents concurrent runs
-- [ ] Verify lock auto-releases after 5 min stale timeout
-
-## 6. AI Conversation
-
-- [ ] Verify AI replies to incoming messages
-- [ ] Verify persona prompt loads correctly
-- [ ] Verify 7 funnel phases route correctly
-- [ ] Verify emotional temp updates per message
-- [ ] Verify intent score calculated per batch
-
-## 7. Offer / Payment
-
-- [ ] Manual payment link creation works: `POST /api/razorpay/create-order`
-- [ ] Razorpay webhook configured: `{APP_URL}/api/razorpay/webhook`
-- [ ] Event: `payment_link.paid`
-- [ ] Webhook secret matches `RAZORPAY_WEBHOOK_SECRET`
-- [ ] Test payment link flow end-to-end
-- [ ] Verify purchase recorded in database
-- [ ] Verify `conv_state` changes to `PAID`
-- [ ] Verify media unlocked after payment
-- [ ] Verify upsell ladder fires for first purchase (₹499 × 0.6 = ₹299)
-
-## 8. Cron Jobs (Vercel)
-
-Configure these Vercel Cron Jobs:
-
-| Endpoint | Frequency | Purpose |
-|---|---|---|
-| `/api/telegram/poll` | Every 2 min | Poll Telegram for new messages & reply |
-| `/api/telegram/remind` | Every 6 hours | Send locked response reminders |
-| `/api/telegram/reengage` | Every 12 hours | Re-engage cold prospects |
-| `/api/razorpay/reconcile` | Every 30 min | Reconcile Razorpay payment links |
-| `/api/razorpay/recover` | Every 1 hour | Recover abandoned checkouts |
-| `/api/automation/stale-leads` | Every 6 hours | Re-engage stale leads (7d+) |
-| `/api/automation/failed-unlock` | Every 1 hour | Fix paid-but-not-unlocked contacts |
-| `/api/automation/vip-followup` | Daily | VIP re-engagement |
-| `/api/automation/whale-followup` | Daily | Whale re-engagement |
-| `/api/automation/daily-summary` | Daily | Generate CRM summary |
-| `/api/automation/retry-queue` | Every 30 min | Retry failed actions |
-
-## 9. Verify All Cron Endpoints
-
-- [ ] Run `GET /api/automation/verify-crons` with CRON_SECRET
-- [ ] All endpoints return `ok: true`
-
-## 10. Revenue Analytics
-
-- [ ] GET `/api/analytics/revenue` returns all 10 metrics
-- [ ] GET `/api/analytics/buyer-intelligence` returns summary
-- [ ] GET `/api/analytics/crm-intelligence` returns summary
-
-## 11. Final Checks
-
-- [ ] Middleware correctly protects all non-public routes
-- [ ] Media file/preview routes accessible without auth
-- [ ] Media CRUD routes (upload, list, update, delete) require auth
-- [ ] No `.env` or secrets committed to repository
-- [ ] Database indexes created (check schema.ts for all indexes)
-- [ ] Razorpay webhook returns 200 for valid events
-- [ ] Upsell only fires for first-time buyers (upsell_count === 0, total_spent < 1000)
+## Rollback Plan
+1. Redeploy previous working commit
+2. Disable webhook in Razorpay dashboard
+3. Revoke compromised API keys
+4. Update DNS if custom domain

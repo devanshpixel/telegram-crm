@@ -19,7 +19,7 @@ export async function GET(
     }
     return apiOk(await getTimeline(contactId, limit));
   } catch (e) {
-    console.error(e);
+    console.error("[Timeline]", e);
     return apiError("Failed to load timeline", 500);
   }
 }

@@ -5,7 +5,7 @@ export async function GET() {
   try {
     return apiOk(await getAnalytics());
   } catch (e) {
-    console.error(e);
+    console.error("[Analytics]", e);
     return apiError("Failed to load analytics", 500);
   }
 }

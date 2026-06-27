@@ -5,7 +5,7 @@ export async function GET() {
   try {
     return apiOk(await getDashboardStats());
   } catch (e) {
-    console.error(e);
+    console.error("[Stats]", e);
     return apiError("Failed to load stats", 500);
   }
 }

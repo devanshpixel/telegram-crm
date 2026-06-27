@@ -13,7 +13,7 @@ export async function GET() {
     }
     return apiOk({ counts });
   } catch (e) {
-    console.error(e);
+    console.error("[ReengagementAudiences]", e);
     return apiError("Failed to load re-engagement audiences", 500);
   }
 }

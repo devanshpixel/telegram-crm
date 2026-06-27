@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
     return apiOk(await getPpvStats(limit));
   } catch (e) {
-    console.error(e);
+    console.error("[PpvStats]", e);
     return apiError("Failed to load PPV stats", 500);
   }
 }

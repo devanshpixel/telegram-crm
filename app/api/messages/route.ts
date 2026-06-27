@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     if (!message) return apiError("Conversation not found", 404);
     return apiOk(message, 201);
   } catch (e) {
-    console.error(e);
+    console.error("[MessagesCreate]", e);
     return apiError("Failed to create message", 500);
   }
 }

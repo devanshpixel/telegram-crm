@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 
     return apiOk(await getRevenueData(months, limit));
   } catch (e) {
-    console.error(e);
+    console.error("[Revenue]", e);
     return apiError("Failed to load revenue", 500);
   }
 }

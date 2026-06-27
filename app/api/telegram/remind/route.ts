@@ -43,8 +43,7 @@ async function handle(req: Request) {
     }
 
     return NextResponse.json({ reminded: results.length, results });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Reminder job failed";
+  } catch {
     return NextResponse.json({ error: "Reminder job failed" }, { status: 500 });
   }
 }
