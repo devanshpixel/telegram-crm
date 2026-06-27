@@ -828,7 +828,7 @@ export async function getFollowUpAudience(
       );
     case "high_spender_inactive":
       return audienceToRecipients(
-        await getFollowUpHighSpenderInactive(200, 30, capped),
+        await getFollowUpHighSpenderInactive(1500, 30, capped),
       );
     case "no_ppv_30d":
       return audienceToRecipients(await getFollowUpNoPpvInDays(30, capped));
@@ -1697,14 +1697,14 @@ export async function getFollowUps(limit: number = 10): Promise<FollowUpData> {
     },
     {
       key: "vip_segment_inactive",
-      title: "VIP — inactive 60d+",
+      title: "VIP — inactive 45d+",
       description: "VIP buyers (₹5000+) at risk",
       count: 0,
       items: await getFollowUpVipBySegment(limit),
     },
     {
       key: "whale_inactive",
-      title: "Whale — inactive 90d+",
+      title: "Whale — inactive 60d+",
       description: "Whale buyers (₹20000+) at risk",
       count: 0,
       items: await getFollowUpWhaleInactive(limit),
@@ -2192,7 +2192,7 @@ function calcConversationHealth(
 ): number {
   let h = 50;
   h += (emotionalTemp - 50) * 0.5;
-  h += relationshipScore * 2;
+  h += relationshipScore * 0.2;
   if (daysSinceLastMessage !== null && daysSinceLastMessage <= 1) h += 10;
   else if (daysSinceLastMessage !== null && daysSinceLastMessage <= 3) h += 5;
   else if (daysSinceLastMessage !== null && daysSinceLastMessage > 14) h -= 15;

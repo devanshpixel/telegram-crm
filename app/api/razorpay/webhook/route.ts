@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
-import { razorpay, WEBHOOK_SECRET } from "@/lib/razorpay";
+import { WEBHOOK_SECRET } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
 import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid, recordUpsell } from "@/lib/db/service";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 
 export async function POST(request: Request) {
   try {
-    if (!razorpay || !WEBHOOK_SECRET) {
+    if (!WEBHOOK_SECRET) {
       return NextResponse.json({ error: "Razorpay webhook not configured" }, { status: 500 });
     }
 

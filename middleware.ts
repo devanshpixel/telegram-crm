@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 
 // Only Razorpay's webhook is truly public — it authenticates every request with
 // an HMAC signature, so it must be reachable without the CRM key.
-const PUBLIC_PATHS = ["/api/razorpay/webhook", "/api/checkout", "/api/media"];
+const PUBLIC_PATHS = ["/api/razorpay/webhook", "/api/checkout"];
 
 // Scheduler endpoints — authenticated with CRON_SECRET (not the CRM key).
 const CRON_PATHS = [
@@ -59,8 +59,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 2. Signature-verified public endpoints (Razorpay webhook).
+  // 2. Signature-verified public endpoints (Razorpay webhook, media download).
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+  if (pathname.startsWith("/api/media/") && (pathname.endsWith("/file") || pathname.endsWith("/preview"))) {
     return NextResponse.next();
   }
 

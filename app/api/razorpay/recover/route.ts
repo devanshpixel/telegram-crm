@@ -76,7 +76,7 @@ async function handle(req: Request) {
         await sendTelegramMessage(contactId, reminderText);
 
         await db
-          .prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, '1', ?)")
+          .prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, '1', ?)")
           .run(`recover_sent:${link.id}`, new Date().toISOString());
 
         reminded.push({ linkId: link.id, contactId, sent: true });

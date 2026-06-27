@@ -335,6 +335,22 @@ Completed:
   - Production cron verification: `/api/automation/verify-crons` — pings all 12 cron endpoints and reports status/errors
   - All endpoints: CRON_SECRET auth, idempotent via settings KV locks, 54/54 tests, clean TSC, clean lint
 
+- **Production Readiness (complete)** — full verification + bug fixes + documentation:
+  - Verified: Telegram, AI, Offer, Payment, Unlock, Reminder, Re-engagement, Analytics, Spend Segmentation, Buyer Intelligence, CRM Intelligence
+  - Fixed 10 production bugs:
+    1. SQL syntax error (trailing comma) in `sendLockedResponse` — blocked all locked responses
+    2. PUBLIC_PATHS exposed media CRUD routes (upload/PATCH/DELETE without auth)
+    3. ALTER TABLE crash on better-sqlite3 cold restart (unconditional exec)
+    4. ALTER TABLE defaults not backfilled for existing rows (NULL columns)
+    5. Webhook rejected valid HMAC-signed events when `razorpay` instance was null
+    6. `high_spender_inactive` threshold mismatch (dashboard ₹1500, broadcast ₹200)
+    7. VIP/Whale follow-up titles showed 60d/90d but SQL used 45d/60d
+    8. `conversationHealth` formula dominated by `relationshipScore * 2` (→ `* 0.2`)
+    9. Recover route INSERT race (check-then-insert not atomic)
+    10. Re-engagement cron didn't update `conversations.last_message_time`
+  - Generated: LAUNCH_CHECKLIST.md, RELEASE_NOTES.md, KNOWN_LIMITATIONS.md
+  - 54/54 tests, clean TSC, clean lint
+
 Blocked:
   - None
 

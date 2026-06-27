@@ -49,6 +49,9 @@ async function handle(req: Request) {
         await db
           .prepare("UPDATE contacts SET updated_at = ? WHERE id = ?")
           .run(ts, contact.id);
+        await db
+          .prepare("UPDATE conversations SET last_message_time = ?, updated_at = ? WHERE contact_id = ?")
+          .run(ts, ts, contact.id);
 
         results.push({ contactId: contact.id, sent: true });
       } catch (e) {

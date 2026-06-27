@@ -339,7 +339,7 @@ export async function sendLockedResponse(contactId: number): Promise<void> {
 
   const ts = nowIso();
   await db
-    .prepare("UPDATE contacts SET last_locked_response_at = ?, locked_response_count = locked_response_count + 1, updated_at = ?, WHERE id = ?")
+    .prepare("UPDATE contacts SET last_locked_response_at = ?, locked_response_count = locked_response_count + 1, updated_at = ? WHERE id = ?")
     .run(ts, ts, contactId);
 }
 

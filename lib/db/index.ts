@@ -220,6 +220,22 @@ export async function getDb(): Promise<AsyncDb> {
       if (tables.length < 2) {
         await db.exec(SCHEMA_SQL);
       }
+      // Backfill ALTER TABLE default values for existing rows
+      await db.exec(`
+        UPDATE contacts SET spend_segment = 'prospect' WHERE spend_segment IS NULL;
+        UPDATE contacts SET emotional_temp = 50 WHERE emotional_temp IS NULL;
+        UPDATE contacts SET relationship_score = 0 WHERE relationship_score IS NULL;
+        UPDATE contacts SET offer_declined_count = 0 WHERE offer_declined_count IS NULL;
+        UPDATE contacts SET post_purchase_welcome_sent = 0 WHERE post_purchase_welcome_sent IS NULL;
+        UPDATE contacts SET upsell_count = 0 WHERE upsell_count IS NULL;
+        UPDATE contacts SET lead_classification = 'warm' WHERE lead_classification IS NULL;
+        UPDATE contacts SET purchase_probability = 0 WHERE purchase_probability IS NULL;
+        UPDATE contacts SET churn_risk = 0 WHERE churn_risk IS NULL;
+        UPDATE contacts SET conversation_health = 50 WHERE conversation_health IS NULL;
+        UPDATE contacts SET lifetime_spend_score = 0 WHERE lifetime_spend_score IS NULL;
+        UPDATE contacts SET contact_health = 50 WHERE contact_health IS NULL;
+        UPDATE contacts SET favorite_content_type = '' WHERE favorite_content_type IS NULL;
+      `);
     } catch (e: unknown) {
       console.error("[DB] Turso schema check/init failed:", e instanceof Error ? e.message : String(e));
     }
@@ -228,7 +244,27 @@ export async function getDb(): Promise<AsyncDb> {
   }
 
   const raw = createRawBetterSqlite3(DB_PATH);
-  raw.exec(SCHEMA_SQL);
+  try {
+    raw.exec(SCHEMA_SQL);
+  } catch (e) {
+    console.warn("[DB] Schema init (columns may already exist):", e instanceof Error ? e.message : String(e));
+  }
+  // Backfill ALTER TABLE default values for existing rows
+  raw.exec(`
+    UPDATE contacts SET spend_segment = 'prospect' WHERE spend_segment IS NULL;
+    UPDATE contacts SET emotional_temp = 50 WHERE emotional_temp IS NULL;
+    UPDATE contacts SET relationship_score = 0 WHERE relationship_score IS NULL;
+    UPDATE contacts SET offer_declined_count = 0 WHERE offer_declined_count IS NULL;
+    UPDATE contacts SET post_purchase_welcome_sent = 0 WHERE post_purchase_welcome_sent IS NULL;
+    UPDATE contacts SET upsell_count = 0 WHERE upsell_count IS NULL;
+    UPDATE contacts SET lead_classification = 'warm' WHERE lead_classification IS NULL;
+    UPDATE contacts SET purchase_probability = 0 WHERE purchase_probability IS NULL;
+    UPDATE contacts SET churn_risk = 0 WHERE churn_risk IS NULL;
+    UPDATE contacts SET conversation_health = 50 WHERE conversation_health IS NULL;
+    UPDATE contacts SET lifetime_spend_score = 0 WHERE lifetime_spend_score IS NULL;
+    UPDATE contacts SET contact_health = 50 WHERE contact_health IS NULL;
+    UPDATE contacts SET favorite_content_type = '' WHERE favorite_content_type IS NULL;
+  `);
   migrateBetterSqlite3(raw);
   const db = wrapBetterSqlite3(raw);
   global.__crmDb = db;
