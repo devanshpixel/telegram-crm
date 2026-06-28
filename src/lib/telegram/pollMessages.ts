@@ -711,7 +711,7 @@ async function shouldSkipDueToPacing(contactId: number, emotionalTemp: number): 
     .prepare(
       `SELECT m.created_at FROM messages m
        JOIN conversations conv ON conv.id = m.conversation_id
-       WHERE conv.contact_id = ?
+       WHERE conv.contact_id = ? AND m.direction = 'outgoing'
        ORDER BY m.created_at DESC LIMIT 1`
     )
     .get(contactId) as { created_at: string } | undefined;
