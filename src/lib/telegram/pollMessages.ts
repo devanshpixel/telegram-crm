@@ -174,7 +174,10 @@ async function sendAiReply(
 ): Promise<{ offerSent: boolean }> {
   const messages = await getMessagesByContactId(contactId);
   const recent = messages.slice(-20);
+  const _t_suggest = Date.now();
+  console.log(`[TIMING] START suggestReply contactId=${contactId} mode=${mode}`);
   let reply = await suggestReply(recent, mode, emotionalTemp, intentScore);
+  console.log(`[TIMING] END suggestReply contactId=${contactId} (${Date.now() - _t_suggest}ms)`);
   console.log(`[PIPELINE:6] AI reply generated — contactId=${contactId} mode=${mode} reply="${reply.slice(0, 80)}"`);
 
   // The AI persona emits a literal "[LINK]" token when it decides to convert
@@ -189,7 +192,10 @@ async function sendAiReply(
       const amount = await selectOfferAmount(contactId, settings.offerPrice);
       const link = await createPaymentLink(contactId, amount);
       reply = reply.replace(/\[link\]/gi, link).trim();
+      const _t_send_link = Date.now();
+      console.log(`[TIMING] START sendTelegramMessage[link] contactId=${contactId}`);
       await sendTelegramMessage(contactId, reply);
+      console.log(`[TIMING] END sendTelegramMessage[link] contactId=${contactId} (${Date.now() - _t_send_link}ms)`);
       linkSent = true;
       await setConvState(contactId, "OFFER_SENT", nowIso());
       return { offerSent: true };
@@ -207,7 +213,10 @@ async function sendAiReply(
     }
   }
 
+  const _t_send_reply = Date.now();
+  console.log(`[TIMING] START sendTelegramMessage contactId=${contactId}`);
   await sendTelegramMessage(contactId, reply);
+  console.log(`[TIMING] END sendTelegramMessage contactId=${contactId} (${Date.now() - _t_send_reply}ms)`);
   return { offerSent: false };
 }
 
@@ -431,10 +440,20 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     }
 
     try {
+      const _t_connect = Date.now();
+      console.log("[TIMING] START ensureConnected");
       await ensureConnected();
-      const client = await getTelegramClient();
+      console.log(`[TIMING] END ensureConnected (${Date.now() - _t_connect}ms)`);
 
+      const _t_client = Date.now();
+      console.log("[TIMING] START getTelegramClient");
+      const client = await getTelegramClient();
+      console.log(`[TIMING] END getTelegramClient (${Date.now() - _t_client}ms)`);
+
+      const _t_getMe = Date.now();
+      console.log("[TIMING] START getMe");
       const me = await client.getMe(); // validate session is alive
+      console.log(`[TIMING] END getMe (${Date.now() - _t_getMe}ms)`);
       console.log(`[PIPELINE:1] Telegram connected — self userId=${me?.id} username=${me?.username ?? "—"}`);
 
       const knownContacts = await listContactConversations();
@@ -444,7 +463,15 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         knownMap.set(c.telegram_id, c);
       }
 
+      let _dialogTick = 0;
+      let _t_lastDialogTick = Date.now();
+      console.log("[TIMING] START iterDialogs");
       for await (const dialog of client.iterDialogs({ folder: 0 })) {
+        _dialogTick++;
+        const _t_thisDialog = Date.now();
+        console.log(`[TIMING] TICK iterDialogs #${_dialogTick} entity=${dialog.entity?.constructor?.name ?? "unknown"} (${_t_thisDialog - _t_lastDialogTick}ms since prev tick)`);
+        _t_lastDialogTick = _t_thisDialog;
+
         const entity = dialog.entity;
 
         // Skip non-users, bots, self early before counting against the quota
@@ -474,7 +501,10 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
         if (!contact) {
           try {
+            const _t_createContact = Date.now();
+            console.log(`[TIMING] START createContactFromDialog telegramId=${telegramId}`);
             contact = await createContactFromDialog(entity);
+            console.log(`[TIMING] END createContactFromDialog telegramId=${telegramId} (${Date.now() - _t_createContact}ms)`);
             knownMap.set(telegramId, contact);
             console.log(`[PIPELINE:3] New contact created — contactId=${contact.id} telegramId=${telegramId} name=${formatUserName(entity)}`);
           } catch (e) {
@@ -507,11 +537,16 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         try {
           const incomingMessages: { text: string }[] = [];
 
+          let _msgTick = 0;
+          const _t_iterMessages = Date.now();
+          console.log(`[TIMING] START iterMessages contactId=${contact.id} minId=${minId}`);
           for await (const message of client.iterMessages(peer, {
             minId,
             reverse: true,
             limit: 50,
           })) {
+            _msgTick++;
+            console.log(`[TIMING] TICK iterMessages #${_msgTick} contactId=${contact.id}`);
             const msgId = (message as { id?: number }).id;
 
             if (!msgId) {
@@ -532,7 +567,10 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
             if (msgId > maxId) maxId = msgId;
 
+            const _t_createMsg = Date.now();
+            console.log(`[TIMING] START createMessage contactId=${contact.id} msgId=${msgId}`);
             const saved = await createMessage(contact.id, text, "incoming", msgId);
+            console.log(`[TIMING] END createMessage contactId=${contact.id} msgId=${msgId} (${Date.now() - _t_createMsg}ms)`);
             if (!saved) {
               summary.errors.push(`Failed to save message for contact ${contact.id}`);
               continue;
@@ -541,6 +579,8 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             incomingMessages.push({ text });
             summary.newMessages++;
           }
+
+          console.log(`[TIMING] END iterMessages contactId=${contact.id} total=${_msgTick} (${Date.now() - _t_iterMessages}ms)`);
 
           // Batched reply: one response per contact per poll regardless of
           // how many messages arrived (BUG-5 fix).
@@ -630,7 +670,10 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           }
 
           if (!replyFailed && maxId > minId) {
+            const _t_cursor = Date.now();
+            console.log(`[TIMING] START updateSyncCursor convId=${contact.conversation_id} newMax=${maxId}`);
             await updateSyncCursor(contact.conversation_id, maxId);
+            console.log(`[TIMING] END updateSyncCursor convId=${contact.conversation_id} (${Date.now() - _t_cursor}ms)`);
             console.log(`[PIPELINE:8] Sync cursor advanced — convId=${contact.conversation_id} ${minId} → ${maxId}`);
           }
         } catch (e) {
@@ -640,6 +683,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           );
         }
       }
+      console.log(`[TIMING] END iterDialogs totalTicks=${_dialogTick} userDialogs=${summary.dialogsChecked} elapsed=${Date.now() - startTime}ms`);
     } catch (e) {
       summary.errors.push(
         "Poll loop failed: " + (e instanceof Error ? e.message : String(e)),
