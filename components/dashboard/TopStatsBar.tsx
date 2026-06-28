@@ -4,24 +4,20 @@ import { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { importTelegramContacts, importTelegramMessages } from "@/lib/api";
 import type { DashboardStats } from "@/types";
-import { BarChart3, Download, Loader2, MessageCircle, Radio, RefreshCw, Send, Sparkles, Wallet } from "lucide-react";
+import { Download, Loader2, MessageCircle, Radio, RefreshCw, Send, Wallet } from "lucide-react";
 
 interface TopStatsBarProps {
   stats: DashboardStats;
   authenticated: boolean;
   onConnectTelegram: () => void;
-  onOpenAnalytics?: () => void;
   onOpenBroadcast?: () => void;
-  onOpenReengagement?: () => void;
 }
 
 export function TopStatsBar({
   stats,
   authenticated,
   onConnectTelegram,
-  onOpenAnalytics,
   onOpenBroadcast,
-  onOpenReengagement,
 }: TopStatsBarProps) {
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<string>("");

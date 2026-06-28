@@ -19,10 +19,7 @@ import { SidebarLeft } from "@/components/sidebar-left/SidebarLeft";
 import { ConversationView } from "@/components/conversation/ConversationView";
 import { SidebarRight } from "@/components/sidebar-right/SidebarRight";
 import { TopStatsBar } from "./TopStatsBar";
-import { AnalyticsModal } from "./AnalyticsModal";
 import { BroadcastModal } from "./BroadcastModal";
-
-import { ReengagementModal } from "./ReengagementModal";
 import { CreateContactModal } from "@/components/forms/CreateContactModal";
 import { TelegramLoginModal } from "@/components/forms/TelegramLoginModal";
 
@@ -53,9 +50,7 @@ export function Dashboard({
   const [profiles, setProfiles] = useState<Record<string, ContactProfile>>({});
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
   const [showBroadcast, setShowBroadcast] = useState(false);
-  const [showReengagement, setShowReengagement] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -111,14 +106,6 @@ export function Dashboard({
     setMobilePanel("chat");
   }, []);
 
-  const handleFollowUpSelect = useCallback(
-    (id: string) => {
-      setActiveChatId(id);
-      setShowAnalytics(false);
-    },
-    [],
-  );
-
   const handleBackToList = useCallback(() => {
     setMobilePanel("list");
   }, []);
@@ -133,10 +120,10 @@ export function Dashboard({
 
   const handleContactCreated = useCallback(
     async (profile: ContactProfile) => {
-      const nextChats = await refreshAll();
+      await refreshAll();
       setActiveChatId(profile.id);
       setProfiles((prev) => ({ ...prev, [profile.id]: profile }));
-      setMobilePanel(nextChats.length > 1 ? "chat" : "chat");
+      setMobilePanel("chat");
     },
     [refreshAll],
   );
@@ -207,9 +194,7 @@ export function Dashboard({
           stats={stats}
           authenticated={authenticated}
           onConnectTelegram={() => setShowLoginModal(true)}
-          onOpenAnalytics={() => setShowAnalytics(true)}
           onOpenBroadcast={() => setShowBroadcast(true)}
-          onOpenReengagement={() => setShowReengagement(true)}
         />
 
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
@@ -239,19 +224,9 @@ export function Dashboard({
             setShowLoginModal(false);
           }}
         />
-        <AnalyticsModal
-          open={showAnalytics}
-          onClose={() => setShowAnalytics(false)}
-          onSelectContact={handleFollowUpSelect}
-        />
         <BroadcastModal
           open={showBroadcast}
           onClose={() => setShowBroadcast(false)}
-          onSent={refreshAll}
-        />
-        <ReengagementModal
-          open={showReengagement}
-          onClose={() => setShowReengagement(false)}
           onSent={refreshAll}
         />
       </div>
@@ -272,9 +247,7 @@ export function Dashboard({
           stats={stats}
           authenticated={authenticated}
           onConnectTelegram={() => setShowLoginModal(true)}
-          onOpenAnalytics={() => setShowAnalytics(true)}
           onOpenBroadcast={() => setShowBroadcast(true)}
-          onOpenReengagement={() => setShowReengagement(true)}
         />
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -365,19 +338,9 @@ export function Dashboard({
           setShowLoginModal(false);
         }}
       />
-      <AnalyticsModal
-        open={showAnalytics}
-        onClose={() => setShowAnalytics(false)}
-        onSelectContact={handleFollowUpSelect}
-      />
       <BroadcastModal
         open={showBroadcast}
         onClose={() => setShowBroadcast(false)}
-        onSent={refreshAll}
-      />
-      <ReengagementModal
-        open={showReengagement}
-        onClose={() => setShowReengagement(false)}
         onSent={refreshAll}
       />
     </div>

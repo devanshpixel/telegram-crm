@@ -507,7 +507,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     try {
       await ensureConnected();
       const client = await getTelegramClient();
-      const me = await client.getMe(); // validate session is alive
+      await client.getMe(); // validate session is alive
 
       await sendDueReplies(summary);
 

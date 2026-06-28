@@ -13,7 +13,7 @@ export default async function Home({
   try {
     [chats, stats] = await Promise.all([listChats(), getDashboardStats()]);
   } catch (e: unknown) {
-    console.log("[PAGE] Home data load failed:", e instanceof Error ? e.message : String(e));
+    console.error("[PAGE] Home data load failed:", e instanceof Error ? e.message : String(e));
     chats = [];
     stats = { totalChats: 0, onlineCount: 0, totalRevenue: 0, unreadTotal: 0 };
   }
