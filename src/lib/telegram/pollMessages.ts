@@ -446,7 +446,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       for await (const dialog of client.iterDialogs({ folder: 0 })) {
         const entity = dialog.entity;
 
-        // Skip non-users, bots, self early before counting against the quota
+        // Skip non-users, bots, self, and Telegram system accounts early
         if (!(entity instanceof Api.User)) {
           continue;
         }
@@ -457,6 +457,10 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           continue;
         }
         if (entity.self) {
+          continue;
+        }
+        // 777000 = Telegram's own notification account (not a real user)
+        if (entity.id.toString() === "777000") {
           continue;
         }
 
