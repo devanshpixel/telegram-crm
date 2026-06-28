@@ -149,28 +149,6 @@ export function TopStatsBar({
             <span className="hidden text-xs font-medium sm:inline">Broadcast</span>
           </button>
         )}
-        {onOpenReengagement && (
-          <button
-            type="button"
-            onClick={onOpenReengagement}
-            aria-label="Open re-engagement campaigns"
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-surface-card px-2.5 py-1.5 text-text-secondary hover:bg-surface-hover sm:px-3 sm:py-2"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span className="hidden text-xs font-medium sm:inline">Campaigns</span>
-          </button>
-        )}
-          {onOpenAnalytics && (
-          <button
-            type="button"
-            onClick={onOpenAnalytics}
-            aria-label="Open analytics"
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-surface-card px-2.5 py-1.5 text-text-secondary hover:bg-surface-hover sm:px-3 sm:py-2"
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            <span className="hidden text-xs font-medium sm:inline">Analytics</span>
-          </button>
-        )}
           </>
         )}
       </div>

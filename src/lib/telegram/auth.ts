@@ -1,7 +1,7 @@
 import { Api, client as tgClient, TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { getDb, nowIso } from "@/lib/db";
-import { getTelegramClient, loadSessionString } from "./client";
+import { loadSessionString } from "./client";
 
 function getApiCredentials(): { apiId: number; apiHash: string } {
   const apiIdRaw = process.env.TELEGRAM_API_ID;
@@ -70,7 +70,6 @@ export async function sendCode(
     // Save temp session alongside hash — phoneCodeHash is bound to the auth key
     // that requested it. verifyCode MUST use the same session, not a new one.
     const tempSession = client.session.save() as unknown as string;
-    console.log("[auth] sendCode: phone=", phone, "hash=", phoneCodeHash, "tempSession.length=", tempSession?.length);
 
     const db = await getDb();
     await db.prepare(
@@ -100,7 +99,6 @@ export async function verifyCode(
   }
 
   const { phone_code_hash: phoneCodeHash, temp_session: tempSession } = row;
-  console.log("[auth] verifyCode: phone=", phone, "hash=", phoneCodeHash, "tempSession.length=", tempSession?.length);
 
   const { apiId, apiHash } = getApiCredentials();
 
@@ -114,7 +112,6 @@ export async function verifyCode(
   await client.connect();
 
   try {
-    console.log("[auth] verifyCode: invoking SignIn phone=", phone, "hash=", phoneCodeHash, "code=", code);
     const result = await client.invoke(
       new Api.auth.SignIn({
         phoneNumber: phone,
