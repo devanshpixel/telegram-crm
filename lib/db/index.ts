@@ -220,7 +220,49 @@ export async function getDb(): Promise<AsyncDb> {
       if (tables.length < 2) {
         await db.exec(SCHEMA_SQL);
       }
-      // Backfill ALTER TABLE default values for existing rows
+      // Always ensure telegram tables exist (added after initial schema deployment)
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS telegram_sessions (
+          id INTEGER PRIMARY KEY,
+          session_string TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS telegram_pending_codes (
+          phone TEXT PRIMARY KEY,
+          phone_code_hash TEXT NOT NULL,
+          temp_session TEXT,
+          created_at TEXT NOT NULL
+        );
+      `);
+      // Migrate missing columns — each ALTER TABLE is isolated so a "duplicate column"
+      // error on an already-migrated DB doesn't abort the rest.
+      const contactColMigrations: [string, string][] = [
+        ["spend_segment",           "TEXT NOT NULL DEFAULT 'prospect'"],
+        ["emotional_temp",          "INTEGER NOT NULL DEFAULT 50"],
+        ["relationship_score",      "INTEGER NOT NULL DEFAULT 0"],
+        ["offer_declined_count",    "INTEGER NOT NULL DEFAULT 0"],
+        ["post_purchase_welcome_sent", "INTEGER NOT NULL DEFAULT 0"],
+        ["upsell_count",            "INTEGER NOT NULL DEFAULT 0"],
+        ["last_upsell_at",          "TEXT"],
+        ["paid_at",                 "TEXT"],
+        ["lead_classification",     "TEXT NOT NULL DEFAULT 'warm'"],
+        ["purchase_probability",    "INTEGER NOT NULL DEFAULT 0"],
+        ["churn_risk",              "INTEGER NOT NULL DEFAULT 0"],
+        ["conversation_health",     "INTEGER NOT NULL DEFAULT 50"],
+        ["lifetime_spend_score",    "INTEGER NOT NULL DEFAULT 0"],
+        ["contact_health",          "INTEGER NOT NULL DEFAULT 50"],
+        ["favorite_content_type",   "TEXT NOT NULL DEFAULT ''"],
+      ];
+      for (const [col, def] of contactColMigrations) {
+        try {
+          await db.exec(`ALTER TABLE contacts ADD COLUMN ${col} ${def}`);
+        } catch { /* column already exists — ignore */ }
+      }
+      try {
+        await db.exec("ALTER TABLE telegram_pending_codes ADD COLUMN temp_session TEXT");
+      } catch { /* already exists */ }
+      // Backfill default values for existing rows (columns now guaranteed to exist)
       await db.exec(`
         UPDATE contacts SET spend_segment = 'prospect' WHERE spend_segment IS NULL;
         UPDATE contacts SET emotional_temp = 50 WHERE emotional_temp IS NULL;
@@ -237,7 +279,7 @@ export async function getDb(): Promise<AsyncDb> {
         UPDATE contacts SET favorite_content_type = '' WHERE favorite_content_type IS NULL;
       `);
     } catch (e: unknown) {
-      console.error("[DB] Turso schema check/init failed:", e instanceof Error ? e.message : String(e));
+      console.error("[DB] Turso init failed:", e instanceof Error ? e.message : String(e));
     }
     global.__crmDb = db;
     return db;

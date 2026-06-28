@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS broadcasts (
 CREATE TABLE IF NOT EXISTS telegram_pending_codes (
   phone TEXT PRIMARY KEY,
   phone_code_hash TEXT NOT NULL,
+  temp_session TEXT,
   created_at TEXT NOT NULL
 );
 

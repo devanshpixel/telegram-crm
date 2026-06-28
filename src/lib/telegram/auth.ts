@@ -21,11 +21,19 @@ function getApiCredentials(): { apiId: number; apiHash: string } {
   return { apiId, apiHash };
 }
 
-async function ensureConnected(): Promise<void> {
-  const client = await getTelegramClient();
-  if (!client.connected) {
-    await client.connect();
-  }
+/**
+ * Always-fresh, unauthenticated client for login flows.
+ * NEVER reuses the production singleton — doing so causes AUTH_KEY_DUPLICATED.
+ */
+async function createFreshAuthClient(): Promise<TelegramClient> {
+  const { apiId, apiHash } = getApiCredentials();
+  const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
+    connectionRetries: 5,
+    requestRetries: 2,
+    timeout: 30,
+  });
+  await client.connect();
+  return client;
 }
 
 async function saveSessionString(sessionString: string): Promise<void> {
@@ -50,20 +58,30 @@ async function saveSessionString(sessionString: string): Promise<void> {
 export async function sendCode(
   phone: string,
 ): Promise<{ isCodeViaApp: boolean }> {
-  await ensureConnected();
-  const client = await getTelegramClient();
-  const { phoneCodeHash, isCodeViaApp } = await client.sendCode(
-    getApiCredentials(),
-    phone,
-  );
+  // Always create a fresh, empty-session client.
+  // Using the production authenticated singleton causes AUTH_KEY_DUPLICATED.
+  const client = await createFreshAuthClient();
+  try {
+    const { phoneCodeHash, isCodeViaApp } = await client.sendCode(
+      getApiCredentials(),
+      phone,
+    );
 
-  const db = await getDb();
-  const ts = nowIso();
-  await db.prepare(
-    "INSERT OR REPLACE INTO telegram_pending_codes (phone, phone_code_hash, created_at) VALUES (?, ?, ?)",
-  ).run(phone, phoneCodeHash, ts);
+    // Save temp session alongside hash — phoneCodeHash is bound to the auth key
+    // that requested it. verifyCode MUST use the same session, not a new one.
+    const tempSession = client.session.save() as unknown as string;
+    console.log("[auth] sendCode: phone=", phone, "hash=", phoneCodeHash, "tempSession.length=", tempSession?.length);
 
-  return { isCodeViaApp };
+    const db = await getDb();
+    await db.prepare(
+      "INSERT OR REPLACE INTO telegram_pending_codes (phone, phone_code_hash, temp_session, created_at) VALUES (?, ?, ?, ?)",
+    ).run(phone, phoneCodeHash, tempSession, nowIso());
+
+    return { isCodeViaApp };
+  } finally {
+    // Disconnect after saving session — the auth key is persisted in temp_session.
+    try { await client.disconnect(); } catch { /* ignore */ }
+  }
 }
 
 export async function verifyCode(
@@ -72,8 +90,8 @@ export async function verifyCode(
 ): Promise<void> {
   const db = await getDb();
   const row = await db
-    .prepare("SELECT phone_code_hash FROM telegram_pending_codes WHERE phone = ?")
-    .get(phone) as { phone_code_hash: string } | undefined;
+    .prepare("SELECT phone_code_hash, temp_session FROM telegram_pending_codes WHERE phone = ?")
+    .get(phone) as { phone_code_hash: string; temp_session: string | null } | undefined;
 
   if (!row) {
     throw new Error(
@@ -81,12 +99,22 @@ export async function verifyCode(
     );
   }
 
-  const phoneCodeHash = row.phone_code_hash;
+  const { phone_code_hash: phoneCodeHash, temp_session: tempSession } = row;
+  console.log("[auth] verifyCode: phone=", phone, "hash=", phoneCodeHash, "tempSession.length=", tempSession?.length);
 
-  await ensureConnected();
-  const client = await getTelegramClient();
+  const { apiId, apiHash } = getApiCredentials();
+
+  // MUST reuse the same session that called sendCode — phoneCodeHash is auth-key-bound.
+  const session = new StringSession(tempSession ?? "");
+  const client = new TelegramClient(session, apiId, apiHash, {
+    connectionRetries: 5,
+    requestRetries: 2,
+    timeout: 30,
+  });
+  await client.connect();
 
   try {
+    console.log("[auth] verifyCode: invoking SignIn phone=", phone, "hash=", phoneCodeHash, "code=", code);
     const result = await client.invoke(
       new Api.auth.SignIn({
         phoneNumber: phone,
@@ -98,6 +126,21 @@ export async function verifyCode(
     if (result instanceof Api.auth.AuthorizationSignUpRequired) {
       throw new Error("Telegram account registration is required for this number");
     }
+
+    // Save session before disconnect
+    const sessionString = client.session.save() as unknown as string;
+    if (!sessionString) {
+      throw new Error("Failed to save Telegram session after sign-in");
+    }
+
+    await saveSessionString(sessionString);
+
+    // Reset production singleton so next poll reloads the new session
+    if (global.__telegramClient) {
+      try { await global.__telegramClient.disconnect(); } catch { /* ignore */ }
+      global.__telegramClient = undefined;
+      global.__activeSessionString = undefined;
+    }
   } catch (err: unknown) {
     const error = err as { errorMessage?: string };
     if (error.errorMessage === "SESSION_PASSWORD_NEEDED") {
@@ -106,14 +149,8 @@ export async function verifyCode(
     throw err;
   } finally {
     await db.prepare("DELETE FROM telegram_pending_codes WHERE phone = ?").run(phone);
+    try { await client.disconnect(); } catch { /* ignore */ }
   }
-
-  const sessionString = client.session.save() as unknown as string;
-  if (!sessionString) {
-    throw new Error("Failed to save Telegram session after sign-in");
-  }
-
-  await saveSessionString(sessionString);
 }
 
 export async function getLoginStatus(): Promise<{
@@ -180,21 +217,35 @@ export async function signOut(): Promise<void> {
     }
   }
   global.__telegramClient = undefined;
+  global.__activeSessionString = undefined;
   const db = await getDb();
   await db.prepare("DELETE FROM telegram_sessions").run();
 }
 
 export async function checkPassword(password: string): Promise<void> {
-  await ensureConnected();
-  const client = await getTelegramClient();
+  // Fresh client for 2FA — avoids reusing any stale auth state
+  const client = await createFreshAuthClient();
   const { apiId, apiHash } = getApiCredentials();
-  await tgClient.auth.signInWithPassword(client, { apiId, apiHash }, {
-    password: async () => password,
-    onError: (err) => { throw err; },
-  });
-  const sessionString = client.session.save() as unknown as string;
-  if (!sessionString) {
-    throw new Error("Failed to save Telegram session after 2FA verification");
+  try {
+    await tgClient.auth.signInWithPassword(client, { apiId, apiHash }, {
+      password: async () => password,
+      onError: (err) => { throw err; },
+    });
+
+    const sessionString = client.session.save() as unknown as string;
+    if (!sessionString) {
+      throw new Error("Failed to save Telegram session after 2FA verification");
+    }
+
+    await saveSessionString(sessionString);
+
+    // Reset production singleton so next poll reloads the new session
+    if (global.__telegramClient) {
+      try { await global.__telegramClient.disconnect(); } catch { /* ignore */ }
+      global.__telegramClient = undefined;
+      global.__activeSessionString = undefined;
+    }
+  } finally {
+    try { await client.disconnect(); } catch { /* ignore */ }
   }
-  await saveSessionString(sessionString);
 }
