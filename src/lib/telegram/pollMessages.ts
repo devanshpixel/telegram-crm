@@ -166,21 +166,80 @@ async function createContactFromDialog(entity: Api.User): Promise<ContactWithCon
   return row;
 }
 
+function replyDelay(): Promise<void> {
+  const r = Math.random();
+  if (r < 0.1) return Promise.resolve();
+  const ms = 2000 + Math.random() * 40000;
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function getScheduledDelay(convState: string, emotionalTemp: number): number {
+  const r = Math.random();
+  if (convState === "PAID" || convState === "OFFER_SENT") {
+    if (r < 0.3) return 3000 + Math.random() * 7000;
+    return 10000 + Math.random() * 50000;
+  }
+  if (emotionalTemp >= 60) {
+    if (r < 0.3) return 10000 + Math.random() * 30000;
+    return 70000 + Math.random() * 230000;
+  }
+  if (emotionalTemp >= 40) {
+    if (r < 0.2) return 20000 + Math.random() * 40000;
+    return 120000 + Math.random() * 480000;
+  }
+  if (r < 0.3) return 30000 + Math.random() * 90000;
+  return 300000 + Math.random() * 700000;
+}
+
+async function schedulePendingReply(contactId: number, text: string, delayMs: number): Promise<void> {
+  const db = await getDb();
+  const scheduledAt = new Date(Date.now() + delayMs).toISOString();
+  await db.prepare(
+    "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)"
+  ).run(`pending_reply:${contactId}`, JSON.stringify({ text, scheduledAt }), nowIso());
+}
+
+async function sendDueReplies(summary: PollSummary): Promise<void> {
+  const db = await getDb();
+  const rows = await db.prepare(
+    "SELECT key, value FROM settings WHERE key LIKE 'pending_reply:%'"
+  ).all() as { key: string; value: string }[];
+  const now = new Date();
+  for (const row of rows) {
+    try {
+      const contactId = parseInt(row.key.split(":")[1]);
+      const data = JSON.parse(row.value);
+      if (new Date(data.scheduledAt) <= now) {
+        await sendTelegramMessage(contactId, data.text);
+        await db.prepare("DELETE FROM settings WHERE key = ?").run(row.key);
+        summary.repliesSent++;
+      }
+    } catch (e) {
+      console.error("[POLL] Pending reply error:", e);
+    }
+  }
+}
+
 async function sendAiReply(
   contactId: number,
   mode: ReplyMode = "casual",
   emotionalTemp: number = 50,
   intentScore: number = 0,
+  convState: string = "FREE_CHAT",
 ): Promise<{ offerSent: boolean }> {
   const messages = await getMessagesByContactId(contactId);
   const recent = messages.slice(-20);
-  let reply = await suggestReply(recent, mode, emotionalTemp, intentScore);
-  console.log(`[PIPELINE:6] AI reply generated — contactId=${contactId} mode=${mode} reply="${reply.slice(0, 80)}"`);
 
-  // The AI persona emits a literal "[LINK]" token when it decides to convert
-  // the fan (sales/conversion phase). Nothing else substitutes it, so we MUST
-  // replace it with a real payment link here — otherwise the fan receives a
-  // dead "[LINK]" placeholder and can never pay (lost sale on the hottest lead).
+  const lastOutgoing = [...recent].reverse().find(m => m.direction === "outgoing");
+  const lastTopic = lastOutgoing
+    ? lastOutgoing.text.replace(/[LINK].*/i, "").replace(/https?:\/\/\S+/g, "").trim().slice(0, 60)
+    : undefined;
+
+  let reply = await suggestReply(recent, mode, emotionalTemp, intentScore, {
+    previousTopic: lastTopic,
+    convState,
+  });
+
   const linkMatch = reply.match(/\[link\]/i);
   if (linkMatch) {
     let linkSent = false;
@@ -207,8 +266,23 @@ async function sendAiReply(
     }
   }
 
-  await sendTelegramMessage(contactId, reply);
+  await scheduleOrSendReply(contactId, reply, convState, emotionalTemp);
   return { offerSent: false };
+}
+
+async function scheduleOrSendReply(
+  contactId: number,
+  text: string,
+  convState: string,
+  emotionalTemp: number,
+): Promise<void> {
+  const delayMs = getScheduledDelay(convState, emotionalTemp);
+  if (delayMs < 30000) {
+    await replyDelay();
+    await sendTelegramMessage(contactId, text);
+  } else {
+    await schedulePendingReply(contactId, text, delayMs);
+  }
 }
 
 export async function createPaymentLink(
@@ -434,10 +508,10 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       await ensureConnected();
       const client = await getTelegramClient();
       const me = await client.getMe(); // validate session is alive
-      console.log(`[PIPELINE:1] Telegram connected — self userId=${me?.id} username=${me?.username ?? "—"}`);
+
+      await sendDueReplies(summary);
 
       const knownContacts = await listContactConversations();
-      console.log(`[PIPELINE:2] Poll started — ${knownContacts.length} known contacts in DB`);
       const knownMap = new Map<string, ContactWithConv>();
       for (const c of knownContacts) {
         knownMap.set(c.telegram_id, c);
@@ -479,7 +553,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           try {
             contact = await createContactFromDialog(entity);
             knownMap.set(telegramId, contact);
-            console.log(`[PIPELINE:3] New contact created — contactId=${contact.id} telegramId=${telegramId} name=${formatUserName(entity)}`);
+            console.log(`[POLL] New contact — ${formatUserName(entity)}`);
           } catch (e) {
             summary.errors.push(
               `Failed to create contact for ${telegramId}: ${e instanceof Error ? e.message : String(e)}`,
@@ -487,7 +561,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             continue;
           }
         } else {
-          console.log(`[PIPELINE:3] Known contact — contactId=${contact.id} telegramId=${telegramId} cursor=${contact.last_synced_message_id}`);
+          console.log(`[POLL] Contact — ${contact.id} cursor=${contact.last_synced_message_id}`);
         }
 
         // Task E: Offer Expiry
@@ -537,21 +611,15 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
             const saved = await createMessage(contact.id, text, "incoming", msgId);
             if (saved) {
-              console.log(`[PIPELINE:4] Message saved to DB — contactId=${contact.id} msgId=${msgId} text="${text.slice(0, 60)}"`);
               summary.newMessages++;
-            } else {
-              // Already in DB: prior poll saved it but the reply threw, so the cursor
-              // was not advanced. Re-add to incomingMessages so the reply is retried.
-              console.log(`[PIPELINE:4] Message already in DB (reply retry) — contactId=${contact.id} msgId=${msgId}`);
+              incomingMessages.push({ text });
             }
-            incomingMessages.push({ text });
           }
 
           // Batched reply: one response per contact per poll regardless of
           // how many messages arrived (BUG-5 fix).
           let replyFailed = false;
           if (incomingMessages.length > 0 && automatedReplies) {
-            console.log(`[PIPELINE:5] ${incomingMessages.length} new message(s) for contactId=${contact.id} conv_state=${contact.conv_state} — computing reply`);
             try {
               await recalculateLeadScore(contact.id);
               await recalculateSpendSegment(contact.id);
@@ -562,12 +630,11 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
               await updateRelationshipScore(contact.id);
 
               const skipReply = await shouldSkipDueToPacing(contact.id, emotionalTemp);
-              console.log(`[PIPELINE:5] contactId=${contact.id} emotionalTemp=${emotionalTemp} intentScore=${intentScore} skipReply=${skipReply}`);
 
               if (!skipReply && contact.conv_state === "PAID") {
                 const phase = await getPostPurchasePhase(contact.id);
                 if (phase === "welcome") {
-                  const welcomeMsg = "you're officially my VIP now 😘💕 i don't let everyone in here, so feel special. want to see what else i've got for my favs?";
+                  const welcomeMsg = "you're officially in my vip section now... hope you're ready for what's inside ☕️";
                   await sendTelegramMessage(contact.id, welcomeMsg);
                   try { await markWelcomeSent(contact.id); } catch (e) { console.error(`[POLL] markWelcomeSent failed for ${contact.id}:`, e); }
                   summary.repliesSent++;
@@ -576,7 +643,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                   summary.offersSent++;
                   contact.conv_state = "OFFER_SENT";
                 } else {
-                  await sendAiReply(contact.id, "casual", emotionalTemp, intentScore);
+                  await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
                   summary.repliesSent++;
                 }
               } else if (!skipReply && contact.conv_state === "OFFER_SENT") {
@@ -605,7 +672,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                   summary.offersSent++;
                   contact.conv_state = "OFFER_SENT";
                 } else if (intentScore >= 30) {
-                  const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore);
+                  const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore, contact.conv_state);
                   if (offerSent) {
                     summary.offersSent++;
                     contact.conv_state = "OFFER_SENT";
@@ -613,7 +680,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                     summary.repliesSent++;
                   }
                 } else {
-                  const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore);
+                  const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
                   if (offerSent) {
                     summary.offersSent++;
                     contact.conv_state = "OFFER_SENT";
@@ -626,10 +693,6 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                   try { await incrementOfferDeclined(contact.id); } catch (e) { console.error(`[POLL] incrementOfferDeclined failed for ${contact.id}:`, e); }
                 }
               } else {
-                // skipReply fired (low emotional temp + recent message). Prevent cursor
-                // from advancing so the message is retried on the next poll after the
-                // pacing window expires (5 min).
-                console.log(`[PIPELINE:5] Pacing skip — cursor held, will retry — contactId=${contact.id} emotionalTemp=${emotionalTemp}`);
                 replyFailed = true;
               }
             } catch (e) {
@@ -642,7 +705,6 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
           if (!replyFailed && maxId > minId) {
             await updateSyncCursor(contact.conversation_id, maxId);
-            console.log(`[PIPELINE:8] Sync cursor advanced — convId=${contact.conversation_id} ${minId} → ${maxId}`);
           }
         } catch (e) {
           console.error(`[POLL] Message iteration error for contact ${contact.id}:`, e);

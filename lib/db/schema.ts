@@ -186,4 +186,16 @@ CREATE TABLE IF NOT EXISTS failed_actions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_failed_actions_unresolved ON failed_actions(resolved_at) WHERE resolved_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS scheduled_replies (
+  id INTEGER PRIMARY KEY,
+  contact_id INTEGER NOT NULL,
+  message_text TEXT NOT NULL,
+  scheduled_at TEXT NOT NULL,
+  sent INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_replies_due ON scheduled_replies(sent, scheduled_at);
 `;

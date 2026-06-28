@@ -1,5 +1,5 @@
 import bigInt from "big-integer";
-import { Api } from "telegram";
+import { Api, TelegramClient } from "telegram";
 import { FloodWaitError } from "telegram/errors/RPCErrorList";
 import { getDb } from "@/lib/db";
 import { createMessage } from "@/lib/db/service";
@@ -8,6 +8,18 @@ import type { Message } from "@/types";
 import { getTelegramClient } from "./client";
 
 const FLOOD_RETRY_MAX = 3;
+
+async function typingDelay(client: TelegramClient, peer: Api.InputPeerUser, text: string): Promise<void> {
+  try {
+    await client.invoke(new Api.messages.SetTyping({
+      peer,
+      action: new Api.SendMessageTypingAction(),
+    }));
+  } catch {}
+  // ~40ms per char, clamped 1s–8s — realistic for a mobile texter
+  const duration = Math.min(8000, Math.max(1000, Math.round(text.length * 40)));
+  await new Promise(r => setTimeout(r, duration));
+}
 
 async function ensureConnected(): Promise<void> {
   const client = await getTelegramClient();
@@ -54,23 +66,23 @@ export async function sendTelegramMessage(
   const client = await getTelegramClient();
   const peer = buildPeer(contact);
 
+  // Typing indicator happens once before any send attempt
+  await typingDelay(client, peer, trimmedText);
+
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= FLOOD_RETRY_MAX; attempt++) {
     try {
-      console.log(`[PIPELINE:7] Sending Telegram message — contactId=${contactId} attempt=${attempt} length=${trimmedText.length} peer=${contact.telegram_id}`);
       const sent = await client.sendMessage(peer, { message: trimmedText });
 
       if (!(sent instanceof Api.Message) || !sent.id) {
         throw new Error("Failed to send Telegram message");
       }
 
-      console.log(`[PIPELINE:7] Telegram send SUCCESS — sentMsgId=${sent.id} contactId=${contactId}`);
       const saved = await createMessage(contactId, trimmedText, "outgoing", sent.id);
       if (!saved) {
         throw new Error(`No conversation found for contact ${contactId}`);
       }
-      console.log(`[PIPELINE:7] Outgoing message saved to DB — savedId=${saved.id} contactId=${contactId}`);
 
       return saved;
     } catch (err: unknown) {
