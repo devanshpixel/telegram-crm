@@ -7,7 +7,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 async function handle(req: Request) {
-  console.log("[BOOT] /api/telegram/poll invoked");
   // Defense-in-depth auth (middleware also enforces this). Accept either
   // Vercel's `Authorization: Bearer <CRON_SECRET>` (cron is a GET) or an
   // explicit `x-cron-secret` header for manual/external POST schedulers.

@@ -18,6 +18,7 @@ async function testAI() {
       body: JSON.stringify({
         model: "openai/gpt-4o-mini",
         messages: [{ role: "user", content: "say hello" }],
+        max_tokens: 100,
       }),
     });
 
