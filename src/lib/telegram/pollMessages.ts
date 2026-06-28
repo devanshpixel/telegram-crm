@@ -411,7 +411,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       const lock = await getLockStatus();
       if (lock.isPolling && lock.lastUpdated) {
         const lockAgeMs = Date.now() - new Date(lock.lastUpdated).getTime();
-        if (lockAgeMs < 5 * 60 * 1000) { // 5 minute timeout
+        if (lockAgeMs < 90 * 1000) { // 90s — 1.5× Vercel's 60s maxDuration so a timed-out poll releases before the next cron fires
           console.warn("[Poll] Another poll is already in progress, skipping");
           return summary;
         } else {
@@ -532,13 +532,15 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             if (msgId > maxId) maxId = msgId;
 
             const saved = await createMessage(contact.id, text, "incoming", msgId);
-            if (!saved) {
-              summary.errors.push(`Failed to save message for contact ${contact.id}`);
-              continue;
+            if (saved) {
+              console.log(`[PIPELINE:4] Message saved to DB — contactId=${contact.id} msgId=${msgId} text="${text.slice(0, 60)}"`);
+              summary.newMessages++;
+            } else {
+              // Already in DB: prior poll saved it but the reply threw, so the cursor
+              // was not advanced. Re-add to incomingMessages so the reply is retried.
+              console.log(`[PIPELINE:4] Message already in DB (reply retry) — contactId=${contact.id} msgId=${msgId}`);
             }
-            console.log(`[PIPELINE:4] Message saved to DB — contactId=${contact.id} msgId=${msgId} text="${text.slice(0, 60)}"`);
             incomingMessages.push({ text });
-            summary.newMessages++;
           }
 
           // Batched reply: one response per contact per poll regardless of
@@ -619,6 +621,12 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                 if (contact.conv_state === "OFFER_SENT" && intentScore < 20) {
                   try { await incrementOfferDeclined(contact.id); } catch (e) { console.error(`[POLL] incrementOfferDeclined failed for ${contact.id}:`, e); }
                 }
+              } else {
+                // skipReply fired (low emotional temp + recent message). Prevent cursor
+                // from advancing so the message is retried on the next poll after the
+                // pacing window expires (5 min).
+                console.log(`[PIPELINE:5] Pacing skip — cursor held, will retry — contactId=${contact.id} emotionalTemp=${emotionalTemp}`);
+                replyFailed = true;
               }
             } catch (e) {
               replyFailed = true;
