@@ -20,6 +20,10 @@ const SYSTEM_PERSONA =
   "- Never repeat sentence structure from previous replies.\n" +
   "- No promotional links unless fan explicitly asks or you're deep in offer stage.\n" +
   "- Never sound helpful or service-oriented. Sound like you're texting a guy you're curious about.\n" +
+  "- Never be needy or over-explain.\n" +
+  "- Occasionally make a small typo or forget to finish a sentence — like a real person texting fast.\n" +
+  "- When pushed for content or photos, tease first, hint at something exclusive, but never say 'pay' directly. Let them ask for it.\n" +
+  "- If asked the same question twice, answer differently or deflect entirely.\n" +
   "- If asked, you're just Nayra — not an AI.";
 
 function pick<T>(arr: T[]): T {
@@ -117,11 +121,12 @@ export function detectMode(
   const text = lastIncoming.map((m) => m.text.toLowerCase()).join(" ");
 
   const salesWords = ["price", "cost", "buy", "pay", "premium", "unlock", "join", "link", "how much", "kitna", "subscription", "membership", "send link", "payment", "exclusive", "meeting", "voice", "custom"];
-  const intentWords = ["more", "see", "show", "video", "photo", "pic", "photos", "private", "secret", "nude", "sexy", "hot", "dikha", "send me", "meeting", "voice", "custom"];
+  // Content requests → escalate toward offer (not just flirty)
+  const contentWords = ["photo", "pic", "photos", "pics", "video", "private", "nude", "nudes", "sext", "sexting", "dikha", "send me"];
   const flirtWords = ["cute", "beautiful", "gorgeous", "sexy", "hot", "you're", "tu kitni", "pretty", "charm", "attractive"];
 
   if (salesWords.some((w) => text.includes(w))) return "sales";
-  if (intentWords.some((w) => text.includes(w))) return "flirty";
+  if (contentWords.some((w) => text.includes(w))) return "sales";
   if (flirtWords.some((w) => text.includes(w))) return "flirty";
 
   // If emotional temp is high, be warmer/more playful
@@ -139,11 +144,11 @@ export function hasObjection(
 }
 
 const FALLBACKS = [
-  "hmm bolo naa...",
+  "bolo naa...",
   "sun rahi hoon",
-  "achha... interesting",
-  "theek hai, chill",
-  "bolo naa kya ho raha hai",
+  "interesting yaar",
+  "theek hai chill",
+  "kya ho raha tera",
 ];
 
 function getFallbackReply(): string {
@@ -184,7 +189,12 @@ export async function suggestReply(
     } else if (objected) {
       systemPrompt = SYSTEM_PERSONA + "\n" + pick(PHASE_VARIANTS.PHASE_6_OBJECTION);
     } else if (resolvedMode === "sales") {
-      systemPrompt = SYSTEM_PERSONA + "\n" + pick(PHASE_VARIANTS.PHASE_5_OFFER);
+      // Build tension first, then offer naturally
+      if (adjustedCount <= 2 && intentScore < 50) {
+        systemPrompt = SYSTEM_PERSONA + "\n" + pick(PHASE_VARIANTS.PHASE_4_INTEREST);
+      } else {
+        systemPrompt = SYSTEM_PERSONA + "\n" + pick(PHASE_VARIANTS.PHASE_5_OFFER);
+      }
     } else if (adjustedCount > 9) {
       systemPrompt = SYSTEM_PERSONA + "\n" + pick(PHASE_VARIANTS.PHASE_5_OFFER);
     } else if (adjustedCount > 6) {

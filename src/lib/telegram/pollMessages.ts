@@ -166,29 +166,49 @@ async function createContactFromDialog(entity: Api.User): Promise<ContactWithCon
   return row;
 }
 
-function replyDelay(): Promise<void> {
-  const r = Math.random();
-  if (r < 0.1) return Promise.resolve();
-  const ms = 2000 + Math.random() * 40000;
-  return new Promise(r => setTimeout(r, ms));
-}
-
 function getScheduledDelay(convState: string, emotionalTemp: number): number {
   const r = Math.random();
+
   if (convState === "PAID" || convState === "OFFER_SENT") {
-    if (r < 0.3) return 3000 + Math.random() * 7000;
-    return 10000 + Math.random() * 50000;
+    if (r < 0.50) return 2000 + Math.random() * 6000;       // 2–8s (50%)
+    if (r < 0.85) return 20000 + Math.random() * 70000;     // 20–90s (35%)
+    return 180000 + Math.random() * 420000;                  // 3–10min (15%)
   }
+
   if (emotionalTemp >= 60) {
-    if (r < 0.3) return 10000 + Math.random() * 30000;
-    return 70000 + Math.random() * 230000;
+    if (r < 0.30) return 2000 + Math.random() * 6000;       // 2–8s (30%)
+    if (r < 0.60) return 20000 + Math.random() * 70000;     // 20–90s (30%)
+    if (r < 0.85) return 180000 + Math.random() * 420000;   // 3–10min (25%)
+    return 1800000 + Math.random() * 1800000;                // 30–60min (15%)
   }
+
   if (emotionalTemp >= 40) {
-    if (r < 0.2) return 20000 + Math.random() * 40000;
-    return 120000 + Math.random() * 480000;
+    if (r < 0.15) return 2000 + Math.random() * 6000;       // 2–8s (15%)
+    if (r < 0.40) return 20000 + Math.random() * 70000;     // 20–90s (25%)
+    if (r < 0.75) return 180000 + Math.random() * 420000;   // 3–10min (35%)
+    if (r < 0.93) return 1800000 + Math.random() * 1800000; // 30–60min (18%)
+    return 3600000 + Math.random() * 7200000;                // 1–3hrs (7%)
   }
-  if (r < 0.3) return 30000 + Math.random() * 90000;
-  return 300000 + Math.random() * 700000;
+
+  // Low emotional temp — slow, distant
+  if (r < 0.20) return 20000 + Math.random() * 70000;       // 20–90s (20%)
+  if (r < 0.55) return 180000 + Math.random() * 420000;     // 3–10min (35%)
+  if (r < 0.80) return 1800000 + Math.random() * 1800000;   // 30–60min (25%)
+  return 3600000 + Math.random() * 14400000;                 // 1–5hrs (20%)
+}
+
+function splitMessage(text: string): string[] {
+  // 30% chance to keep as one message; always keep short messages whole
+  if (Math.random() < 0.3 || text.length <= 60) return [text];
+  // Split on sentence-ending punctuation
+  const parts = text.match(/[^.!?…]+[.!?…]*/g);
+  if (!parts || parts.length <= 1) return [text];
+  const cleaned = parts.map((s) => s.trim()).filter(Boolean);
+  if (cleaned.length > 4) {
+    const mid = Math.ceil(cleaned.length / 2);
+    return [cleaned.slice(0, mid).join(" "), cleaned.slice(mid).join(" ")];
+  }
+  return cleaned;
 }
 
 async function schedulePendingReply(contactId: number, text: string, delayMs: number): Promise<void> {
@@ -277,9 +297,13 @@ async function scheduleOrSendReply(
   emotionalTemp: number,
 ): Promise<void> {
   const delayMs = getScheduledDelay(convState, emotionalTemp);
-  if (delayMs < 30000) {
-    await replyDelay();
-    await sendTelegramMessage(contactId, text);
+  if (delayMs < 50000) {
+    await new Promise((r) => setTimeout(r, delayMs));
+    const parts = splitMessage(text);
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 500 + Math.random() * 2500));
+      await sendTelegramMessage(contactId, parts[i]);
+    }
   } else {
     await schedulePendingReply(contactId, text, delayMs);
   }
