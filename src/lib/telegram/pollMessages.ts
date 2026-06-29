@@ -29,6 +29,14 @@ import { getAppUrl } from "@/lib/app-url";
 import { getTelegramClient } from "./client";
 import { sendTelegramMessage } from "./sendMessage";
 import { getLockedVariant } from "./messageVariants";
+import {
+  TIMING,
+  INTENT_THRESHOLD,
+  EMOTIONAL_TEMP,
+  OFFER,
+  SEGMENT_INTERVALS,
+  MESSAGE,
+} from "./constants";
 
 const MAX_DIALOGS_PER_POLL = 500;
 // Keep under the Vercel function maxDuration (60s) so the poll exits cleanly
@@ -128,7 +136,7 @@ async function setConvState(
 
 async function getOfferSettings() {
   const [offerPrice, offerMessage, aiMode, automatedReplies] = await Promise.all([
-    getSetting("offerPrice", 499),
+    getSetting("offerPrice", OFFER.DEFAULT_PRICE),
     getSetting("offerMessage", "Hey! You've been enjoying the chat so here's something special 🔥\n\nUnlock premium access for exclusive content, behind-the-scenes, and unlimited chat."),
     getSetting<ReplyMode>("aiMode", "auto"),
     getSetting<boolean>("automatedReplies", true),
@@ -171,36 +179,35 @@ function getScheduledDelay(convState: string, emotionalTemp: number): number {
   const r = Math.random();
 
   if (convState === "PAID" || convState === "OFFER_SENT") {
-    if (r < 0.50) return 2000 + Math.random() * 6000;       // 2–8s (50%)
-    if (r < 0.85) return 20000 + Math.random() * 70000;     // 20–90s (35%)
-    return 180000 + Math.random() * 420000;                  // 3–10min (15%)
+    if (r < 0.50) return TIMING.REPLY_DELAY_MIN_FAST + Math.random() * (TIMING.REPLY_DELAY_MAX_FAST - TIMING.REPLY_DELAY_MIN_FAST);
+    if (r < 0.85) return TIMING.REPLY_DELAY_MIN_MEDIUM + Math.random() * (TIMING.REPLY_DELAY_MAX_MEDIUM - TIMING.REPLY_DELAY_MIN_MEDIUM);
+    return TIMING.REPLY_DELAY_MIN_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_SLOW - TIMING.REPLY_DELAY_MIN_SLOW);
   }
 
-  if (emotionalTemp >= 60) {
-    if (r < 0.30) return 2000 + Math.random() * 6000;       // 2–8s (30%)
-    if (r < 0.60) return 20000 + Math.random() * 70000;     // 20–90s (30%)
-    if (r < 0.85) return 180000 + Math.random() * 420000;   // 3–10min (25%)
-    return 1800000 + Math.random() * 1800000;                // 30–60min (15%)
+  if (emotionalTemp >= EMOTIONAL_TEMP.HOT) {
+    if (r < 0.30) return TIMING.REPLY_DELAY_MIN_FAST + Math.random() * (TIMING.REPLY_DELAY_MAX_FAST - TIMING.REPLY_DELAY_MIN_FAST);
+    if (r < 0.60) return TIMING.REPLY_DELAY_MIN_MEDIUM + Math.random() * (TIMING.REPLY_DELAY_MAX_MEDIUM - TIMING.REPLY_DELAY_MIN_MEDIUM);
+    if (r < 0.85) return TIMING.REPLY_DELAY_MIN_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_SLOW - TIMING.REPLY_DELAY_MIN_SLOW);
+    return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * TIMING.REPLY_DELAY_MIN_VERY_SLOW;
   }
 
-  if (emotionalTemp >= 40) {
-    if (r < 0.15) return 2000 + Math.random() * 6000;       // 2–8s (15%)
-    if (r < 0.40) return 20000 + Math.random() * 70000;     // 20–90s (25%)
-    if (r < 0.75) return 180000 + Math.random() * 420000;   // 3–10min (35%)
-    if (r < 0.93) return 1800000 + Math.random() * 1800000; // 30–60min (18%)
-    return 3600000 + Math.random() * 7200000;                // 1–3hrs (7%)
+  if (emotionalTemp >= EMOTIONAL_TEMP.WARM) {
+    if (r < 0.15) return TIMING.REPLY_DELAY_MIN_FAST + Math.random() * (TIMING.REPLY_DELAY_MAX_FAST - TIMING.REPLY_DELAY_MIN_FAST);
+    if (r < 0.40) return TIMING.REPLY_DELAY_MIN_MEDIUM + Math.random() * (TIMING.REPLY_DELAY_MAX_MEDIUM - TIMING.REPLY_DELAY_MIN_MEDIUM);
+    if (r < 0.75) return TIMING.REPLY_DELAY_MIN_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_SLOW - TIMING.REPLY_DELAY_MIN_SLOW);
+    if (r < 0.93) return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * TIMING.REPLY_DELAY_MIN_VERY_SLOW;
+    return TIMING.REPLY_DELAY_MIN_EXTREMELY_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_EXTREMELY_SLOW - TIMING.REPLY_DELAY_MIN_EXTREMELY_SLOW);
   }
 
   // Low emotional temp — slow, distant
-  if (r < 0.20) return 20000 + Math.random() * 70000;       // 20–90s (20%)
-  if (r < 0.55) return 180000 + Math.random() * 420000;     // 3–10min (35%)
-  if (r < 0.80) return 1800000 + Math.random() * 1800000;   // 30–60min (25%)
-  return 3600000 + Math.random() * 14400000;                 // 1–5hrs (20%)
+  if (r < 0.20) return TIMING.REPLY_DELAY_MIN_MEDIUM + Math.random() * (TIMING.REPLY_DELAY_MAX_MEDIUM - TIMING.REPLY_DELAY_MIN_MEDIUM);
+  if (r < 0.55) return TIMING.REPLY_DELAY_MIN_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_SLOW - TIMING.REPLY_DELAY_MIN_SLOW);
+  if (r < 0.80) return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * TIMING.REPLY_DELAY_MIN_VERY_SLOW;
+  return TIMING.REPLY_DELAY_MIN_HOURS + Math.random() * (TIMING.REPLY_DELAY_MAX_HOURS - TIMING.REPLY_DELAY_MIN_HOURS);
 }
 
 function splitMessage(text: string): string[] {
-  // 30% chance to keep as one message; always keep short messages whole
-  if (Math.random() < 0.3 || text.length <= 60) return [text];
+  if (Math.random() < MESSAGE.SPLIT_CHANCE || text.length <= MESSAGE.SHORT_MESSAGE_LENGTH) return [text];
   // Split on sentence-ending punctuation
   const parts = text.match(/[^.!?…]+[.!?…]*/g);
   if (!parts || parts.length <= 1) return [text];
@@ -249,11 +256,11 @@ async function sendAiReply(
   convState: string = "FREE_CHAT",
 ): Promise<{ offerSent: boolean }> {
   const messages = await getMessagesByContactId(contactId);
-  const recent = messages.slice(-20);
+  const recent = messages.slice(-MESSAGE.RECENT_COUNT);
 
   const lastOutgoing = [...recent].reverse().find(m => m.direction === "outgoing");
   const lastTopic = lastOutgoing
-    ? lastOutgoing.text.replace(/[LINK].*/i, "").replace(/https?:\/\/\S+/g, "").trim().slice(0, 60)
+    ? lastOutgoing.text.replace(/[LINK].*/i, "").replace(/https?:\/\/\S+/g, "").trim().slice(0, MESSAGE.TOPIC_MAX_LENGTH)
     : undefined;
 
   let reply = await suggestReply(recent, mode, emotionalTemp, intentScore, {
@@ -302,7 +309,7 @@ async function scheduleOrSendReply(
     await new Promise((r) => setTimeout(r, delayMs));
     const parts = splitMessage(text);
     for (let i = 0; i < parts.length; i++) {
-      if (i > 0) await new Promise((r) => setTimeout(r, 500 + Math.random() * 2500));
+      if (i > 0) await new Promise((r) => setTimeout(r, TIMING.MULTI_MESSAGE_GAP_MIN + Math.random() * (TIMING.MULTI_MESSAGE_GAP_MAX - TIMING.MULTI_MESSAGE_GAP_MIN)));
       await sendTelegramMessage(contactId, parts[i]);
     }
   } else {
@@ -347,17 +354,10 @@ async function sendPremiumOffer(contactId: number): Promise<void> {
 }
 
 
-const SEGMENT_LOCKED_INTERVALS: Record<string, number> = {
-  prospect: 12,
-  buyer: 18,
-  premium: 24,
-  high_value: 36,
-  vip: 48,
-  whale: 72,
-};
+const SEGMENT_LOCKED_INTERVALS: Record<string, number> = SEGMENT_INTERVALS;
 
 async function getSegmentLockedInterval(segment: string): Promise<number> {
-  return SEGMENT_LOCKED_INTERVALS[segment] ?? 24;
+  return SEGMENT_LOCKED_INTERVALS[segment as keyof typeof SEGMENT_LOCKED_INTERVALS] ?? SEGMENT_INTERVALS.default;
 }
 
 export async function sendLockedResponse(contactId: number): Promise<void> {
@@ -368,9 +368,9 @@ export async function sendLockedResponse(contactId: number): Promise<void> {
   const count = row?.locked_response_count ?? 0;
   const segment = row?.spend_segment ?? "default";
 
-  if (count >= 22) {
+  if (count >= OFFER.MAX_LOCKED_RESPONSES) {
     await setConvState(contactId, "FREE_CHAT");
-    await setOfferCooldown(contactId, 7);
+    await setOfferCooldown(contactId, OFFER.COOLDOWN_DAYS);
     return;
   }
 
@@ -397,7 +397,7 @@ async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
     .prepare("SELECT last_locked_response_at, locked_response_count, spend_segment FROM contacts WHERE id = ?")
     .get(contactId)) as { last_locked_response_at: string | null; locked_response_count: number; spend_segment: string } | undefined;
   if (!row) return false;
-  if ((row.locked_response_count ?? 0) >= 22) return false;
+  if ((row.locked_response_count ?? 0) >= OFFER.MAX_LOCKED_RESPONSES) return false;
   if (!row.last_locked_response_at) return true;
   const intervalHours = await getSegmentLockedInterval(row.spend_segment ?? "default");
   const h = hoursSince(row.last_locked_response_at);
@@ -413,7 +413,7 @@ async function selectOfferAmount(contactId: number, basePrice: number): Promise<
 async function checkOfferExpiry(contactId: number, offerSentAt: string | null): Promise<boolean> {
   if (!offerSentAt) return false;
   const days = (Date.now() - new Date(offerSentAt).getTime()) / (1000 * 60 * 60 * 24);
-  if (days >= 7) {
+  if (days >= OFFER.EXPIRY_DAYS) {
     await setConvState(contactId, "FREE_CHAT");
     return true;
   }
@@ -639,11 +639,11 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
               } else if (!skipReply) {
                 const inCooldown = await isInOfferCooldown(contact.id);
 
-                if (intentScore >= 60 && !inCooldown) {
+                if (intentScore >= INTENT_THRESHOLD.HIGH && !inCooldown) {
                   await sendPremiumOffer(contact.id);
                   summary.offersSent++;
                   contact.conv_state = "OFFER_SENT";
-                } else if (intentScore >= 30) {
+                } else if (intentScore >= INTENT_THRESHOLD.LOW) {
                   const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore, contact.conv_state);
                   if (offerSent) {
                     summary.offersSent++;
@@ -661,7 +661,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                   }
                 }
 
-                if (contact.conv_state === "OFFER_SENT" && intentScore < 20) {
+                if (contact.conv_state === "OFFER_SENT" && intentScore < INTENT_THRESHOLD.VERY_LOW) {
                   try { await incrementOfferDeclined(contact.id); } catch (e) { console.error(`[POLL] incrementOfferDeclined failed for ${contact.id}:`, e); }
                 }
               } else {
