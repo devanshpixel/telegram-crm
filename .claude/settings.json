@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(vercel logs *)",
+      "Bash(vercel ls *)",
+      "Bash(vercel list *)",
+      "Bash(vercel inspect *)",
+      "Bash(vercel env ls *)",
+      "WebSearch"
+    ]
+  }
+}

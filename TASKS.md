@@ -1,5 +1,45 @@
 # Tasks
 
+## Conversation Polish — Complete ✅
+
+### Prompt Rewrite ✅
+- Rewrote entire SYSTEM_PERSONA in `lib/ai/suggest-reply.ts`
+- Addressed all 9 production issues:
+  1. Question overuse → enforced 40% max, banned repetitive structures
+  2. Personality too nice → added unpredictability, coldness, push-pull
+  3. Emoji usage → explicit 50/35/15 rule, no consecutive emoji
+  4. Selling flow → 4-step rotation with varied language, banned overused phrases
+  5. Generic questions → hardened banned list
+  6. Memory → improved CRM context integration
+  7. Human behavior → quantified percentages for ignoring, distraction, one-word replies
+  8. Emotional variety → added 14 emotions with usage instructions (jealousy, mystery, warmth, excitement, vulnerability)
+  9. Message length → enforced 1-2 sentences max, reduced max_tokens 120→100
+
+### 100-Conversation Audit ✅
+- Simulated 100 conversations across 13 persona types
+- Pattern detection identified:
+  - "sabko nahi bhejti/dikhati" — 5x repetition
+  - "X matlab?" — 18x repetition
+  - "depends" — 7x overuse
+  - "pata hai" — 6x tick
+  - Question overuse: 68% vs target 40%
+  - Missing emotions: jealousy (0%), mystery (2%), warmth (4%)
+  - Incomplete selling: 0/100 reached [LINK] stage
+
+### Prompt Improvements Applied ✅
+- Banned repetitive structures: "X matlab?", "tu X hai ya Y?", "X mat bol", "pehle X", "X vibes aa rahe", "pata hai"
+- Added rotation rules for selling phrases (5 variants per step)
+- Banned overused words: "sabko nahi bhejti", "screening", "deserve karta hai"
+- Quantified human behaviors with percentages
+- Expanded emotional range instructions with specific triggers
+- Rewrote all 7 phase variants to enforce statements over questions
+- Updated mode prompts to emphasize language variety
+
+### Build Verification ✅
+- TypeScript: clean
+- Next.js build: success
+- 0 errors, 0 warnings
+
 ## RELEASE CANDIDATE — Complete ✅
 
 ### Phase 1: Production Audit ✅

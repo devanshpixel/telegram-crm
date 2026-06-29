@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
+import { pickRandom, WHALE_FOLLOWUP } from "@/src/lib/telegram/messageVariants";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -31,12 +32,6 @@ async function handle(req: Request) {
       )
       .all(cutoff60d)) as { id: number; name: string }[];
 
-    const messages = [
-      "my absolute favorite 😘💕 been too long — your vip lounge has new content ready for you. want me to send the link?",
-      "whale alert 🐋 miss having you around babe! i've put something special aside just for you.",
-      "you're top tier for a reason 🥺 don't let your vip status go cold — exclusive stuff waiting for you.",
-    ];
-
     const results: { contactId: number; sent: boolean; error?: string }[] = [];
 
     for (const contact of whales) {
@@ -47,7 +42,7 @@ async function handle(req: Request) {
           .get(lockKey) as { id: number } | undefined;
         if (alreadySent) continue;
 
-        const msg = messages[Math.floor(Math.random() * messages.length)];
+        const msg = pickRandom(WHALE_FOLLOWUP);
         await sendTelegramMessage(contact.id, msg);
 
         await db

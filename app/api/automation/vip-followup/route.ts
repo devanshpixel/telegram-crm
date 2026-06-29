@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
+import { pickRandom, VIP_FOLLOWUP } from "@/src/lib/telegram/messageVariants";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -31,12 +32,6 @@ async function handle(req: Request) {
       )
       .all(cutoff45d)) as { id: number; name: string }[];
 
-    const messages = [
-      "hey gorgeous 😘 been a while since we caught up — just wanted to remind you you're still my VIP 💕 got something exclusive coming your way soon.",
-      "miss you in the vip lounge babe 😏 don't forget you've got premium access here whenever you want.",
-      "thinking of you 🥺 vip members get first look at my new content — want me to save you a spot?",
-    ];
-
     const results: { contactId: number; sent: boolean; error?: string }[] = [];
 
     for (const contact of vips) {
@@ -47,7 +42,7 @@ async function handle(req: Request) {
           .get(lockKey) as { id: number } | undefined;
         if (alreadySent) continue;
 
-        const msg = messages[Math.floor(Math.random() * messages.length)];
+        const msg = pickRandom(VIP_FOLLOWUP);
         await sendTelegramMessage(contact.id, msg);
 
         await db

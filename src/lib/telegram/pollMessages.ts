@@ -28,6 +28,7 @@ import { suggestReply } from "@/lib/ai/suggest-reply";
 import { getAppUrl } from "@/lib/app-url";
 import { getTelegramClient } from "./client";
 import { sendTelegramMessage } from "./sendMessage";
+import { getLockedVariant } from "./messageVariants";
 
 const MAX_DIALOGS_PER_POLL = 500;
 // Keep under the Vercel function maxDuration (60s) so the poll exits cleanly
@@ -346,12 +347,6 @@ async function sendPremiumOffer(contactId: number): Promise<void> {
 }
 
 
-export const LOCKED_MESSAGES = [
-  `Baby, this chat is locked now 😘💕 Unlock here for my exclusive content: `,
-  `Still thinking? 😏 Meri private stuff is waiting inside... don't miss out: `,
-  `Last chance babe 🥺 After this I'm closing the door for a while. Join fast: `,
-];
-
 const SEGMENT_LOCKED_INTERVALS: Record<string, number> = {
   prospect: 12,
   buyer: 18,
@@ -361,50 +356,8 @@ const SEGMENT_LOCKED_INTERVALS: Record<string, number> = {
   whale: 72,
 };
 
-const SEGMENT_LOCKED_MESSAGES: Record<string, string[]> = {
-  prospect: [
-    `hey! this chat is locked now 😘💕 unlock for exclusive content: `,
-    `still here? 😏 my private stuff is waiting... don't miss out: `,
-    `last chance 🥺 closing the door soon. join now: `,
-  ],
-  buyer: [
-    `baby, locked chat time 😘💕 unlock your vip access here: `,
-    `you liked it last time... ready for more? 😏 unlock here: `,
-    `final reminder 🥺 door's closing. grab your access: `,
-  ],
-  premium: [
-    `premium chat locked 😘💕 your exclusive content awaits: `,
-    `still thinking? 😏 the good stuff is inside... unlock: `,
-    `last call babe 🥺 this offer expires soon: `,
-  ],
-  high_value: [
-    `hey you! locked chat for my favs 😘💕 unlock premium: `,
-    `missed you in my vip 😏 the exclusive stuff is waiting: `,
-    `final chance 🥺 this tier won't stay open long: `,
-  ],
-  vip: [
-    `vip access locked 😘💕 your private content is ready: `,
-    `exclusive tier still open 😏 don't let it slip: `,
-    `closing vip doors 🥺 last chance for this tier: `,
-  ],
-  whale: [
-    `my vip lounge is locked 😘💕 your content awaits: `,
-    `whale tier exclusive 😏 the best stuff is inside: `,
-    `final vip call 🥺 doors closing on this tier: `,
-  ],
-  default: [
-    `Baby, this chat is locked now 😘💕 Unlock here for my exclusive content: `,
-    `Still thinking? 😏 Meri private stuff is waiting inside... don't miss out: `,
-    `Last chance babe 🥺 After this I'm closing the door for a while. Join fast: `,
-  ],
-};
-
 async function getSegmentLockedInterval(segment: string): Promise<number> {
   return SEGMENT_LOCKED_INTERVALS[segment] ?? 24;
-}
-
-async function getSegmentLockedMessages(segment: string): Promise<string[]> {
-  return SEGMENT_LOCKED_MESSAGES[segment] ?? SEGMENT_LOCKED_MESSAGES.default;
 }
 
 export async function sendLockedResponse(contactId: number): Promise<void> {
@@ -415,8 +368,7 @@ export async function sendLockedResponse(contactId: number): Promise<void> {
   const count = row?.locked_response_count ?? 0;
   const segment = row?.spend_segment ?? "default";
 
-  const messages = await getSegmentLockedMessages(segment);
-  if (count >= messages.length) {
+  if (count >= 22) {
     await setConvState(contactId, "FREE_CHAT");
     await setOfferCooldown(contactId, 7);
     return;
@@ -425,7 +377,7 @@ export async function sendLockedResponse(contactId: number): Promise<void> {
   const settings = await getOfferSettings();
   const amount = await selectOfferAmount(contactId, settings.offerPrice);
   const link = await createPaymentLink(contactId, amount);
-  const text = messages[count] + link;
+  const text = getLockedVariant(segment, count) + link;
 
   await sendTelegramMessage(contactId, text);
 
@@ -445,11 +397,9 @@ async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
     .prepare("SELECT last_locked_response_at, locked_response_count, spend_segment FROM contacts WHERE id = ?")
     .get(contactId)) as { last_locked_response_at: string | null; locked_response_count: number; spend_segment: string } | undefined;
   if (!row) return false;
-  const segment = row.spend_segment ?? "default";
-  const messages = await getSegmentLockedMessages(segment);
-  if ((row.locked_response_count ?? 0) >= messages.length) return false;
+  if ((row.locked_response_count ?? 0) >= 22) return false;
   if (!row.last_locked_response_at) return true;
-  const intervalHours = await getSegmentLockedInterval(segment);
+  const intervalHours = await getSegmentLockedInterval(row.spend_segment ?? "default");
   const h = hoursSince(row.last_locked_response_at);
   return h >= intervalHours;
 }
@@ -680,9 +630,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                     .prepare("SELECT locked_response_count, spend_segment FROM contacts WHERE id = ?")
                     .get(contact.id) as { locked_response_count: number; spend_segment: string } | undefined;
                   if (row) {
-                    const slug = row.spend_segment ?? "default";
-                    const msgs = await getSegmentLockedMessages(slug);
-                    if ((row.locked_response_count ?? 0) >= msgs.length) {
+                    if ((row.locked_response_count ?? 0) >= 22) {
                       await setConvState(contact.id, "FREE_CHAT");
                       await setOfferCooldown(contact.id, 7);
                     }

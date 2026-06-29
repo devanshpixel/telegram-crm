@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { sendLockedResponse, LOCKED_MESSAGES } from "@/src/lib/telegram/pollMessages";
+import { sendLockedResponse } from "@/src/lib/telegram/pollMessages";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -21,11 +21,11 @@ async function handle(req: Request) {
       .prepare(
         `SELECT id FROM contacts
          WHERE conv_state = 'OFFER_SENT'
-           AND locked_response_count < ?
+           AND locked_response_count < 22
            AND (last_locked_response_at IS NULL OR last_locked_response_at < ?)
          LIMIT 200`,
       )
-      .all(LOCKED_MESSAGES.length, cutoff)) as { id: number }[];
+      .all(cutoff)) as { id: number }[];
 
     const results: { contactId: number; sent: boolean; error?: string }[] = [];
 

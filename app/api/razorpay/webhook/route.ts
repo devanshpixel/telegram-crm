@@ -4,6 +4,7 @@ import { WEBHOOK_SECRET } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
 import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid, recordUpsell } from "@/lib/db/service";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
+import { pickRandom, PAYMENT_SUCCESS, FIRST_UPSELL } from "@/src/lib/telegram/messageVariants";
 
 export async function POST(request: Request) {
   try {
@@ -75,13 +76,8 @@ export async function POST(request: Request) {
             const upsellCount = contact?.upsell_count ?? 0;
             const totalSpent = contact?.total_spent ?? 0;
 
-            // Upsell ladder: offer next tier after purchase
-            // Every completed purchase triggers an upsell offer 24h later via the post-purchase lifecycle
-            // The confirmation message hints at more content
-            await sendTelegramMessage(
-              contactId,
-              `✅ Payment successful! Your premium access has been unlocked${mediaLink}. Thank you for your support! ❤️\n\nps... i've got something even more special for my favs. ask me about it 😉`
-            );
+            const successMsg = pickRandom(PAYMENT_SUCCESS);
+            await sendTelegramMessage(contactId, successMsg + mediaLink);
 
             // For first purchase, also send immediate upsell if total spent < 1000
             if (upsellCount === 0 && totalSpent < 1000) {
@@ -100,10 +96,8 @@ export async function POST(request: Request) {
                   options: { checkout: { name: "Nayra Premium" } },
                 } as Parameters<typeof razorpay.paymentLink.create>[0]);
                 const upsellUrl = (upsellLink as { short_url: string }).short_url;
-                await sendTelegramMessage(
-                  contactId,
-                  `🔥 special offer for our newest VIP: get the full bundle at just ₹${upsellPrice} — this is a one-time offer just for you!\n\n👉 ${upsellUrl}`
-                );
+                const upsellMsg = pickRandom(FIRST_UPSELL).replace('{price}', `₹${upsellPrice}`);
+                await sendTelegramMessage(contactId, `${upsellMsg}\n\n👉 ${upsellUrl}`);
                 await recordUpsell(contactId);
               }
             }
