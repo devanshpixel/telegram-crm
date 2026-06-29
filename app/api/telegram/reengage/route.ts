@@ -30,6 +30,7 @@ async function handle(req: Request) {
            AND conv.last_message_time < ?
            AND c.updated_at < ?
            AND c.revenue = 0
+           AND c.is_bot = 0
          ORDER BY conv.last_message_time ASC
          LIMIT 20`,
       )
@@ -41,8 +42,8 @@ async function handle(req: Request) {
       try {
         const lockKey = `reengage_sent:${contact.id}`;
         const alreadySent = await db
-          .prepare("SELECT id FROM settings WHERE key = ?")
-          .get(lockKey) as { id: number } | undefined;
+          .prepare("SELECT key FROM settings WHERE key = ?")
+          .get(lockKey) as { key: string } | undefined;
         if (alreadySent) continue;
 
         const messages = await getMessagesByContactId(contact.id);

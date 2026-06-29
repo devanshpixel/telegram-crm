@@ -6,6 +6,9 @@ import type { NextRequest } from "next/server";
 const PUBLIC_PATHS = ["/api/razorpay/webhook", "/api/checkout"];
 
 // Scheduler endpoints — authenticated with CRON_SECRET (not the CRM key).
+// /api/health is here (not public): it runs live Telegram getMe + OpenRouter
+// checks and leaks infra status, so it must require the cron secret. verify-crons
+// and external uptime monitors reach it with the x-cron-secret header.
 const CRON_PATHS = [
   "/api/telegram/poll",
   "/api/telegram/remind",
@@ -19,6 +22,7 @@ const CRON_PATHS = [
   "/api/automation/daily-summary",
   "/api/automation/retry-queue",
   "/api/automation/verify-crons",
+  "/api/health",
 ];
 
 const SESSION_COOKIE = "crm_session";

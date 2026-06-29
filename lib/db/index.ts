@@ -128,6 +128,9 @@ function migrateBetterSqlite3(database: any): void {
     database.exec("ALTER TABLE broadcasts ADD COLUMN trigger TEXT");
   }
   database.exec("CREATE INDEX IF NOT EXISTS idx_broadcasts_trigger_created_at ON broadcasts(trigger, created_at)");
+  if (!columnExists(database, "contacts", "is_bot")) {
+    database.exec("ALTER TABLE contacts ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0");
+  }
   if (!columnExists(database, "contacts", "offer_sent")) {
     database.exec("ALTER TABLE contacts ADD COLUMN offer_sent INTEGER NOT NULL DEFAULT 0");
   }
@@ -258,6 +261,7 @@ export async function getDb(): Promise<AsyncDb> {
         ["suggested_next_action",      "TEXT"],
         ["favorite_content_type",      "TEXT DEFAULT ''"],
         ["contact_health",             "INTEGER DEFAULT 50"],
+        ["is_bot",                     "INTEGER DEFAULT 0"],
       ];
       for (const [col, def] of contactColMigrations) {
         try {
@@ -294,7 +298,12 @@ export async function getDb(): Promise<AsyncDb> {
   try {
     raw.exec(SCHEMA_SQL);
   } catch (e) {
-    console.warn("[DB] Schema init (columns may already exist):", e instanceof Error ? e.message : String(e));
+    const msg = e instanceof Error ? e.message : String(e);
+    // SQLite doesn't support IF NOT EXISTS for ADD COLUMN — duplicate column errors
+    // are expected on established databases and are safe to ignore.
+    if (!msg.includes("duplicate column name")) {
+      console.warn("[DB] Schema init:", msg);
+    }
   }
   // Backfill ALTER TABLE default values for existing rows
   raw.exec(`

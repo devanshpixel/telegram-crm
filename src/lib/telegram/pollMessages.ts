@@ -20,6 +20,7 @@ import {
   markWelcomeSent,
   recalculateBuyerIntelligence,
   recalculateCrmIntelligence,
+  enqueueFailedAction,
 } from "@/lib/db/service";
 
 import type { ConvState, ReplyMode } from "@/types";
@@ -28,7 +29,7 @@ import { suggestReply } from "@/lib/ai/suggest-reply";
 import { getAppUrl } from "@/lib/app-url";
 import { getTelegramClient } from "./client";
 import { sendTelegramMessage } from "./sendMessage";
-import { getLockedVariant } from "./messageVariants";
+import { getLockedVariant, pickRandom, WELCOME_PAID } from "./messageVariants";
 import {
   TIMING,
   INTENT_THRESHOLD,
@@ -160,6 +161,7 @@ async function createContactFromDialog(entity: Api.User): Promise<ContactWithCon
     phone: entity.phone ?? "",
     telegramId,
     telegramAccessHash: accessHash ?? "",
+    isBot: entity.bot === true,
   });
   
   const db = await getDb();
@@ -608,12 +610,16 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
               if (!skipReply && contact.conv_state === "PAID") {
                 const phase = await getPostPurchasePhase(contact.id);
                 if (phase === "welcome") {
-                  const welcomeMsg = "you're officially in my vip section now... hope you're ready for what's inside ☕️";
+                  const welcomeMsg = pickRandom(WELCOME_PAID);
                   await sendTelegramMessage(contact.id, welcomeMsg);
                   try { await markWelcomeSent(contact.id); } catch (e) { console.error(`[POLL] markWelcomeSent failed for ${contact.id}:`, e); }
                   summary.repliesSent++;
-                } else if (phase === "reoffer") {
+                } else if (phase === "reoffer" && !(await isInOfferCooldown(contact.id))) {
+                  // Throttle reoffers: a past buyer is permanently in "reoffer" phase
+                  // (>7d since paid_at) and is reset to PAID every poll (see below), so
+                  // without a cooldown they'd get a fresh payment link on every message.
                   await sendPremiumOffer(contact.id);
+                  await setOfferCooldown(contact.id, OFFER.COOLDOWN_DAYS);
                   summary.offersSent++;
                   contact.conv_state = "OFFER_SENT";
                 } else {
@@ -627,13 +633,11 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                 } else {
                   const ldb = await getDb();
                   const row = await ldb
-                    .prepare("SELECT locked_response_count, spend_segment FROM contacts WHERE id = ?")
-                    .get(contact.id) as { locked_response_count: number; spend_segment: string } | undefined;
-                  if (row) {
-                    if ((row.locked_response_count ?? 0) >= 22) {
-                      await setConvState(contact.id, "FREE_CHAT");
-                      await setOfferCooldown(contact.id, 7);
-                    }
+                    .prepare("SELECT locked_response_count FROM contacts WHERE id = ?")
+                    .get(contact.id) as { locked_response_count: number } | undefined;
+                  if (row && (row.locked_response_count ?? 0) >= OFFER.MAX_LOCKED_RESPONSES) {
+                    await setConvState(contact.id, "FREE_CHAT");
+                    await setOfferCooldown(contact.id, OFFER.COOLDOWN_DAYS);
                   }
                 }
               } else if (!skipReply) {
@@ -669,9 +673,16 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
               }
             } catch (e) {
               replyFailed = true;
-              summary.errors.push(
-                `Response error for contact ${contact.id}: ${e instanceof Error ? e.message : String(e)}`,
-              );
+              const errMsg = e instanceof Error ? e.message : String(e);
+              summary.errors.push(`Response error for contact ${contact.id}: ${errMsg}`);
+              // Failed-message recovery: enqueue a re-engagement so the retry-queue cron
+              // regenerates and resends a reply later. Without this producer the
+              // failed_actions table stayed empty and retry-queue was a no-op.
+              try {
+                await enqueueFailedAction("reengage", contact.id, errMsg);
+              } catch (qe) {
+                console.error(`[POLL] Failed to enqueue retry for contact ${contact.id}:`, qe);
+              }
             }
           }
 

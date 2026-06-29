@@ -22,6 +22,7 @@ async function handle(req: Request) {
       .prepare(
         `SELECT id FROM contacts
          WHERE conv_state = 'OFFER_SENT'
+           AND is_bot = 0
            AND locked_response_count < ?
            AND (last_locked_response_at IS NULL OR last_locked_response_at < ?)
          LIMIT 200`,

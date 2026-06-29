@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { razorpay } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
+import { pickRandom, PAYMENT_RECOVERY } from "@/src/lib/telegram/messageVariants";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -63,8 +64,8 @@ async function handle(req: Request) {
         // Only remind once per link — check tracking table
         // Use settings table to track reminded links (simple KV store)
         const alreadySent = await db
-          .prepare("SELECT id FROM settings WHERE key = ?")
-          .get(`recover_sent:${link.id}`) as { id: number } | undefined;
+          .prepare("SELECT key FROM settings WHERE key = ?")
+          .get(`recover_sent:${link.id}`) as { key: string } | undefined;
         if (alreadySent) continue;
 
         const contact = await db
@@ -76,7 +77,7 @@ async function handle(req: Request) {
           .prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, '1', ?)")
           .run(`recover_sent:${link.id}`, new Date().toISOString());
 
-        const reminderText = `hey ${contact.name || "there"} 😊 noticed you started your unlock — still interested? the link's waiting if you want it. let me know if you hit any issues 💕`;
+        const reminderText = pickRandom(PAYMENT_RECOVERY);
         await sendTelegramMessage(contactId, reminderText);
 
         reminded.push({ linkId: link.id, contactId, sent: true });

@@ -39,8 +39,8 @@ async function handle(req: Request) {
       try {
         const lockKey = `unlock_fix:${contact.id}`;
         const alreadyFixed = await db
-          .prepare("SELECT id FROM settings WHERE key = ?")
-          .get(lockKey) as { id: number } | undefined;
+          .prepare("SELECT key FROM settings WHERE key = ?")
+          .get(lockKey) as { key: string } | undefined;
         if (alreadyFixed) continue;
 
         await recordPaid(contact.id);

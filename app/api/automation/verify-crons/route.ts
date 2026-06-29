@@ -37,7 +37,7 @@ async function handle(req: Request) {
     CRON_ENDPOINTS.map(async (ep) => {
       const url = `${baseUrl}${ep.path}`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timeout = setTimeout(() => controller.abort(), 15000);
       try {
         const res = await fetch(url, {
           headers: {

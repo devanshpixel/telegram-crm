@@ -1,7 +1,9 @@
 import type { ReplyMode } from "@/types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "openai/gpt-4o-mini";
+// Free tier model — no credits required. Switch to openai/gpt-4o-mini when
+// OpenRouter credits are purchased (better instruction-following for Hinglish persona).
+const MODEL = "google/gemma-4-31b-it:free";
 
 // ─────────────────────────────────────────────
 // CORE PERSONA
@@ -305,7 +307,12 @@ export async function suggestReply(
 
       if (!res.ok) {
         const errorText = await res.text();
-        throw new Error(`API error ${res.status}: ${errorText}`);
+        const err = new Error(`API error ${res.status}: ${errorText}`);
+        // 402 = no credits, 429 on free tier = rate limit (retry won't help immediately)
+        if (res.status === 402 || res.status === 429) {
+          throw Object.assign(err, { noRetry: true });
+        }
+        throw err;
       }
 
       const body = await res.json();
@@ -324,7 +331,9 @@ export async function suggestReply(
       return cleaned;
     } catch (err) {
       console.error("[AI_FETCH_ERROR]", err);
-      if (retryCount < 1) return fetchWithRetry(retryCount + 1);
+      if (retryCount < 1 && !(err instanceof Error && (err as NodeJS.ErrnoException & { noRetry?: boolean }).noRetry)) {
+        return fetchWithRetry(retryCount + 1);
+      }
       return getFallbackReply();
     } finally {
       clearTimeout(timeoutId);

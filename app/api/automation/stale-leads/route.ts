@@ -28,6 +28,7 @@ async function handle(req: Request) {
          INNER JOIN conversations conv ON conv.contact_id = c.id
          WHERE c.conv_state = 'FREE_CHAT'
            AND c.total_spent = 0
+           AND c.is_bot = 0
            AND conv.last_message_time < ?
          ORDER BY conv.last_message_time ASC
          LIMIT 20`
@@ -40,8 +41,8 @@ async function handle(req: Request) {
       try {
         const lockKey = `stale_sent:${contact.id}`;
         const alreadySent = await db
-          .prepare("SELECT id FROM settings WHERE key = ?")
-          .get(lockKey) as { id: number } | undefined;
+          .prepare("SELECT key FROM settings WHERE key = ?")
+          .get(lockKey) as { key: string } | undefined;
         if (alreadySent) continue;
 
         const messages = await getMessagesByContactId(contact.id);

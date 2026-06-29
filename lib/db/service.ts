@@ -5,8 +5,6 @@ import type {
   CampaignAnalyticsSummary,
   BroadcastFilters,
   Chat,
-
-  
   ContactProfile,
   DashboardStats,
   FanScoreStats,
@@ -220,6 +218,7 @@ export interface CreateContactInput {
   fanStatus?: string;
   fanScore?: number;
   lastPurchaseDate?: string | null;
+  isBot?: boolean;
 }
 
 export async function createContact(input: CreateContactInput): Promise<ContactProfile> {
@@ -240,8 +239,8 @@ export async function createContact(input: CreateContactInput): Promise<ContactP
           joined_at, revenue, revenue_trend, lead_score, lead_status, is_online,
           ppv_count, telegram_id, telegram_access_hash, total_spent, vip_level,
           fan_status, fan_score, last_purchase_date, emotional_temp, relationship_score,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, 50, 0, ?, ?)`,
+          is_bot, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'flat', 50, 'warm', ?, 0, ?, ?, ?, ?, ?, ?, ?, 50, 0, ?, ?, ?)`,
       )
       .run(
         input.name,
@@ -262,6 +261,7 @@ export async function createContact(input: CreateContactInput): Promise<ContactP
         input.fanStatus ?? "active",
         input.fanScore ?? 0,
         input.lastPurchaseDate ?? null,
+        input.isBot ? 1 : 0,
         ts,
         ts,
       );

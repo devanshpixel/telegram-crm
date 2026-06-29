@@ -27,9 +27,33 @@ export async function GET() {
     healthy = false;
   }
 
-  // 3. OpenRouter
+  // 3. OpenRouter — validate key has credits (not just configured)
   if (process.env.OPENROUTER_API_KEY) {
-    checks.openrouter = "configured";
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/auth/key", {
+        headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as { data?: { usage?: number; limit?: number | null } };
+        const usage = data?.data?.usage ?? 0;
+        const limit = data?.data?.limit;
+        if (limit !== null && limit !== undefined && usage >= limit) {
+          checks.openrouter = `credits exhausted (${usage}/${limit})`;
+          healthy = false;
+        } else {
+          checks.openrouter = limit !== null && limit !== undefined
+            ? `configured (${usage}/${limit} credits used)`
+            : "configured (unlimited plan)";
+        }
+      } else if (res.status === 402) {
+        checks.openrouter = "no credits — purchase at openrouter.ai/settings/credits";
+        healthy = false;
+      } else {
+        checks.openrouter = `key check failed (${res.status})`;
+      }
+    } catch {
+      checks.openrouter = "configured (key check timed out)";
+    }
   } else {
     checks.openrouter = "not configured (engine falls back to canned replies)";
   }

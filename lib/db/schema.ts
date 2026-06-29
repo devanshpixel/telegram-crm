@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   fan_status TEXT NOT NULL DEFAULT 'active',
   fan_score INTEGER NOT NULL DEFAULT 0,
   last_purchase_date TEXT,
+  is_bot INTEGER NOT NULL DEFAULT 0,
   offer_sent INTEGER NOT NULL DEFAULT 0,
   conv_state TEXT NOT NULL DEFAULT 'FREE_CHAT',
   offer_sent_at TEXT,

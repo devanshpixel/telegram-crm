@@ -25,6 +25,7 @@ async function handle(req: Request) {
         `SELECT c.id, c.name
          FROM contacts c
          WHERE c.spend_segment = 'vip'
+           AND c.is_bot = 0
            AND (c.last_purchase_date IS NULL OR c.last_purchase_date < ?)
            AND c.conv_state = 'PAID'
          ORDER BY c.last_purchase_date ASC NULLS LAST
@@ -38,8 +39,8 @@ async function handle(req: Request) {
       try {
         const lockKey = `vip_followup:${contact.id}`;
         const alreadySent = await db
-          .prepare("SELECT id FROM settings WHERE key = ?")
-          .get(lockKey) as { id: number } | undefined;
+          .prepare("SELECT key FROM settings WHERE key = ?")
+          .get(lockKey) as { key: string } | undefined;
         if (alreadySent) continue;
 
         const msg = pickRandom(VIP_FOLLOWUP);

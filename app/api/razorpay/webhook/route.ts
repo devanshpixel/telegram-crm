@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { WEBHOOK_SECRET } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
-import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid, recordUpsell } from "@/lib/db/service";
-import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
-import { pickRandom, PAYMENT_SUCCESS, FIRST_UPSELL } from "@/src/lib/telegram/messageVariants";
+import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid } from "@/lib/db/service";
+import { handlePostPayment } from "@/lib/payment/post-payment";
 
 export async function POST(request: Request) {
   try {
@@ -44,6 +43,18 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "Contact not found" }, { status: 404 });
         }
 
+        // Idempotency: Razorpay redelivers webhooks on any timeout/non-2xx. If this
+        // payment was already recorded, acknowledge without re-running side-effects —
+        // otherwise handlePostPayment re-sends the unlock confirmation. Mirrors the
+        // reconcile cron's guard so both payment paths dedup identically.
+        const escapedPaymentId = String(paymentId).replace(/[%_]/g, "\\$&");
+        const already = await db
+          .prepare("SELECT id FROM purchases WHERE note LIKE ? ESCAPE '\\'")
+          .get(`%razorpay_payment:${escapedPaymentId}%`);
+        if (already) {
+          return NextResponse.json({ received: true, duplicate: true });
+        }
+
         const note = mediaId
           ? `media_unlock:${mediaId}:razorpay_payment:${paymentId}`
           : `razorpay_payment:${paymentId}`;
@@ -67,40 +78,7 @@ export async function POST(request: Request) {
 
           // Send Telegram confirmation (best-effort, never fails the webhook)
           try {
-            const appUrl = process.env.APP_URL || `http://localhost:3000`;
-            const mediaLink = mediaId
-              ? `\n\nView it here: ${appUrl}/api/media/${mediaId}/file?contactId=${contactId}`
-              : "";
-
-            const contact = await db.prepare("SELECT upsell_count, total_spent FROM contacts WHERE id = ?").get(contactId) as { upsell_count: number; total_spent: number } | undefined;
-            const upsellCount = contact?.upsell_count ?? 0;
-            const totalSpent = contact?.total_spent ?? 0;
-
-            const successMsg = pickRandom(PAYMENT_SUCCESS);
-            await sendTelegramMessage(contactId, successMsg + mediaLink);
-
-            // For first purchase, also send immediate upsell if total spent < 1000
-            if (upsellCount === 0 && totalSpent < 1000) {
-              const upsellPrice = Math.round(499 * 0.6);
-              const appUrl2 = process.env.APP_URL || `http://localhost:3000`;
-              const razorpay = (await import("@/lib/razorpay")).razorpay;
-              if (razorpay) {
-                const upsellLink = await razorpay.paymentLink.create({
-                  amount: Math.round(upsellPrice * 100),
-                  currency: "INR",
-                  description: "VIP Bundle Upgrade",
-                  customer: { name: "Fan" },
-                  notes: { contactId: String(contactId) },
-                  callback_url: `${appUrl2}/api/checkout/success`,
-                  callback_method: "get",
-                  options: { checkout: { name: "Nayra Premium" } },
-                } as Parameters<typeof razorpay.paymentLink.create>[0]);
-                const upsellUrl = (upsellLink as { short_url: string }).short_url;
-                const upsellMsg = pickRandom(FIRST_UPSELL).replace('{price}', `₹${upsellPrice}`);
-                await sendTelegramMessage(contactId, `${upsellMsg}\n\n👉 ${upsellUrl}`);
-                await recordUpsell(contactId);
-              }
-            }
+            await handlePostPayment(contactId, mediaId);
           } catch (e) {
             console.error(`[Razorpay Webhook] Failed to send Telegram confirmation to ${contactId}:`, e);
           }

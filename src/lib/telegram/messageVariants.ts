@@ -285,3 +285,41 @@ export function getLockedVariant(segment: string, index: number): string {
   const variants = LOCKED_VARIANTS[segment as keyof typeof LOCKED_VARIANTS] || LOCKED_VARIANTS.default;
   return variants[index % variants.length];
 }
+
+// Payment recovery reminder variants (for unpaid links > 30 min old)
+export const PAYMENT_RECOVERY = [
+  "hey noticed you started the unlock... still want in? link's right here when you're ready 😊",
+  "your unlock link is still waiting babe... no pressure but it won't last forever 💕",
+  "left this open for you... whenever you're ready, your access link is here",
+  "hey! just checking — did the payment go through okay? link's still active if you need it",
+  "your premium link is still live... come back whenever you're ready babe 🔥",
+  "noticed you checked the link... still interested? it's waiting for you whenever 💫",
+  "hey! link still open if you want it. no rush, just didn't want you to miss out 😏",
+  "your unlock link hasn't expired yet... still want access baby? 💕",
+  "just making sure you saw this... your premium link is still here whenever you're ready",
+  "hey babe... started something earlier? your link's still active if you want it ✨",
+  "link still waiting for you... take your time, just letting you know it's there 😘",
+  "your access link is still live babe... come back when you're ready 🔥",
+  "hey! just a heads up — your unlock link is still active whenever you decide",
+  "didn't forget about you... your premium link is still here if you want it baby 💫",
+  "just checking in — your access is still unlockable whenever you're ready 😊",
+];
+
+// Welcome message variants for new paying members
+export const WELCOME_PAID = [
+  "you're officially in my vip section now... hope you're ready for what's inside ☕️",
+  "welcome to the inside babe 🔥 you're gonna love what's waiting",
+  "vip access unlocked! you're one of the few now... enjoy everything inside 💫",
+  "officially in the exclusive zone baby... hope it was worth the wait 😏",
+  "welcome to vip babe ✨ you've earned this. explore everything that's unlocked for you",
+  "you're in my private circle now... enjoy what most people never get to see 💕",
+  "vip member confirmed! everything's open for you now baby 🔓",
+  "welcome inside babe... you're gonna have fun exploring what's unlocked 😘",
+  "exclusive access granted! you're officially one of mine now 🔥",
+  "vip status activated baby ✨ everything's waiting for you inside",
+  "welcome to the inner circle babe 💫 enjoy your exclusive access",
+  "you're officially in! explore everything that's been unlocked for you now 😏",
+  "vip confirmed baby... hope you're ready for everything that's inside ☕️",
+  "welcome to exclusive access babe 🔓 you're gonna love it",
+  "officially unlocked! you're now in my vip zone... enjoy everything baby 💕",
+];
