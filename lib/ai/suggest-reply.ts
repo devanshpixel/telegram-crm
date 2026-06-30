@@ -194,16 +194,36 @@ export function hasObjection(
 // ─────────────────────────────────────────────
 // FALLBACKS
 // ─────────────────────────────────────────────
+// Last-resort fillers used only when the model is unavailable (free-tier 429s
+// happen often, so these fire more than you'd think). They must stay in persona:
+// short, lowercase Hinglish, "busy/distracted girl" energy, and must NOT reuse any
+// of the persona's BANNED endings ('sun rahi hoon', 'bolo na', 'tell me more').
 const FALLBACKS = [
-  "bolo naa...",
-  "sun rahi hoon",
-  "interesting yaar",
-  "theek hai chill",
-  "kya ho raha tera",
+  "ek sec ruk",
+  "abhi thodi busy hoon",
+  "haan bol",
+  "wait 2 min",
+  "phone pe hoon abhi",
+  "chal theek hai",
+  "thoda distracted hoon yaar",
+  "baad mein baat karte",
+  "kaam mein phasi hoon",
+  "main yahin hoon",
+  "accha continue kar",
+  "bata fir kya scene",
+  "ek min ruk",
+  "net slow hai mera",
+  "2 sec aati hoon",
+  "thoda ruk ja",
 ];
 
+// Avoid repeating the same filler twice in a row across poll cycles.
+let lastFallbackIndex = -1;
 function getFallbackReply(): string {
-  return FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)];
+  let i = Math.floor(Math.random() * FALLBACKS.length);
+  if (i === lastFallbackIndex) i = (i + 1) % FALLBACKS.length;
+  lastFallbackIndex = i;
+  return FALLBACKS[i];
 }
 
 // ─────────────────────────────────────────────
@@ -214,7 +234,16 @@ export async function suggestReply(
   mode: ReplyMode = "auto",
   emotionalTemp: number = 50,
   intentScore: number = 0,
-  context?: { nickname?: string; previousTopic?: string; isPaid?: boolean; convState?: string; lastOfferResult?: string },
+  context?: {
+    nickname?: string;
+    previousTopic?: string;
+    isPaid?: boolean;
+    convState?: string;
+    lastOfferResult?: string;
+    mood?: string;
+    facts?: string[];
+    favoriteContent?: string;
+  },
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -235,10 +264,26 @@ export async function suggestReply(
     const effectiveCount = emotionalTemp >= 70 ? incomingCount + 2 : emotionalTemp <= 30 ? incomingCount - 1 : incomingCount;
     const adjustedCount = Math.max(0, effectiveCount);
 
-    if (linkRequested || intentScore >= 70 || (resolvedMode === "sales" && effectiveCount > 5)) {
-      systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_7_CONVERSION);
-    } else if (objected) {
+    const convState = context?.convState;
+    const isOfferSent = convState === "OFFER_SENT";
+    const isPaid = context?.isPaid;
+    const declinedOffer = context?.lastOfferResult === "declined";
+
+    if (linkRequested || intentScore >= 70 || (resolvedMode === "sales" && effectiveCount > 5 && !isOfferSent)) {
+      // Already in OFFER_SENT → don't push another [LINK] from auto-mode; use rapport
+      systemPrompt = SYSTEM_PERSONA + "\n\n" + (isOfferSent ? pick(PHASE_VARIANTS.PHASE_2_RAPPORT) : pick(PHASE_VARIANTS.PHASE_7_CONVERSION));
+    } else if (objected || declinedOffer) {
       systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_6_OBJECTION);
+    } else if (isPaid) {
+      // Repeat buyer — warm and familiar, no selling pressure
+      systemPrompt = SYSTEM_PERSONA + "\n\nPhase: PAID. He already paid. Be warm, familiar, slightly more open. Reference things he likes. No sales pressure. He earned more genuine warmth. Keep it short and real.";
+    } else if (isOfferSent) {
+      // Offer is live — keep building rapport/interest, avoid re-pitching
+      if (adjustedCount > 6) {
+        systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_4_INTEREST);
+      } else {
+        systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_2_RAPPORT);
+      }
     } else if (resolvedMode === "sales") {
       if (adjustedCount <= 2 && intentScore < 50) {
         systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_4_INTEREST);
@@ -260,23 +305,36 @@ export async function suggestReply(
     systemPrompt = MODE_PROMPTS[resolvedMode];
   }
 
-  // Build CRM context block
+  // Build CRM/memory context block. This is long-term continuity: things he said
+  // earlier, what he likes, his mood, whether he's paid. It must be woven in
+  // naturally — never recited back.
   let crmContext = "";
   if (context) {
     const parts: string[] = [];
-    if (context.nickname) parts.push(`his nickname: ${context.nickname}`);
-    if (context.previousTopic) parts.push(`last topic: ${context.previousTopic}`);
-    if (context.isPaid) parts.push("he is a paid customer — treat him slightly warmer");
-    if (context.convState) parts.push(`current stage: ${context.convState}`);
+    if (context.nickname) parts.push(`he calls you "${context.nickname}"`);
+    if (context.facts && context.facts.length) parts.push(`things he's mentioned: ${context.facts.join("; ")}`);
+    if (context.favoriteContent && context.favoriteContent !== "general") parts.push(`content he likes most: ${context.favoriteContent}`);
+    if (context.previousTopic) parts.push(`last thing you two were talking about: ${context.previousTopic}`);
+    if (context.mood) parts.push(`his recent mood with you: ${context.mood}`);
+    if (context.isPaid) parts.push("he has paid before — he earned a warmer, more familiar tone");
     if (context.lastOfferResult) parts.push(`last offer result: ${context.lastOfferResult}`);
-    if (parts.length > 0) crmContext = "What you know:\n" + parts.join("\n") + "\n\n";
+    if (parts.length > 0) {
+      crmContext =
+        "What you remember about him (weave in ONLY what fits naturally — never recite this list, never say 'I remember' or 'you told me'):\n" +
+        parts.join("\n") + "\n\n";
+    }
   }
 
-  // Anti-repeat injection
-  const lastOutgoing = messages.filter(m => m.direction === "outgoing").slice(-1)[0];
-  const lastOutgoingText = lastOutgoing?.text ?? "";
+  // Anti-repeat injection — guard against repeated openings/structure across the
+  // last few replies, not just the immediately previous one.
+  const recentOutgoing = messages.filter(m => m.direction === "outgoing").slice(-3);
+  const lastOutgoingText = recentOutgoing.slice(-1)[0]?.text ?? "";
+  const recentOpeners = Array.from(
+    new Set(recentOutgoing.map(m => m.text.trim().split(/\s+/)[0]?.toLowerCase()).filter(Boolean)),
+  );
   const antiRepeat = lastOutgoingText
     ? `\nYour last message was: "${lastOutgoingText.slice(0, 80)}". Use a COMPLETELY different opening word, tone, and structure. Never repeat emoji from last message.`
+      + (recentOpeners.length ? ` Do NOT start with any of these words again: ${recentOpeners.join(", ")}.` : "")
     : "";
 
   const userPrompt = transcript
