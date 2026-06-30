@@ -165,6 +165,35 @@ async function main() {
   const countAfter = (db.prepare("SELECT COUNT(*) AS count FROM purchases").get() as { count: number }).count;
   assertEqual(countAfter, 1, "only one purchase row after duplicate attempt");
 
+  console.log("\n=== Purchase idempotency: INSERT OR IGNORE on payment_id ===\n");
+
+  // Mirrors createPurchase()'s atomic dedup. The partial UNIQUE index on payment_id
+  // is what makes result.changes (→ the `created` flag) correct, and the webhook +
+  // reconcile paths gate the unlock message + upsell on `created`. These exact
+  // semantics are what prevent (a) double-unlock on a duplicate/concurrent webhook
+  // and (b) a repeat buyer's 2nd purchase being silently dropped.
+  db.prepare("DELETE FROM purchases").run();
+  const pdate = ts.split("T")[0];
+  const ins = db.prepare(
+    "INSERT OR IGNORE INTO purchases (contact_id, amount, purchase_date, note, kind, payment_id, created_at) VALUES (?, ?, ?, '', 'ppv', ?, ?)"
+  );
+
+  // First delivery of payment pay_A → fresh insert (created=true)
+  assertEqual(ins.run(contactId, 499, pdate, "pay_A", ts).changes, 1, "first insert of pay_A: changes=1 (created → side-effects run)");
+  // Duplicate webhook for pay_A → ignored (created=false), no double row, no double unlock
+  assertEqual(ins.run(contactId, 499, pdate, "pay_A", ts).changes, 0, "duplicate pay_A: changes=0 (dedup → side-effects skipped)");
+  // Repeat buyer: different payment pay_B, same contact → fresh insert (created=true)
+  assertEqual(ins.run(contactId, 299, pdate, "pay_B", ts).changes, 1, "repeat buyer pay_B: changes=1 (delivery NOT suppressed)");
+
+  // Legacy NULL payment_id rows must never conflict with each other
+  const insNull = db.prepare(
+    "INSERT OR IGNORE INTO purchases (contact_id, amount, purchase_date, note, kind, payment_id, created_at) VALUES (?, ?, ?, '', 'ppv', NULL, ?)"
+  );
+  insNull.run(contactId, 100, pdate, ts);
+  insNull.run(contactId, 100, pdate, ts);
+  const idempTotal = (db.prepare("SELECT COUNT(*) AS c FROM purchases").get() as { c: number }).c;
+  assertEqual(idempTotal, 4, "2 distinct paid + 2 legacy NULL rows = 4 (NULLs don't dedup)");
+
   console.log("\n=== Share of voice tracking ===\n");
 
   const zeroPurchasesTier = 0 === 0 ? Math.round(basePrice * 0.7) : basePrice;

@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS purchases (
   purchase_date TEXT NOT NULL,
   note TEXT NOT NULL DEFAULT '',
   kind TEXT NOT NULL DEFAULT 'ppv',
+  payment_id TEXT,
   created_at TEXT NOT NULL,
   FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 );
@@ -142,6 +143,9 @@ CREATE INDEX IF NOT EXISTS idx_tags_contact ON tags(contact_id);
 CREATE INDEX IF NOT EXISTS idx_notes_contact ON notes(contact_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_contact ON purchases(contact_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_contact_kind ON purchases(contact_id, kind);
+-- Payment idempotency guard: createPurchase relies on this partial UNIQUE index so
+-- INSERT OR IGNORE yields changes=0 on a duplicate paymentId (NULLs never conflict).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_purchases_payment_id ON purchases(payment_id) WHERE payment_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_media_contact ON media(contact_id);
 CREATE INDEX IF NOT EXISTS idx_tag_events_contact ON tag_events(contact_id);
 CREATE INDEX IF NOT EXISTS idx_broadcasts_created_at ON broadcasts(created_at);

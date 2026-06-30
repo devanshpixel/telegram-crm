@@ -520,7 +520,7 @@ export interface CreatePurchaseInput {
   paymentId?: string;
 }
 
-export async function createPurchase(input: CreatePurchaseInput): Promise<Purchase> {
+export async function createPurchase(input: CreatePurchaseInput): Promise<Purchase & { created: boolean }> {
   const db = await getDb();
   const ts = nowIso();
   const kind = input.kind ?? "ppv";
@@ -542,7 +542,7 @@ export async function createPurchase(input: CreatePurchaseInput): Promise<Purcha
       const existing = input.paymentId
         ? await db.prepare("SELECT * FROM purchases WHERE payment_id = ?").get(input.paymentId)
         : await db.prepare("SELECT * FROM purchases WHERE note = ? AND contact_id = ?").get(input.note ?? "", input.contactId);
-      return existing as import("./types").PurchaseRow;
+      return { row: existing as import("./types").PurchaseRow, created: false };
     }
 
     const updateParts = [
@@ -562,11 +562,11 @@ export async function createPurchase(input: CreatePurchaseInput): Promise<Purcha
       `UPDATE contacts SET ${updateParts.join(", ")} WHERE id = ?`,
     ).run(...updateArgs, input.contactId);
 
-    return (await db.prepare("SELECT * FROM purchases WHERE id = ?").get(result.lastInsertRowid)) as import("./types").PurchaseRow;
+    return { row: (await db.prepare("SELECT * FROM purchases WHERE id = ?").get(result.lastInsertRowid)) as import("./types").PurchaseRow, created: true };
   });
 
-  const row = await insertAndUpdateStats();
-  return mapPurchaseRow(row);
+  const { row, created } = await insertAndUpdateStats();
+  return { ...mapPurchaseRow(row), created };
 }
 
 export async function getPurchasesByContact(contactId: number): Promise<Purchase[]> {

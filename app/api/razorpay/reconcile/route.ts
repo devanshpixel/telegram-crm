@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { razorpay } from "@/lib/razorpay";
-import { getDb } from "@/lib/db";
 import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid } from "@/lib/db/service";
 import { handlePostPayment } from "@/lib/payment/post-payment";
 
@@ -31,7 +30,6 @@ async function handle(req: Request) {
   }
 
   try {
-    const db = await getDb();
     const lookbackHours = 72;
     const from = Math.floor((Date.now() - lookbackHours * 3600_000) / 1000);
     const to = Math.floor(Date.now() / 1000);
@@ -83,19 +81,19 @@ async function handle(req: Request) {
           paymentId,
         });
 
-        // Always ensure contact is marked PAID — handles partial webhook failures
-        // where the purchase was recorded but the contact state wasn't updated.
-        const contactRow = await db
-          .prepare("SELECT conv_state FROM contacts WHERE id = ?")
-          .get(contactId) as { conv_state: string } | undefined;
-        const alreadyPaid = contactRow?.conv_state === "PAID";
-
+        // Always repair contact state — reconcile exists to fix partial webhook
+        // failures where the purchase row was written but state lagged. These are
+        // idempotent, so running them on an already-processed payment is harmless.
         await recalculateLeadScore(contactId);
         await recalculateSpendSegment(contactId);
         await recordPaid(contactId);
 
-        if (!alreadyPaid) {
-          // Only fire post-payment messages if not already done (avoid double-sending)
+        // Send the unlock message only for a payment THIS cron newly recorded.
+        // purchase.created is true iff this call inserted the row — i.e. the webhook
+        // never processed it. Gating on created (not conv_state==='PAID') also fixes
+        // repeat buyers, whose 2nd purchase was previously suppressed because their
+        // state was already PAID from the 1st.
+        if (purchase.created) {
           try {
             const mid = typeof mediaId === "string" ? mediaId : null;
             await handlePostPayment(contactId, mid);
@@ -104,8 +102,7 @@ async function handle(req: Request) {
           }
         }
 
-        const isNew = purchase.note === note;
-        reconciled.push({ paymentLinkId: link.id, contactId, created: isNew });
+        reconciled.push({ paymentLinkId: link.id, contactId, created: purchase.created });
         console.log(`[Reconcile] Recovered payment ${paymentId} for contact ${contactId}`);
       } catch (e) {
         console.error(`[Reconcile] Error processing link ${link.id}:`, e);

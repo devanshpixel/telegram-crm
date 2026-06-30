@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 
         // Atomic check-and-insert inside the transaction (see createPurchase paymentId param)
         try {
-          await createPurchase({
+          const purchase = await createPurchase({
             contactId,
             amount: amountPaid / 100,
             purchaseDate: new Date().toISOString().split("T")[0],
@@ -72,16 +72,22 @@ export async function POST(request: Request) {
             paymentId,
           });
 
-          // Lead score + segment update
-          await recalculateLeadScore(contactId);
-          await recalculateSpendSegment(contactId);
-          await recordPaid(contactId);
+          // Only run side-effects for a genuinely new purchase. createPurchase dedups
+          // atomically on payment_id, so a concurrent or duplicate delivery that slips
+          // past the pre-check above returns created=false here — preventing a double
+          // unlock message and a double upsell link under a true race.
+          if (purchase.created) {
+            // Lead score + segment update
+            await recalculateLeadScore(contactId);
+            await recalculateSpendSegment(contactId);
+            await recordPaid(contactId);
 
-          // Send Telegram confirmation (best-effort, never fails the webhook)
-          try {
-            await handlePostPayment(contactId, mediaId);
-          } catch (e) {
-            console.error(`[Razorpay Webhook] Failed to send Telegram confirmation to ${contactId}:`, e);
+            // Send Telegram confirmation (best-effort, never fails the webhook)
+            try {
+              await handlePostPayment(contactId, mediaId);
+            } catch (e) {
+              console.error(`[Razorpay Webhook] Failed to send Telegram confirmation to ${contactId}:`, e);
+            }
           }
         } catch (error) {
           console.error("[Razorpay Webhook] Payment record failed:", error);
