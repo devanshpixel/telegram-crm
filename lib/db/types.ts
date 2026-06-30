@@ -79,6 +79,7 @@ export interface PurchaseRow {
   purchase_date: string;
   note: string;
   kind: string;
+  payment_id: string | null;
   created_at: string;
 }
 

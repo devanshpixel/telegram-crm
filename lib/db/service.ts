@@ -528,24 +528,22 @@ export async function createPurchase(input: CreatePurchaseInput): Promise<Purcha
   if (!contact) throw new Error("Contact not found");
 
   const insertAndUpdateStats = db.transaction(async () => {
-    if (input.paymentId) {
-      const existing = await db
-        .prepare("SELECT id FROM purchases WHERE note LIKE ?")
-        .get(`%razorpay_payment:${input.paymentId}%`);
-      if (existing) {
-        const row = await db
-          .prepare("SELECT * FROM purchases WHERE id = ?")
-          .get((existing as { id: number }).id) as import("./types").PurchaseRow;
-        return row;
-      }
-    }
-
+    // Attempt atomic idempotent insert. If payment_id already exists the UNIQUE
+    // index fires and INSERT OR IGNORE produces zero changes — return the existing row.
     const result = await db
       .prepare(
-        `INSERT INTO purchases (contact_id, amount, purchase_date, note, kind, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT OR IGNORE INTO purchases (contact_id, amount, purchase_date, note, kind, payment_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(input.contactId, input.amount, input.purchaseDate, input.note ?? "", kind, ts);
+      .run(input.contactId, input.amount, input.purchaseDate, input.note ?? "", kind, input.paymentId ?? null, ts);
+
+    if (result.changes === 0) {
+      // Duplicate — return existing row without re-running side-effects
+      const existing = input.paymentId
+        ? await db.prepare("SELECT * FROM purchases WHERE payment_id = ?").get(input.paymentId)
+        : await db.prepare("SELECT * FROM purchases WHERE note = ? AND contact_id = ?").get(input.note ?? "", input.contactId);
+      return existing as import("./types").PurchaseRow;
+    }
 
     const updateParts = [
       "total_spent = total_spent + ?",

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getMessagesByContactId } from "@/lib/db/service";
 import { suggestReply } from "@/lib/ai/suggest-reply";
+import { extractMemory, moodLabel } from "@/lib/ai/memory";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 
 export const dynamic = "force-dynamic";
@@ -46,10 +47,23 @@ async function handle(req: Request) {
           .get(lockKey) as { key: string } | undefined;
         if (alreadySent) continue;
 
-        const messages = await getMessagesByContactId(contact.id);
+        const messages = await getMessagesByContactId(contact.id, 500);
         if (messages.length === 0) continue;
 
-        const reply = await suggestReply(messages, "reengagement");
+        const memory = extractMemory(messages);
+        const metaRow = await db
+          .prepare("SELECT total_spent, favorite_content_type, offer_declined_count FROM contacts WHERE id = ?")
+          .get(contact.id) as { total_spent: number; favorite_content_type: string | null; offer_declined_count: number } | undefined;
+
+        const recent = messages.slice(-20);
+        const reply = await suggestReply(recent, "reengagement", 40, 0, {
+          isPaid: (metaRow?.total_spent ?? 0) > 0,
+          favoriteContent: metaRow?.favorite_content_type || undefined,
+          facts: memory.facts,
+          nickname: memory.nickname,
+          mood: moodLabel(40),
+          lastOfferResult: (metaRow?.offer_declined_count ?? 0) > 0 ? "declined" : undefined,
+        });
         await sendTelegramMessage(contact.id, reply);
 
         const ts = new Date().toISOString();

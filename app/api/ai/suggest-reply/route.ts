@@ -1,5 +1,7 @@
 import type { ReplyMode } from "@/types";
+import { getDb } from "@/lib/db";
 import { getMessagesByContactId } from "@/lib/db/service";
+import { extractMemory, moodLabel } from "@/lib/ai/memory";
 import { apiError, apiOk } from "@/lib/api-error";
 import { suggestReply } from "@/lib/ai/suggest-reply";
 
@@ -18,13 +20,27 @@ export async function POST(request: Request) {
     const validModes: ReplyMode[] = ["casual", "flirty", "sales", "reengagement", "premium", "auto"];
     const mode: ReplyMode = validModes.includes(body.mode) ? body.mode : "auto";
 
-    const messages = await getMessagesByContactId(contactId);
+    const messages = await getMessagesByContactId(contactId, 500);
     if (messages.length === 0) {
       return apiError("No messages found for this contact", 404);
     }
 
+    const db = await getDb();
+    const meta = await db
+      .prepare("SELECT total_spent, favorite_content_type, offer_declined_count, emotional_temp FROM contacts WHERE id = ?")
+      .get(contactId) as { total_spent: number; favorite_content_type: string | null; offer_declined_count: number; emotional_temp: number } | undefined;
+
+    const memory = extractMemory(messages);
+    const emotionalTemp = meta?.emotional_temp ?? 50;
     const recent = messages.slice(-20);
-    const suggestion = await suggestReply(recent, mode);
+    const suggestion = await suggestReply(recent, mode, emotionalTemp, 0, {
+      isPaid: (meta?.total_spent ?? 0) > 0,
+      favoriteContent: meta?.favorite_content_type || undefined,
+      facts: memory.facts,
+      nickname: memory.nickname,
+      mood: moodLabel(emotionalTemp),
+      lastOfferResult: (meta?.offer_declined_count ?? 0) > 0 ? "declined" : undefined,
+    });
     return apiOk({ suggestion }, 200);
   } catch (e) {
     const message = e instanceof Error ? e.message : "AI reply generation failed";

@@ -38,7 +38,7 @@ export const OFFER = {
   DEFAULT_PRICE: 499,
   COOLDOWN_DAYS: 7,
   EXPIRY_DAYS: 7,
-  MAX_LOCKED_RESPONSES: 22,
+  MAX_LOCKED_RESPONSES: 6,
 } as const;
 
 // Segment locked response intervals (hours)

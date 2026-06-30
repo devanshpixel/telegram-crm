@@ -175,6 +175,10 @@ function migrateBetterSqlite3(database: any): void {
   }
 
   database.exec("CREATE INDEX IF NOT EXISTS idx_purchases_purchase_date ON purchases(purchase_date)");
+  if (!columnExists(database, "purchases", "payment_id")) {
+    database.exec("ALTER TABLE purchases ADD COLUMN payment_id TEXT");
+  }
+  database.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchases_payment_id ON purchases(payment_id) WHERE payment_id IS NOT NULL");
   database.exec("CREATE INDEX IF NOT EXISTS idx_contacts_created_at ON contacts(created_at)");
   database.exec("CREATE INDEX IF NOT EXISTS idx_contacts_last_purchase_date ON contacts(last_purchase_date)");
   const mediaTables = database
@@ -240,6 +244,13 @@ export async function getDb(): Promise<AsyncDb> {
       `);
       // Migrate missing columns — each ALTER TABLE is isolated so a "duplicate column"
       // error on an already-migrated DB doesn't abort the rest.
+      // Add payment_id column to purchases for atomic idempotency
+      try {
+        await db.exec("ALTER TABLE purchases ADD COLUMN payment_id TEXT");
+      } catch { /* already exists */ }
+      // UNIQUE index on payment_id — NULLs don't conflict, so legacy rows are fine
+      await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchases_payment_id ON purchases(payment_id) WHERE payment_id IS NOT NULL");
+
       const contactColMigrations: [string, string][] = [
         ["spend_segment",              "TEXT NOT NULL DEFAULT 'prospect'"],
         ["emotional_temp",             "REAL DEFAULT 50"],

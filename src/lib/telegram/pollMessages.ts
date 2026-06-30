@@ -289,8 +289,11 @@ async function sendAiReply(
   const memory = extractMemory(messages);
   const mdb = await getDb();
   const meta = await mdb
-    .prepare("SELECT total_spent, favorite_content_type FROM contacts WHERE id = ?")
-    .get(contactId) as { total_spent: number; favorite_content_type: string | null } | undefined;
+    .prepare("SELECT total_spent, favorite_content_type, offer_declined_count FROM contacts WHERE id = ?")
+    .get(contactId) as { total_spent: number; favorite_content_type: string | null; offer_declined_count: number } | undefined;
+
+  const declineCount = meta?.offer_declined_count ?? 0;
+  const lastOfferResult = declineCount > 0 ? "declined" : undefined;
 
   let reply = await suggestReply(recent, mode, emotionalTemp, intentScore, {
     previousTopic: lastTopic,
@@ -300,6 +303,7 @@ async function sendAiReply(
     mood: moodLabel(emotionalTemp),
     facts: memory.facts,
     nickname: memory.nickname,
+    lastOfferResult,
   });
 
   const linkMatch = reply.match(/\[link\]/i);
