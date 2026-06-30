@@ -164,34 +164,146 @@ export interface SimResult {
   label: string;
   transcript: Turn[];
   metrics: SimMetrics;
+  assertions?: { name: string; pass: boolean; detail?: string }[];
 }
+
+// ─────────────────────────────────────────────
+// SCENARIOS
+// ─────────────────────────────────────────────
+export interface Scenario {
+  name: string;
+  personaKey: PersonaKey;
+  turns: number;
+  paymentOutcome?: "success" | "failure" | "none";
+  /** Inject a silence + re-open after this many turns */
+  reengageAfterTurn?: number;
+  assert?: (result: SimResult) => { name: string; pass: boolean; detail?: string }[];
+}
+
+export const SCENARIOS: Scenario[] = [
+  {
+    name: "new_user_shy",
+    personaKey: "shy",
+    turns: 6,
+    paymentOutcome: "none",
+    assert: (r) => [
+      { name: "no_offer_too_early", pass: !r.metrics.reachedOffer || r.transcript.findIndex(t => t.role === "nayra" && /\[link\]|razorpay|http/i.test(t.text)) > 4, detail: "offer should not appear before turn 5 with shy user" },
+      { name: "low_emoji_violations", pass: r.metrics.emojiViolations === 0 },
+    ],
+  },
+  {
+    name: "interested_buyer",
+    personaKey: "buyer",
+    turns: 8,
+    paymentOutcome: "success",
+    assert: (r) => [
+      { name: "offer_reached", pass: r.metrics.reachedOffer, detail: "buyer persona should trigger an offer" },
+      { name: "no_emoji_violations", pass: r.metrics.emojiViolations === 0 },
+      { name: "question_rate_ok", pass: r.metrics.questionRate <= 0.45 },
+    ],
+  },
+  {
+    name: "content_request_direct",
+    personaKey: "horny",
+    turns: 5,
+    paymentOutcome: "success",
+    assert: (r) => [
+      { name: "offer_reached", pass: r.metrics.reachedOffer, detail: "explicit content request should reach offer" },
+      { name: "no_emoji_violations", pass: r.metrics.emojiViolations === 0 },
+    ],
+  },
+  {
+    name: "disinterested_timepass",
+    personaKey: "timepass",
+    turns: 6,
+    paymentOutcome: "none",
+    assert: (r) => [
+      { name: "no_premature_offer", pass: !r.metrics.reachedOffer, detail: "disinterested user should not get an offer" },
+    ],
+  },
+  {
+    name: "payment_failure",
+    personaKey: "buyer",
+    turns: 6,
+    paymentOutcome: "failure",
+    assert: (r) => [
+      { name: "offer_reached", pass: r.metrics.reachedOffer },
+      { name: "no_emoji_violations", pass: r.metrics.emojiViolations === 0 },
+    ],
+  },
+  {
+    name: "post_purchase_vip",
+    personaKey: "vip",
+    turns: 5,
+    paymentOutcome: "none",
+    assert: (r) => [
+      { name: "no_emoji_violations", pass: r.metrics.emojiViolations === 0 },
+      { name: "no_repeated_openers", pass: r.metrics.repeatedOpenings === 0 },
+    ],
+  },
+  {
+    name: "whale_reengagement",
+    personaKey: "whale",
+    turns: 6,
+    reengageAfterTurn: 3,
+    paymentOutcome: "none",
+    assert: (r) => [
+      { name: "no_emoji_violations", pass: r.metrics.emojiViolations === 0 },
+    ],
+  },
+  {
+    name: "spam_resistance",
+    personaKey: "spam",
+    turns: 4,
+    paymentOutcome: "none",
+    assert: (r) => [
+      { name: "no_emoji_violations", pass: r.metrics.emojiViolations === 0 },
+      { name: "no_premature_offer", pass: !r.metrics.reachedOffer },
+    ],
+  },
+];
 
 /**
  * Run a full simulated conversation for one persona through the real engine.
  * `turns` = number of fan↔Nayra exchanges.
+ * `paymentOutcome` = whether to inject a synthetic payment success/failure mid-conversation.
+ * `reengageAfterTurn` = inject a silence + re-open message after this turn (tests re-engagement path).
  */
-export async function simulateConversation(personaKey: PersonaKey, turns = 6): Promise<SimResult> {
+export async function simulateConversation(
+  personaKey: PersonaKey,
+  turns = 6,
+  paymentOutcome: "success" | "failure" | "none" = "none",
+  reengageAfterTurn?: number,
+): Promise<SimResult> {
   const persona = PERSONAS[personaKey];
   if (!persona) throw new Error(`Unknown persona: ${personaKey}`);
 
   const transcript: Turn[] = [];
-  // Engine messages use the production direction labels.
   const engineMsgs: { text: string; direction: "incoming" | "outgoing" }[] = [];
+  let convState = persona.convState;
+  let isPaid = persona.isPaid;
+  let offerInjected = false;
 
   for (let i = 0; i < turns; i++) {
-    const fanMsg = await generateFanMessage(persona, transcript);
-    transcript.push({ role: "fan", text: fanMsg });
-    engineMsgs.push({ text: fanMsg, direction: "incoming" });
+    // Simulate silence + re-open after specified turn
+    if (reengageAfterTurn && i === reengageAfterTurn) {
+      const reopen = "hey, been a while. still there?";
+      transcript.push({ role: "fan", text: `[7 days of silence] ${reopen}` });
+      engineMsgs.push({ text: reopen, direction: "incoming" });
+    } else {
+      const fanMsg = await generateFanMessage(persona, transcript);
+      transcript.push({ role: "fan", text: fanMsg });
+      engineMsgs.push({ text: fanMsg, direction: "incoming" });
+    }
 
     const incomingTexts = engineMsgs.filter((m) => m.direction === "incoming");
     const intentScore = await getIntentScore(incomingTexts);
-    // Temperature warms slightly as the fan engages.
     const temp = Math.min(95, persona.baseTemp + i * 3);
     const memory = extractMemory(engineMsgs);
 
     const reply = await suggestReply(engineMsgs, "auto", temp, intentScore, {
-      convState: persona.convState,
-      isPaid: persona.isPaid,
+      convState,
+      isPaid,
       mood: moodLabel(temp),
       facts: memory.facts,
       nickname: memory.nickname,
@@ -199,7 +311,48 @@ export async function simulateConversation(personaKey: PersonaKey, turns = 6): P
 
     transcript.push({ role: "nayra", text: reply });
     engineMsgs.push({ text: reply, direction: "outgoing" });
+
+    // Detect offer in Nayra's reply → advance state
+    if (!offerInjected && /\[link\]|razorpay\.me|http/i.test(reply)) {
+      convState = "OFFER_SENT";
+      offerInjected = true;
+
+      // Inject synthetic payment event on next turn
+      if (paymentOutcome === "success") {
+        const paidMsg = "done, payment kiya. unlock ho gaya?";
+        transcript.push({ role: "fan", text: `[PAYMENT SUCCESS] ${paidMsg}` });
+        engineMsgs.push({ text: paidMsg, direction: "incoming" });
+        convState = "PAID";
+        isPaid = true;
+        i++; // consume a turn
+      } else if (paymentOutcome === "failure") {
+        const failMsg = "payment failed. card declined. kuch aur option hai?";
+        transcript.push({ role: "fan", text: `[PAYMENT FAILED] ${failMsg}` });
+        engineMsgs.push({ text: failMsg, direction: "incoming" });
+        i++; // consume a turn
+      }
+    }
   }
 
   return { persona: personaKey, label: persona.label, transcript, metrics: analyze(transcript) };
+}
+
+/**
+ * Run all predefined scenarios and return results with pass/fail assertions.
+ */
+export async function runScenarios(): Promise<SimResult[]> {
+  const results: SimResult[] = [];
+  for (const scenario of SCENARIOS) {
+    const result = await simulateConversation(
+      scenario.personaKey,
+      scenario.turns,
+      scenario.paymentOutcome ?? "none",
+      scenario.reengageAfterTurn,
+    );
+    if (scenario.assert) {
+      result.assertions = scenario.assert(result);
+    }
+    results.push(result);
+  }
+  return results;
 }
