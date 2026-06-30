@@ -96,11 +96,16 @@ export async function sendTelegramMessage(
 
       if (isFlood) {
         lastError = e;
-        const seconds = e.seconds ?? Math.pow(2, attempt);
+        const rawSeconds = e.seconds ?? Math.pow(2, attempt);
+        // Cap at 45s — Vercel maxDuration is 60s and we need headroom for remaining
+        // retries. For longer FloodWait values, bubble up so the retry queue handles it.
+        if (rawSeconds > 45) {
+          throw Object.assign(new Error(`FloodWait ${rawSeconds}s — too long to sleep inline`), { isFloodWait: true, seconds: rawSeconds });
+        }
         console.warn(
-          `[SEND_RETRY] FloodWait: sleeping ${seconds}s for contact ${contactId} (attempt ${attempt}/${FLOOD_RETRY_MAX})`,
+          `[SEND_RETRY] FloodWait: sleeping ${rawSeconds}s for contact ${contactId} (attempt ${attempt}/${FLOOD_RETRY_MAX})`,
         );
-        await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+        await new Promise((resolve) => setTimeout(resolve, rawSeconds * 1000));
         await ensureConnected();
         continue;
       }

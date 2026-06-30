@@ -1,12 +1,24 @@
 {
   "crons": [
     {
+      "path": "/api/telegram/poll",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/automation/retry-queue",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/automation/failed-unlock",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/telegram/remind",
       "schedule": "0 10 * * *"
     },
     {
       "path": "/api/telegram/reengage",
-      "schedule": "0 10 * * *"
+      "schedule": "30 10 * * *"
     },
     {
       "path": "/api/razorpay/reconcile",
