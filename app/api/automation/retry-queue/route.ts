@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getMessagesByContactId, getFailedActionStats } from "@/lib/db/service";
 import { suggestReply } from "@/lib/ai/suggest-reply";
+import { extractMemory, moodLabel } from "@/lib/ai/memory";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 import { sendLockedResponse } from "@/src/lib/telegram/pollMessages";
 
@@ -28,6 +29,11 @@ async function handle(req: Request) {
       return NextResponse.json(stats);
     }
 
+    // First, mark terminally-exhausted actions resolved so they don't accumulate
+    await db
+      .prepare("UPDATE failed_actions SET resolved_at = ? WHERE resolved_at IS NULL AND retry_count >= max_retries")
+      .run(new Date().toISOString());
+
     const rows = await db
       .prepare(
         `SELECT id, action_type, contact_id, payload, error, retry_count
@@ -50,7 +56,7 @@ async function handle(req: Request) {
       try {
         switch (action.action_type) {
           case "send_message": {
-            const text = action.payload || "hey! sorry i missed your message earlier 😘 what's up?";
+            const text = action.payload || "hey, was just thinking about you";
             await sendTelegramMessage(action.contact_id, text);
             break;
           }
@@ -59,9 +65,21 @@ async function handle(req: Request) {
             break;
           }
           case "reengage": {
-            const msgs = await getMessagesByContactId(action.contact_id);
+            const msgs = await getMessagesByContactId(action.contact_id, 500);
             if (msgs.length > 0) {
-              const reply = await suggestReply(msgs, "reengagement");
+              const memory = extractMemory(msgs);
+              const metaRow = await db
+                .prepare("SELECT total_spent, favorite_content_type, offer_declined_count FROM contacts WHERE id = ?")
+                .get(action.contact_id) as { total_spent: number; favorite_content_type: string | null; offer_declined_count: number } | undefined;
+              const recent = msgs.slice(-20);
+              const reply = await suggestReply(recent, "reengagement", 40, 0, {
+                isPaid: (metaRow?.total_spent ?? 0) > 0,
+                favoriteContent: metaRow?.favorite_content_type || undefined,
+                facts: memory.facts,
+                nickname: memory.nickname,
+                mood: moodLabel(40),
+                lastOfferResult: (metaRow?.offer_declined_count ?? 0) > 0 ? "declined" : undefined,
+              });
               await sendTelegramMessage(action.contact_id, reply);
             }
             break;
@@ -76,7 +94,7 @@ async function handle(req: Request) {
         }
 
         await db
-          .prepare("UPDATE failed_actions SET resolved_at = ?, last_retry_at = ?, retry_count = retry_count + 1 WHERE id = ?")
+          .prepare("UPDATE failed_actions SET resolved_at = ?, last_retry_at = ? WHERE id = ?")
           .run(new Date().toISOString(), new Date().toISOString(), action.id);
 
         results.push({ id: action.id, actionType: action.action_type, contactId: action.contact_id, success: true });
