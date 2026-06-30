@@ -26,6 +26,7 @@ import {
 import type { ConvState, ReplyMode } from "@/types";
 import { razorpay } from "@/lib/razorpay";
 import { suggestReply } from "@/lib/ai/suggest-reply";
+import { extractMemory, moodLabel } from "@/lib/ai/memory";
 import { getAppUrl } from "@/lib/app-url";
 import { getTelegramClient } from "./client";
 import { sendTelegramMessage } from "./sendMessage";
@@ -180,32 +181,48 @@ async function createContactFromDialog(entity: Api.User): Promise<ContactWithCon
 function getScheduledDelay(convState: string, emotionalTemp: number): number {
   const r = Math.random();
 
+  // Time-of-day awareness (IST = UTC+5:30)
+  const istHour = (new Date().getUTCHours() + 5) % 24 + (new Date().getUTCMinutes() >= 30 ? 0 : 0);
+  const isLateNight = istHour >= 1 && istHour < 7;   // 1am–7am: she's asleep
+  const isEarlyMorning = istHour >= 7 && istHour < 10; // 7am–10am: slow to reply
+  const isPeakHours = istHour >= 18 || istHour < 1;   // 6pm–1am: most active
+
+  // Late night: always push to medium-slow — instant replies at 3am break the illusion
+  if (isLateNight) {
+    if (r < 0.40) return TIMING.REPLY_DELAY_MIN_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_SLOW - TIMING.REPLY_DELAY_MIN_SLOW);
+    if (r < 0.85) return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_VERY_SLOW - TIMING.REPLY_DELAY_MIN_VERY_SLOW);
+    return TIMING.REPLY_DELAY_MIN_EXTREMELY_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_EXTREMELY_SLOW - TIMING.REPLY_DELAY_MIN_EXTREMELY_SLOW);
+  }
+
+  // Early morning: slower than peak, no fast replies
+  const fastFloor = isEarlyMorning ? TIMING.REPLY_DELAY_MIN_MEDIUM : (isPeakHours ? TIMING.REPLY_DELAY_MIN_FAST : TIMING.REPLY_DELAY_MIN_MEDIUM);
+  const fastMax = isEarlyMorning ? TIMING.REPLY_DELAY_MAX_MEDIUM : (isPeakHours ? TIMING.REPLY_DELAY_MAX_FAST : TIMING.REPLY_DELAY_MAX_MEDIUM);
+
   if (convState === "PAID" || convState === "OFFER_SENT") {
-    if (r < 0.50) return TIMING.REPLY_DELAY_MIN_FAST + Math.random() * (TIMING.REPLY_DELAY_MAX_FAST - TIMING.REPLY_DELAY_MIN_FAST);
+    if (r < 0.50) return fastFloor + Math.random() * (fastMax - fastFloor);
     if (r < 0.85) return TIMING.REPLY_DELAY_MIN_MEDIUM + Math.random() * (TIMING.REPLY_DELAY_MAX_MEDIUM - TIMING.REPLY_DELAY_MIN_MEDIUM);
     return TIMING.REPLY_DELAY_MIN_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_SLOW - TIMING.REPLY_DELAY_MIN_SLOW);
   }
 
   if (emotionalTemp >= EMOTIONAL_TEMP.HOT) {
-    if (r < 0.30) return TIMING.REPLY_DELAY_MIN_FAST + Math.random() * (TIMING.REPLY_DELAY_MAX_FAST - TIMING.REPLY_DELAY_MIN_FAST);
+    if (r < 0.30) return fastFloor + Math.random() * (fastMax - fastFloor);
     if (r < 0.60) return TIMING.REPLY_DELAY_MIN_MEDIUM + Math.random() * (TIMING.REPLY_DELAY_MAX_MEDIUM - TIMING.REPLY_DELAY_MIN_MEDIUM);
     if (r < 0.85) return TIMING.REPLY_DELAY_MIN_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_SLOW - TIMING.REPLY_DELAY_MIN_SLOW);
-    return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * TIMING.REPLY_DELAY_MIN_VERY_SLOW;
+    return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_VERY_SLOW - TIMING.REPLY_DELAY_MIN_VERY_SLOW);
   }
 
   if (emotionalTemp >= EMOTIONAL_TEMP.WARM) {
-    if (r < 0.15) return TIMING.REPLY_DELAY_MIN_FAST + Math.random() * (TIMING.REPLY_DELAY_MAX_FAST - TIMING.REPLY_DELAY_MIN_FAST);
+    if (r < 0.15) return fastFloor + Math.random() * (fastMax - fastFloor);
     if (r < 0.40) return TIMING.REPLY_DELAY_MIN_MEDIUM + Math.random() * (TIMING.REPLY_DELAY_MAX_MEDIUM - TIMING.REPLY_DELAY_MIN_MEDIUM);
     if (r < 0.75) return TIMING.REPLY_DELAY_MIN_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_SLOW - TIMING.REPLY_DELAY_MIN_SLOW);
-    if (r < 0.93) return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * TIMING.REPLY_DELAY_MIN_VERY_SLOW;
+    if (r < 0.93) return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_VERY_SLOW - TIMING.REPLY_DELAY_MIN_VERY_SLOW);
     return TIMING.REPLY_DELAY_MIN_EXTREMELY_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_EXTREMELY_SLOW - TIMING.REPLY_DELAY_MIN_EXTREMELY_SLOW);
   }
 
-  // Low emotional temp — slow, distant
+  // Low emotional temp — slow, distant; cap at VERY_SLOW (no multi-hour delays for warm conversations)
   if (r < 0.20) return TIMING.REPLY_DELAY_MIN_MEDIUM + Math.random() * (TIMING.REPLY_DELAY_MAX_MEDIUM - TIMING.REPLY_DELAY_MIN_MEDIUM);
   if (r < 0.55) return TIMING.REPLY_DELAY_MIN_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_SLOW - TIMING.REPLY_DELAY_MIN_SLOW);
-  if (r < 0.80) return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * TIMING.REPLY_DELAY_MIN_VERY_SLOW;
-  return TIMING.REPLY_DELAY_MIN_HOURS + Math.random() * (TIMING.REPLY_DELAY_MAX_HOURS - TIMING.REPLY_DELAY_MIN_HOURS);
+  return TIMING.REPLY_DELAY_MIN_VERY_SLOW + Math.random() * (TIMING.REPLY_DELAY_MAX_VERY_SLOW - TIMING.REPLY_DELAY_MIN_VERY_SLOW);
 }
 
 function splitMessage(text: string): string[] {
@@ -257,7 +274,8 @@ async function sendAiReply(
   intentScore: number = 0,
   convState: string = "FREE_CHAT",
 ): Promise<{ offerSent: boolean }> {
-  const messages = await getMessagesByContactId(contactId);
+  // Use extended history for memory extraction; recent slice for the transcript
+  const messages = await getMessagesByContactId(contactId, 500);
   const recent = messages.slice(-MESSAGE.RECENT_COUNT);
 
   const lastOutgoing = [...recent].reverse().find(m => m.direction === "outgoing");
@@ -265,9 +283,23 @@ async function sendAiReply(
     ? lastOutgoing.text.replace(/[LINK].*/i, "").replace(/https?:\/\/\S+/g, "").trim().slice(0, MESSAGE.TOPIC_MAX_LENGTH)
     : undefined;
 
+  // Long-term memory: extract stable facts from the FULL history (not just the
+  // recent window) plus paid status / favourite content, so replies stay
+  // continuous across long conversations.
+  const memory = extractMemory(messages);
+  const mdb = await getDb();
+  const meta = await mdb
+    .prepare("SELECT total_spent, favorite_content_type FROM contacts WHERE id = ?")
+    .get(contactId) as { total_spent: number; favorite_content_type: string | null } | undefined;
+
   let reply = await suggestReply(recent, mode, emotionalTemp, intentScore, {
     previousTopic: lastTopic,
     convState,
+    isPaid: (meta?.total_spent ?? 0) > 0,
+    favoriteContent: meta?.favorite_content_type || undefined,
+    mood: moodLabel(emotionalTemp),
+    facts: memory.facts,
+    nickname: memory.nickname,
   });
 
   const linkMatch = reply.match(/\[link\]/i);
@@ -638,6 +670,13 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                   if (row && (row.locked_response_count ?? 0) >= OFFER.MAX_LOCKED_RESPONSES) {
                     await setConvState(contact.id, "FREE_CHAT");
                     await setOfferCooldown(contact.id, OFFER.COOLDOWN_DAYS);
+                  } else {
+                    // Interval not elapsed yet — keep user engaged with a casual reply
+                    // instead of silence. Prevents the OFFER_SENT state becoming a dead-end
+                    // where the fan messages but hears nothing until the lock timer fires.
+                    const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
+                    if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
+                    else summary.repliesSent++;
                   }
                 }
               } else if (!skipReply) {
@@ -647,7 +686,9 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
                   await sendPremiumOffer(contact.id);
                   summary.offersSent++;
                   contact.conv_state = "OFFER_SENT";
-                } else if (intentScore >= INTENT_THRESHOLD.LOW) {
+                } else if (intentScore >= INTENT_THRESHOLD.VERY_LOW) {
+                  // Any explicit content/sales keyword (score ≥ 20) → use aiMode so
+                  // detectMode can route to sales phase and include [LINK] when ready.
                   const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore, contact.conv_state);
                   if (offerSent) {
                     summary.offersSent++;
@@ -686,9 +727,14 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             }
           }
 
-          if (!replyFailed && maxId > minId) {
+          // Always advance the cursor for new messages — prevents the same DMs from
+          // re-triggering offers/replies on the next poll. Reply failures are already
+          // enqueued to the retry queue (enqueueFailedAction above), so they don't need
+          // the cursor to hold back in order to be retried.
+          if (maxId > minId) {
             await updateSyncCursor(contact.conversation_id, maxId);
           }
+          void replyFailed; // consumed above in enqueueFailedAction path
         } catch (e) {
           console.error(`[POLL] Message iteration error for contact ${contact.id}:`, e);
           summary.errors.push(

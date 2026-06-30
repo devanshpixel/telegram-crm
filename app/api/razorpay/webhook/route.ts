@@ -36,11 +36,12 @@ export async function POST(request: Request) {
       if (contactId && amountPaid && paymentId) {
         const db = await getDb();
         
-        // Verify contact exists
+        // Verify contact exists. Return 200 (not 404) so Razorpay stops retrying —
+        // a missing contact is a permanent condition, not a transient failure.
         const contact = await db.prepare("SELECT id FROM contacts WHERE id = ?").get(contactId);
         if (!contact) {
           console.error(`[Razorpay Webhook] Contact ${contactId} not found`);
-          return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+          return NextResponse.json({ received: true, skipped: "contact_not_found" });
         }
 
         // Idempotency: Razorpay redelivers webhooks on any timeout/non-2xx. If this
