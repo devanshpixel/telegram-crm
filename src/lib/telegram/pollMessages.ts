@@ -738,7 +738,9 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           if (maxId > minId) {
             await updateSyncCursor(contact.conversation_id, maxId);
           }
-          void replyFailed; // consumed above in enqueueFailedAction path
+          if (replyFailed) {
+            summary.errors.push(`Reply skipped for contact ${contact.id} (queued for retry)`);
+          }
         } catch (e) {
           console.error(`[POLL] Message iteration error for contact ${contact.id}:`, e);
           summary.errors.push(

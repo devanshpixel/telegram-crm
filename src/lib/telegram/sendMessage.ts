@@ -66,8 +66,10 @@ export async function sendTelegramMessage(
   const client = await getTelegramClient();
   const peer = buildPeer(contact);
 
-  // Typing indicator happens once before any send attempt
+  // Typing indicator for the full message (shows realistic composing time)
   await typingDelay(client, peer, trimmedText);
+  // Small random pause after typing stops — mirrors real human "sending" lag
+  await new Promise(r => setTimeout(r, 200 + Math.random() * 400));
 
   let lastError: Error | null = null;
 
