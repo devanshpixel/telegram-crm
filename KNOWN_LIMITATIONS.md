@@ -59,27 +59,23 @@ This generates log noise but has no other impact.
 
 ---
 
-## 6. AI Fetch Has No Timeout
+## 6. AI Fetch Timeout — RESOLVED
 
-**Severity:** Medium (can stall poll loop)
+**Severity:** ~~Medium~~ Resolved
 
-**Issue:** The OpenRouter API fetch in `suggest-reply.ts` has no AbortController timeout. If the AI service hangs, a single stalled request can consume the entire 50-second poll budget, causing the poll to skip other contacts.
+**Issue:** The OpenRouter API fetch in `suggest-reply.ts` could hang and consume the entire poll budget.
 
-**Workaround:** The poll has a 50-second timeout and caps at 500 dialogs. Budget per contact is ~100ms, so a stalled AI call is worse than expected.
-
-**Future fix:** Add `AbortSignal.timeout(15000)` to the OpenRouter fetch.
+**Fix:** The fetch is wrapped in an `AbortController` with a 15s timeout (`lib/ai/suggest-reply.ts:345`). A timeout triggers a retry, then a graceful fallback to a canned reply.
 
 ---
 
-## 7. LIKE-Based Payment Dedup Without UNIQUE Constraint
+## 7. Payment Dedup UNIQUE Constraint — RESOLVED
 
-**Severity:** Low (dedup works in practice but not formally enforced)
+**Severity:** ~~Low~~ Resolved
 
-**Issue:** Purchase idempotency uses a `LIKE '%razorpay_payment:{paymentId}%'` check instead of a `UNIQUE` constraint on a dedicated `payment_id` column. Two concurrent webhook deliveries could theoretically create duplicate purchase records.
+**Issue:** Purchase idempotency previously relied on a `LIKE` check rather than a formal constraint.
 
-**Workaround:** The check runs inside a database transaction. SQLite serializes writes, making concurrent inserts mutually exclusive.
-
-**Future fix:** Add a `payment_id TEXT UNIQUE` column to the purchases table.
+**Fix:** A partial UNIQUE index enforces idempotency at the storage layer: `CREATE UNIQUE INDEX idx_purchases_payment_id ON purchases(payment_id) WHERE payment_id IS NOT NULL` (`lib/db/schema.ts:148`, created on both better-sqlite3 and Turso paths). `createPurchase()` performs an atomic idempotent insert that no-ops on conflict (`lib/db/service.ts:531`). Legacy rows with NULL `payment_id` are unaffected.
 
 ---
 
@@ -93,13 +89,13 @@ This generates log noise but has no other impact.
 
 ---
 
-## 9. No Logout Endpoint
+## 9. Logout Endpoint — RESOLVED
 
-**Severity:** Low
+**Severity:** ~~Low~~ Resolved
 
-**Issue:** The session cookie (`crm_session`) has a 30-day TTL with no logout endpoint. The only way to "log out" is to clear browser cookies or change the `CRM_API_KEY`.
+**Issue:** The session cookie (`crm_session`) had a 30-day TTL with no logout endpoint.
 
-**Future fix:** Add a `POST /api/auth/logout` endpoint that clears the cookie.
+**Fix:** `POST /api/auth/logout` (`app/api/auth/logout/route.ts`) overwrites the cookie with an immediately-expired value using matching attributes. A "Log out" button in the Settings modal calls it and reloads to the sign-in page. POST-only + session-gated by middleware, so it also resists CSRF.
 
 ---
 

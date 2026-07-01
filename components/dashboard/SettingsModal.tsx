@@ -17,6 +17,19 @@ interface SettingsModalProps {
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const logout = useCallback(async () => {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* clear cookie best-effort; reload lands on the 401 sign-in page anyway */
+    } finally {
+      // Full reload so middleware re-evaluates auth and serves the sign-in page.
+      window.location.href = "/";
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -131,7 +144,15 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           </div>
         </div>
 
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex items-center gap-3">
+          <button
+            onClick={logout}
+            disabled={loggingOut}
+            className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+          >
+            {loggingOut ? "Logging out..." : "Log out"}
+          </button>
+          <div className="flex-1" />
           <button
             onClick={onClose}
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
