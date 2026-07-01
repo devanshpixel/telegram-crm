@@ -5,6 +5,7 @@ config({ path: ".env" });
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
+import { sanitizeReply } from "../lib/ai/suggest-reply";
 
 const TEST_DB_PATH = path.join(process.cwd(), "data", "test-core.db");
 
@@ -418,6 +419,43 @@ async function main() {
   // Retry (webhook redelivery / recovery cron) must find the marker and skip
   const wouldResend = !deliveredAlready(confirmKey);
   assert(!wouldResend, "retry skips resend — customer never gets a duplicate unlock");
+
+  // ─────────────────────────────────────────────
+  console.log("\n=== Reply sanitizer: AI-tell removal ===\n");
+
+  // Em dash → casual punctuation (explicit persona ban).
+  assert(!sanitizeReply("i was gonna say — but nvm").includes("—"), "em dash removed");
+  assertEqual(sanitizeReply("i was gonna say — but nvm"), "i was gonna say, but nvm", "em dash becomes comma pause");
+  assert(!sanitizeReply("wait – kya bola tu").includes("–"), "en dash removed");
+  assert(!sanitizeReply("hmm -- soch rahi").includes("--"), "ascii double-dash removed");
+
+  // List / markdown formatting never survives.
+  assertEqual(sanitizeReply("- pehla\n- doosra"), "pehla doosra", "bullet list flattened to one line");
+  assertEqual(sanitizeReply("1. ye\n2. wo"), "ye wo", "numbered list flattened");
+  assertEqual(sanitizeReply("**bold** nahi karti"), "bold nahi karti", "markdown bold stripped");
+  assertEqual(sanitizeReply("thoda __italic__ text"), "thoda italic text", "markdown underscore-italic stripped");
+
+  // Multi-line paragraph collapses to a single bubble.
+  assertEqual(sanitizeReply("line one\n\nline two"), "line one line two", "newlines collapse to space");
+
+  // Wrapping quotes and role labels removed.
+  assertEqual(sanitizeReply('"bas yahi tha"'), "bas yahi tha", "surrounding quotes unwrapped");
+  assertEqual(sanitizeReply("Nayra: haan bol"), "haan bol", "Nayra label stripped");
+  assertEqual(sanitizeReply("assistant: theek hai"), "theek hai", "assistant label stripped");
+
+  // AI helper openers stripped.
+  assertEqual(sanitizeReply("Of course! main ready hoon"), "main ready hoon", "'Of course' opener stripped");
+  assert(!/as an ai/i.test(sanitizeReply("As an AI, i cannot")), "'as an ai' opener stripped");
+
+  // Emoji hard-cap at 2 (persona: NEVER 3+).
+  assertEqual([...sanitizeReply("hi 😏😏😏😏")].filter(c => /\p{Extended_Pictographic}/u.test(c)).length, 2, "3+ emoji capped to 2");
+  assert(sanitizeReply("chill 😌").includes("😌"), "single emoji preserved");
+
+  // Clean input is returned unchanged (no false positives on normal replies).
+  assertEqual(sanitizeReply("itni jaldi kya hai tujhe"), "itni jaldi kya hai tujhe", "clean reply untouched");
+  assertEqual(sanitizeReply("haan"), "haan", "one-word reply untouched");
+  // Empty / markup-only input yields empty (caller falls back).
+  assertEqual(sanitizeReply("  "), "", "whitespace-only yields empty");
 
   // Cleanup
   db.close();

@@ -227,6 +227,56 @@ function getFallbackReply(): string {
 }
 
 // ─────────────────────────────────────────────
+// OUTPUT SANITIZER
+// ─────────────────────────────────────────────
+// The model still leaks AI "tells" the prompt bans: em dashes, markdown, list
+// formatting, wrapping quotes, multi-line "paragraphs", 3+ emoji. A real girl
+// texting on Telegram never does these. This runs on every model reply (not on
+// fallbacks — those are already clean) and enforces the hard rules the prompt
+// can only *ask* for. Deterministic + unit-tested.
+const AI_HELPER_PREFIX =
+  /^(of course[!,]?\s*|sure[!,]?\s*|great[!,]?\s*|definitely[!,]?\s*|absolutely[!,]?\s*|certainly[!,]?\s*|i understand[,.]?\s*|that'?s great[!,]?\s*|no problem[!,]?\s*|happy to[!,]?\s*|i'?m sorry[,.]?\s*|as an ai[,.]?\s*)/i;
+
+export function sanitizeReply(raw: string): string {
+  let s = (raw ?? "").trim();
+  if (!s) return s;
+
+  // Role labels the model sometimes prepends.
+  s = s.replace(/^Nayra\s*[:\-]\s*/i, "").replace(/^(assistant|fan)\s*[:\-]\s*/i, "");
+
+  // Unwrap a reply that's entirely wrapped in quotes (straight or curly).
+  const q = s.match(/^["'“”‘’]([\s\S]+)["'“”‘’]$/);
+  if (q && !q[1].includes('"')) s = q[1].trim();
+
+  // Strip AI helper openers (may appear after unwrapping).
+  s = s.replace(AI_HELPER_PREFIX, "");
+
+  // Markdown emphasis → plain text. Bold/italic markers, not roleplay *actions*
+  // (those get collapsed by the list/whitespace pass below if on their own line).
+  s = s.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/__([^_]+)__/g, "$1");
+
+  // List / bullet formatting at line starts — never in a real text.
+  s = s.replace(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+/gm, "");
+
+  // Em/en dashes (and the ASCII "--" models use for them) → casual punctuation.
+  // " word — word " reads as a comma pause; a glued em dash becomes a space.
+  s = s.replace(/\s*[—–―]\s*/g, ", ").replace(/\s+--\s+/g, ", ");
+
+  // Collapse to a single line: a real reply is one bubble, not a paragraph.
+  s = s.replace(/\s*\n+\s*/g, " ");
+
+  // Cap emoji at 2 (prompt says NEVER 3+). Keep the first two, drop the rest.
+  let emojiSeen = 0;
+  s = s.replace(/\p{Extended_Pictographic}/gu, (m) => (++emojiSeen <= 2 ? m : ""));
+
+  // Tidy whitespace and dangling punctuation left by the substitutions.
+  s = s.replace(/\s{2,}/g, " ").replace(/\s+([,.!?])/g, "$1").replace(/,\s*([,.!?])/g, "$1");
+  s = s.replace(/^[\s,]+/, "").replace(/[\s,]+$/, "").trim();
+
+  return s;
+}
+
+// ─────────────────────────────────────────────
 // MAIN SUGGEST REPLY
 // ─────────────────────────────────────────────
 export async function suggestReply(
@@ -378,14 +428,10 @@ export async function suggestReply(
 
       if (!text || text.trim().length === 0) throw new Error("Empty response");
 
-      let cleaned = text.trim();
-      cleaned = cleaned.replace(/^Nayra:\s*/i, "").replace(/^Nayra\s*-\s*/i, "");
-      // Strip AI helper phrases that break persona
-      cleaned = cleaned.replace(
-        /^(of course[!,]?\s*|sure[!,]?\s*|great[!,]?\s*|definitely[!,]?\s*|absolutely[!,]?\s*|certainly[!,]?\s*|i understand[,.]?\s*|that'?s great[!,]?\s*|no problem[!,]?\s*|happy to[!,]?\s*)/i,
-        ""
-      );
-
+      const cleaned = sanitizeReply(text);
+      // If sanitization stripped everything (e.g. model returned only markup),
+      // fall back rather than sending an empty message.
+      if (!cleaned) return getFallbackReply();
       return cleaned;
     } catch (err) {
       console.error("[AI_FETCH_ERROR]", err);
