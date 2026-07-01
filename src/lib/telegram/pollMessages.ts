@@ -257,7 +257,11 @@ async function sendDueReplies(summary: PollSummary): Promise<void> {
       const contactId = parseInt(row.key.split(":")[1]);
       const data = JSON.parse(row.value);
       if (new Date(data.scheduledAt) <= now) {
-        await sendTelegramMessage(contactId, data.text);
+        const parts = splitMessage(data.text);
+        for (let i = 0; i < parts.length; i++) {
+          if (i > 0) await new Promise((r) => setTimeout(r, TIMING.MULTI_MESSAGE_GAP_MIN + Math.random() * (TIMING.MULTI_MESSAGE_GAP_MAX - TIMING.MULTI_MESSAGE_GAP_MIN)));
+          await sendTelegramMessage(contactId, parts[i]);
+        }
         await db.prepare("DELETE FROM settings WHERE key = ?").run(row.key);
         summary.repliesSent++;
       }
@@ -344,7 +348,7 @@ async function scheduleOrSendReply(
   emotionalTemp: number,
 ): Promise<void> {
   const delayMs = getScheduledDelay(convState, emotionalTemp);
-  if (delayMs < 50000) {
+  if (delayMs < 3000) {
     await new Promise((r) => setTimeout(r, delayMs));
     const parts = splitMessage(text);
     for (let i = 0; i < parts.length; i++) {
