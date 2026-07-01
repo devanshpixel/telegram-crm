@@ -16,15 +16,15 @@
 
 ---
 
-## 2. No Rate Limiting
+## 2. Rate Limiting — PARTIAL
 
-**Severity:** Low (no abuse observed, but no protection)
+**Severity:** Low (no abuse observed)
 
-**Issue:** No API endpoints have rate limiting. An attacker could brute-force the CRM dashboard login via `?key=` parameter or spam the poll/webhook endpoints.
+**Issue:** An attacker could brute-force the CRM dashboard login via the `?key=` parameter.
 
-**Workaround:** Dashboard auth requires exact `CRM_API_KEY` match. The key should be a strong random string. Cron endpoints require `CRON_SECRET`.
+**Fix (partial):** The middleware now throttles *failed* auth attempts per client IP with an in-memory sliding window (10 attempts / 60s → HTTP 429 with `Retry-After`). Authenticated requests bypass the throttle entirely, so there is no added latency for legitimate traffic. This is a per-instance best-effort mitigation — serverless instances don't share the counter, but each independently caps guess rate.
 
-**Future fix:** Add rate limiting middleware for high-traffic endpoints.
+**Remaining:** A globally-consistent limiter (e.g. Turso- or Upstash-backed) and limits on high-traffic cron/webhook endpoints are still future work.
 
 ---
 
@@ -38,14 +38,13 @@
 
 ---
 
-## 4. Webhook Retries for Permanent Failures  
+## 4. Webhook Retries for Permanent Failures — RESOLVED
 
-**Severity:** Low (noisy, not destructive)  
+**Severity:** ~~Low~~ Resolved
 
-**Issue:** When a webhook event references a deleted contact, Razorpay retries the event indefinitely because the endpoint now returns HTTP 500 (was 400, fixed in RC to enable retries for transient errors).  
-This generates log noise but has no other impact.  
+**Issue:** A webhook referencing a deleted contact could be retried indefinitely by Razorpay.
 
-**Future fix:** Return HTTP 200 for permanent failures after logging them.
+**Fix:** Permanent conditions return HTTP 200 so Razorpay stops retrying: a missing contact logs and returns `{ received: true, skipped: "contact_not_found" }` (`app/api/razorpay/webhook/route.ts:42`). HTTP 500 is now reserved for genuinely transient errors, which *should* be retried.
 
 ---
 

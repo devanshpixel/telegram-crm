@@ -27,6 +27,55 @@ const CRON_PATHS = [
 
 const SESSION_COOKIE = "crm_session";
 
+// --- Brute-force throttle for failed dashboard auth --------------------------
+// The dashboard authenticates via an exact `?key=` / cookie / header match, so
+// the only attack surface is guessing CRM_API_KEY. We throttle *failed* auth
+// attempts per client IP with an in-memory sliding window. This adds zero cost
+// to legitimate authenticated requests (they never reach this code) and is a
+// best-effort per-instance mitigation — serverless instances don't share state,
+// but each instance independently caps how fast an attacker can guess.
+const FAIL_WINDOW_MS = 60_000; // 1 minute
+const FAIL_MAX = 10; // max failed auth attempts per IP per window
+const failCounts = new Map<string, { count: number; resetAt: number }>();
+
+function clientIp(request: NextRequest): string {
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return request.headers.get("x-real-ip") || "unknown";
+}
+
+// Returns true if this IP is over its failed-attempt budget. Opportunistically
+// evicts expired entries so the map can't grow unbounded under sustained abuse.
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = failCounts.get(ip);
+  if (!entry || now > entry.resetAt) return false;
+  return entry.count >= FAIL_MAX;
+}
+
+function recordFailure(ip: string): void {
+  const now = Date.now();
+  const entry = failCounts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    failCounts.set(ip, { count: 1, resetAt: now + FAIL_WINDOW_MS });
+  } else {
+    entry.count += 1;
+  }
+  // Bound memory: prune expired entries when the map gets large.
+  if (failCounts.size > 5000) {
+    for (const [k, v] of failCounts) {
+      if (now > v.resetAt) failCounts.delete(k);
+    }
+  }
+}
+
+function tooManyRequests(): NextResponse {
+  return NextResponse.json(
+    { error: "Too many failed attempts. Try again later." },
+    { status: 429, headers: { "Retry-After": "60" } },
+  );
+}
+
 export const config = {
   // Run on all pages and API routes; skip Next internals and static assets.
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
@@ -77,6 +126,18 @@ export function middleware(request: NextRequest) {
 
   const hasValidCookie = request.cookies.get(SESSION_COOKIE)?.value === apiKey;
   const hasValidHeader = request.headers.get("x-api-key") === apiKey;
+
+  // Already authenticated requests skip the throttle entirely (no added latency).
+  // Anyone else is a potential brute-forcer: block if over budget before we even
+  // compare keys, so guessing can't outrun the window.
+  if (!hasValidCookie && !hasValidHeader) {
+    const ip = clientIp(request);
+    if (isRateLimited(ip)) return tooManyRequests();
+    // A request that presents no credentials at all (just loading the login
+    // page) shouldn't burn budget; only count attempts that try a key.
+    const attemptedKey = searchParams.get("key") || request.headers.get("x-api-key");
+    if (attemptedKey && attemptedKey !== apiKey) recordFailure(ip);
+  }
 
   // Login via ?key=<CRM_API_KEY>: set an httpOnly session cookie, then redirect
   // to the same URL with the key stripped so it never lingers in history/logs.
