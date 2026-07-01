@@ -1,6 +1,6 @@
 import type { ReplyMode } from "@/types";
 import { getDb } from "@/lib/db";
-import { getMessagesByContactId } from "@/lib/db/service";
+import { getMessagesByContactId, getIntentScore } from "@/lib/db/service";
 import { extractMemory, moodLabel } from "@/lib/ai/memory";
 import { apiError, apiOk } from "@/lib/api-error";
 import { suggestReply } from "@/lib/ai/suggest-reply";
@@ -27,15 +27,21 @@ export async function POST(request: Request) {
 
     const db = await getDb();
     const meta = await db
-      .prepare("SELECT total_spent, favorite_content_type, offer_declined_count, emotional_temp FROM contacts WHERE id = ?")
-      .get(contactId) as { total_spent: number; favorite_content_type: string | null; offer_declined_count: number; emotional_temp: number } | undefined;
+      .prepare("SELECT total_spent, favorite_content_type, offer_declined_count, emotional_temp, conv_state FROM contacts WHERE id = ?")
+      .get(contactId) as { total_spent: number; favorite_content_type: string | null; offer_declined_count: number; emotional_temp: number; conv_state: string } | undefined;
 
-    const memory = extractMemory(messages);
+    const incomingMessages = messages.filter((m) => m.direction === "incoming");
+    const [memory, intentScore] = await Promise.all([
+      Promise.resolve(extractMemory(messages)),
+      getIntentScore(incomingMessages.slice(-10)),
+    ]);
+
     const emotionalTemp = meta?.emotional_temp ?? 50;
     const recent = messages.slice(-20);
-    const suggestion = await suggestReply(recent, mode, emotionalTemp, 0, {
+    const suggestion = await suggestReply(recent, mode, emotionalTemp, intentScore, {
       isPaid: (meta?.total_spent ?? 0) > 0,
       favoriteContent: meta?.favorite_content_type || undefined,
+      convState: meta?.conv_state,
       facts: memory.facts,
       nickname: memory.nickname,
       answered: memory.answered,
