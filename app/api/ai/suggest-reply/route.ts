@@ -38,10 +38,18 @@ export async function POST(request: Request) {
 
     const emotionalTemp = meta?.emotional_temp ?? 50;
     const recent = messages.slice(-20);
+
+    // previousTopic: last thing Nayra said, stripped of any payment link or URL
+    const lastOutgoing = [...recent].reverse().find(m => m.direction === "outgoing");
+    const previousTopic = lastOutgoing
+      ? lastOutgoing.text.replace(/\[link\].*/i, "").replace(/https?:\/\/\S+/g, "").trim().slice(0, 80) || undefined
+      : undefined;
+
     const suggestion = await suggestReply(recent, mode, emotionalTemp, intentScore, {
       isPaid: (meta?.total_spent ?? 0) > 0,
       favoriteContent: meta?.favorite_content_type || undefined,
       convState: meta?.conv_state,
+      previousTopic,
       facts: memory.facts,
       nickname: memory.nickname,
       answered: memory.answered,
