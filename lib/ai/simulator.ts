@@ -9,10 +9,8 @@
 
 import { suggestReply } from "./suggest-reply";
 import { extractMemory, moodLabel } from "./memory";
+import { rawCompletion, OPENROUTER_MODEL_FREE } from "./provider";
 import { getIntentScore } from "@/lib/db/service";
-
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "google/gemma-4-31b-it:free";
 
 export type PersonaKey =
   | "shy" | "romantic" | "horny" | "timepass"
@@ -86,30 +84,15 @@ async function generateFanMessage(persona: Persona, transcript: Turn[]): Promise
     ? history + "\n\nReply as 'You' with ONE short message. Stay in character."
     : "Send your FIRST message to her. ONE short line.";
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-  try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: "system", content: persona.fanPrompt + " Never break character. Never mention being an AI. One short message only." },
-          { role: "user", content: userPrompt },
-        ],
-        max_tokens: 60,
-        temperature: 1.05,
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`Fan gen error ${res.status}`);
-    const body = await res.json();
-    const text: string | undefined = body?.choices?.[0]?.message?.content;
-    return (text ?? "hmm").trim().replace(/^You:\s*/i, "") || "hmm";
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  const text = await rawCompletion({
+    model: OPENROUTER_MODEL_FREE,
+    system: persona.fanPrompt + " Never break character. Never mention being an AI. One short message only.",
+    user: userPrompt,
+    maxTokens: 60,
+    temperature: 1.05,
+    apiKey,
+  });
+  return text.trim().replace(/^You:\s*/i, "") || "hmm";
 }
 
 const EMOJI_RE = /\p{Extended_Pictographic}/gu;
@@ -307,6 +290,7 @@ export async function simulateConversation(
       mood: moodLabel(temp),
       facts: memory.facts,
       nickname: memory.nickname,
+      answered: memory.answered,
     });
 
     transcript.push({ role: "nayra", text: reply });

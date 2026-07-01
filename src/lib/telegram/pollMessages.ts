@@ -303,6 +303,7 @@ async function sendAiReply(
     mood: moodLabel(emotionalTemp),
     facts: memory.facts,
     nickname: memory.nickname,
+    answered: memory.answered,
     lastOfferResult,
   });
 

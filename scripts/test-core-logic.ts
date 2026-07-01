@@ -6,6 +6,8 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import { sanitizeReply } from "../lib/ai/suggest-reply";
+import { extractMemory } from "../lib/ai/memory";
+import { selectTier } from "../lib/ai/provider";
 
 const TEST_DB_PATH = path.join(process.cwd(), "data", "test-core.db");
 
@@ -456,6 +458,108 @@ async function main() {
   assertEqual(sanitizeReply("haan"), "haan", "one-word reply untouched");
   // Empty / markup-only input yields empty (caller falls back).
   assertEqual(sanitizeReply("  "), "", "whitespace-only yields empty");
+
+  // Spaced hyphen used as em-dash substitute — only between letter-letter pairs.
+  assertEqual(sanitizeReply("acha - chalo"), "acha, chalo", "spaced hyphen between words → comma");
+  assert(!sanitizeReply("tu - main dono").includes(" - "), "spaced hyphen stripped");
+  // Number ranges must survive (the regex only fires on [a-zA-Z] on both sides).
+  assertEqual(sanitizeReply("2 - 3 min lega"), "2 - 3 min lega", "number range untouched");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n=== selectTier: provider tier selection ===\n");
+
+  // smart tier: emotionallyCharged wins over everything, including trivial
+  assertEqual(selectTier({ emotionalTemp: 50, intentScore: 0, contextChars: 100, emotionallyCharged: true, trivial: true }), "smart", "charged + trivial → smart (charged wins)");
+  assertEqual(selectTier({ emotionalTemp: 20, intentScore: 0, contextChars: 100, emotionallyCharged: true, trivial: false }), "smart", "charged + cold → smart");
+
+  // smart tier: long context
+  assertEqual(selectTier({ emotionalTemp: 30, intentScore: 20, contextChars: 1800, emotionallyCharged: false, trivial: false }), "smart", "contextChars >= 1800 → smart");
+  assertEqual(selectTier({ emotionalTemp: 30, intentScore: 20, contextChars: 1799, emotionallyCharged: false, trivial: false }), "cheap", "contextChars 1799 (just under) → cheap");
+
+  // smart tier: hot conversation
+  assertEqual(selectTier({ emotionalTemp: 70, intentScore: 0, contextChars: 100, emotionallyCharged: false, trivial: false }), "smart", "emotionalTemp >= 70 → smart");
+  assertEqual(selectTier({ emotionalTemp: 69, intentScore: 0, contextChars: 100, emotionallyCharged: false, trivial: false }), "cheap", "emotionalTemp 69 → cheap");
+
+  // smart tier: high purchase intent
+  assertEqual(selectTier({ emotionalTemp: 50, intentScore: 60, contextChars: 100, emotionallyCharged: false, trivial: false }), "smart", "intentScore >= 60 → smart");
+  assertEqual(selectTier({ emotionalTemp: 50, intentScore: 59, contextChars: 100, emotionallyCharged: false, trivial: false }), "cheap", "intentScore 59 → cheap");
+
+  // fast tier: trivial one-liner (no high-stakes signals)
+  assertEqual(selectTier({ emotionalTemp: 50, intentScore: 0, contextChars: 100, emotionallyCharged: false, trivial: true }), "fast", "trivial → fast");
+
+  // cheap tier: normal conversation
+  assertEqual(selectTier({ emotionalTemp: 50, intentScore: 30, contextChars: 500, emotionallyCharged: false, trivial: false }), "cheap", "normal conversation → cheap");
+  assertEqual(selectTier({ emotionalTemp: 0, intentScore: 0, contextChars: 0, emotionallyCharged: false, trivial: false }), "cheap", "all-zero non-trivial → cheap");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n=== extractMemory: answered topic detection ===\n");
+
+  const mkMsg = (text: string): { text: string; direction: "incoming" | "outgoing" } =>
+    ({ text, direction: "incoming" });
+
+  // Name extraction
+  let mem = extractMemory([mkMsg("mera naam rahul hai")]);
+  assert(mem.facts.some(f => f.includes("Rahul")), "name extracted from 'mera naam X hai'");
+  assert(mem.answered.includes("his name"), "name → answered['his name']");
+
+  mem = extractMemory([mkMsg("my name is arjun")]);
+  assert(mem.facts.some(f => f.includes("Arjun")), "name extracted from 'my name is X'");
+
+  // City extraction (requires FROM_CONTEXT near city name)
+  mem = extractMemory([mkMsg("main delhi se hoon")]);
+  assert(mem.facts.some(f => f.includes("Delhi")), "city extracted from 'X se hoon'");
+  assert(mem.answered.includes("where he's from"), "city → answered[\"where he's from\"]");
+
+  // City without FROM_CONTEXT → should NOT match (precision over recall)
+  mem = extractMemory([mkMsg("delhi is a great city")]);
+  assert(!mem.facts.some(f => f.includes("Delhi")), "passing city mention without FROM_CONTEXT not stored");
+
+  // Work / study
+  mem = extractMemory([mkMsg("main software developer hoon")]);
+  assert(mem.facts.some(f => f.includes("software/IT")), "work: developer detected");
+  assert(mem.answered.includes("what he does for work/study"), "work → answered");
+
+  mem = extractMemory([mkMsg("bhai main student hoon hostel mein")]);
+  assert(mem.facts.some(f => f.includes("student")), "work: student detected");
+
+  // Interest / hobby
+  mem = extractMemory([mkMsg("gym jata hoon daily bro")]);
+  assert(mem.facts.some(f => f.includes("gym")), "interest: gym detected");
+  assert(mem.answered.includes("his main hobby"), "interest → answered");
+
+  mem = extractMemory([mkMsg("cricket dekhna bahut pasand hai")]);
+  assert(mem.facts.some(f => f.includes("cricket")), "interest: cricket detected");
+
+  // Nickname — requires STRICTLY MORE THAN ONE use
+  mem = extractMemory([mkMsg("teri photos chahiye jaan")]);
+  assert(mem.nickname === undefined, "single endearment use → no nickname");
+
+  mem = extractMemory([mkMsg("jaan please bhej"), mkMsg("tu bahut cute hai jaan")]);
+  assert(mem.nickname === "jaan", "endearment used 2× → nickname set");
+
+  // Content requests: <2 → no signal; >=2 → content_want fact
+  mem = extractMemory([mkMsg("photo bhejo")]);
+  assert(!mem.facts.some(f => f.includes("pics/videos")), "single content request → no content_want fact");
+
+  mem = extractMemory([mkMsg("photo bhejo"), mkMsg("ek pic send karo")]);
+  assert(mem.facts.some(f => f.includes("pics/videos")), "2 content requests → content_want fact added");
+
+  // Empty history → all empty
+  mem = extractMemory([]);
+  assert(mem.facts.length === 0, "empty history → no facts");
+  assert(mem.answered.length === 0, "empty history → no answered");
+  assert(mem.nickname === undefined, "empty history → no nickname");
+
+  // Outgoing messages are ignored (only fan's messages matter)
+  mem = extractMemory([{ text: "mera naam nayra hai", direction: "outgoing" }]);
+  assert(mem.facts.length === 0, "outgoing messages never trigger memory extraction");
+
+  // Stopwords block false name matches
+  mem = extractMemory([mkMsg("i am busy right now")]);
+  assert(!mem.facts.some(f => f.includes("Busy")), "stopword 'busy' not stored as name");
+
+  mem = extractMemory([mkMsg("myself ready")]);
+  assert(!mem.facts.some(f => f.includes("Ready")), "stopword 'ready' not stored as name");
 
   // Cleanup
   db.close();

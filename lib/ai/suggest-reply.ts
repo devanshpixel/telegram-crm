@@ -1,9 +1,5 @@
 import type { ReplyMode } from "@/types";
-
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-// Free tier model — no credits required. Switch to openai/gpt-4o-mini when
-// OpenRouter credits are purchased (better instruction-following for Hinglish persona).
-const MODEL = "google/gemma-4-31b-it:free";
+import { generate, selectTier } from "./provider";
 
 // ─────────────────────────────────────────────
 // CORE PERSONA
@@ -261,6 +257,10 @@ export function sanitizeReply(raw: string): string {
   // Em/en dashes (and the ASCII "--" models use for them) → casual punctuation.
   // " word — word " reads as a comma pause; a glued em dash becomes a space.
   s = s.replace(/\s*[—–―]\s*/g, ", ").replace(/\s+--\s+/g, ", ");
+  // A single spaced hyphen used as an em-dash substitute ("acha - chalo") is an
+  // AI tell too. Only convert when flanked by letters so number ranges like
+  // "2 - 3 min" survive untouched.
+  s = s.replace(/([a-zA-Z])\s+-\s+([a-zA-Z])/g, "$1, $2");
 
   // Collapse to a single line: a real reply is one bubble, not a paragraph.
   s = s.replace(/\s*\n+\s*/g, " ");
@@ -293,6 +293,7 @@ export async function suggestReply(
     mood?: string;
     facts?: string[];
     favoriteContent?: string;
+    answered?: string[];
   },
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -373,6 +374,11 @@ export async function suggestReply(
         "What you remember about him (weave in ONLY what fits naturally — never recite this list, never say 'I remember' or 'you told me'):\n" +
         parts.join("\n") + "\n\n";
     }
+    // Never re-interrogate — asking something he already told you is a bot tell.
+    if (context.answered && context.answered.length) {
+      crmContext +=
+        `He has ALREADY told you: ${context.answered.join(", ")}. Never ask about these again.\n\n`;
+    }
   }
 
   // Anti-repeat injection — guard against repeated openings/structure across the
@@ -391,58 +397,42 @@ export async function suggestReply(
     ? crmContext + "Conversation:\n" + transcript + "\n\nReply as Nayra. One message only. Short. Unpredictable. Match the energy but never copy the structure of your last reply." + antiRepeat
     : crmContext + "First message ever from this person. React naturally — be bold, not polite. 60% chance: no emoji at all.";
 
-  const fetchWithRetry = async (retryCount = 0): Promise<string> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    try {
-      const res = await fetch(OPENROUTER_URL, {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          max_tokens: 100,
-          temperature: 1.1,
-        }),
-        signal: controller.signal,
-      });
+  // Route to a model tier by how much this reply matters. A charged moment
+  // (objection, decline, at-risk cold) or a live offer gets the strong model;
+  // a throwaway one-liner gets the fast one; everything else the cheap default.
+  const emotionallyCharged =
+    hasObjection(messages) || context?.lastOfferResult === "declined" || emotionalTemp <= 25;
+  const lastIncomingText = messages
+    .filter((m) => m.direction === "incoming")
+    .slice(-1)[0]?.text.trim() ?? "";
+  const trivial =
+    !emotionallyCharged &&
+    intentScore < 30 &&
+    lastIncomingText.length > 0 &&
+    lastIncomingText.length <= 15 &&
+    lastIncomingText.split(/\s+/).length <= 3;
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        const err = new Error(`API error ${res.status}: ${errorText}`);
-        // 402 = no credits, 429 on free tier = rate limit (retry won't help immediately)
-        if (res.status === 402 || res.status === 429) {
-          throw Object.assign(err, { noRetry: true });
-        }
-        throw err;
-      }
+  const tier = selectTier({
+    emotionalTemp,
+    intentScore,
+    contextChars: systemPrompt.length + userPrompt.length,
+    emotionallyCharged,
+    trivial,
+  });
 
-      const body = await res.json();
-      const text: string | undefined = body?.choices?.[0]?.message?.content;
+  const result = await generate({
+    system: systemPrompt,
+    user: userPrompt,
+    tier,
+    maxTokens: 100,
+    temperature: 1.1,
+  });
 
-      if (!text || text.trim().length === 0) throw new Error("Empty response");
+  // Provider exhausted every model (or no key) → canned in-persona filler.
+  if (!result) return getFallbackReply();
 
-      const cleaned = sanitizeReply(text);
-      // If sanitization stripped everything (e.g. model returned only markup),
-      // fall back rather than sending an empty message.
-      if (!cleaned) return getFallbackReply();
-      return cleaned;
-    } catch (err) {
-      console.error("[AI_FETCH_ERROR]", err);
-      if (retryCount < 1 && !(err instanceof Error && (err as NodeJS.ErrnoException & { noRetry?: boolean }).noRetry)) {
-        return fetchWithRetry(retryCount + 1);
-      }
-      return getFallbackReply();
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  };
-
-  return fetchWithRetry();
+  // If sanitization strips everything (model returned only markup), fall back
+  // rather than sending an empty message.
+  const cleaned = sanitizeReply(result.text);
+  return cleaned || getFallbackReply();
 }

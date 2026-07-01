@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       favoriteContent: meta?.favorite_content_type || undefined,
       facts: memory.facts,
       nickname: memory.nickname,
+      answered: memory.answered,
       mood: moodLabel(emotionalTemp),
       lastOfferResult: (meta?.offer_declined_count ?? 0) > 0 ? "declined" : undefined,
     });
