@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { razorpay } from "@/lib/razorpay";
-import { recordPaid } from "@/lib/db/service";
+import { recordPaid, enqueueFailedAction } from "@/lib/db/service";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -44,6 +44,41 @@ async function handle(req: Request) {
         if (alreadyFixed) continue;
 
         await recordPaid(contact.id);
+
+        // Gap B safety net: a paid contact whose state lagged may also never have
+        // received the unlock message (e.g. the process died before the webhook
+        // could enqueue a retry). If their latest purchase's unlock was never
+        // delivered, enqueue an idempotent deliver_unlock so the customer is made
+        // whole. deliverUnlock dedups on the payment id, so this can't double-send.
+        const lastPurchase = await db
+          .prepare(
+            `SELECT note, payment_id FROM purchases
+             WHERE contact_id = ? ORDER BY created_at DESC LIMIT 1`
+          )
+          .get(contact.id) as { note: string | null; payment_id: string | null } | undefined;
+
+        if (lastPurchase) {
+          const note = lastPurchase.note || "";
+          const paymentId =
+            lastPurchase.payment_id ||
+            note.match(/razorpay_payment:([^:\s]+)/)?.[1] ||
+            `contact:${contact.id}`;
+          const mediaId = note.match(/media_unlock:([^:\s]+)/)?.[1] ?? null;
+          const delivered = await db
+            .prepare("SELECT key FROM settings WHERE key = ?")
+            .get(`unlock_delivered:${paymentId}`) as { key: string } | undefined;
+          if (!delivered) {
+            await enqueueFailedAction(
+              "deliver_unlock",
+              contact.id,
+              "recovered_by_failed_unlock_cron",
+              JSON.stringify({ contactId: contact.id, mediaId, paymentId }),
+              5,
+              `deliver_unlock:${paymentId}`,
+            );
+          }
+        }
+
         await db
           .prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, '1', ?)")
           .run(lockKey, new Date().toISOString());

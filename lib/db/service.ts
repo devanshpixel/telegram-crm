@@ -2663,20 +2663,47 @@ export async function getAllCrmIntelligence(): Promise<{
   };
 }
 
+// Exponential backoff for the retry queue. retry_count is the number of attempts
+// already made, so the first retry waits BACKOFF_BASE_MS, then doubles each time,
+// capped at BACKOFF_MAX_MS. Keeps a transient FloodWait/disconnect from being
+// hammered every cron tick while still recovering within minutes.
+const BACKOFF_BASE_MS = 60_000; // 1 min
+const BACKOFF_MAX_MS = 3_600_000; // 1 hour
+
+export function backoffMs(retryCount: number): number {
+  const raw = BACKOFF_BASE_MS * Math.pow(2, Math.max(0, retryCount));
+  return Math.min(BACKOFF_MAX_MS, raw);
+}
+
+/**
+ * Enqueue an action for the retry queue. When `dedupKey` is supplied, a second
+ * enqueue for the same key while the first is still unresolved is silently
+ * ignored (idempotent enqueue) — the partial unique index enforces this at the
+ * DB layer, so concurrent webhook + reconcile paths can't double-queue the same
+ * unlock delivery.
+ */
 export async function enqueueFailedAction(
   actionType: string,
   contactId: number,
   error: string,
   payload?: string,
   maxRetries: number = 3,
+  dedupKey?: string,
 ): Promise<void> {
   const db = await getDb();
-  await db
-    .prepare(
-      `INSERT INTO failed_actions (action_type, contact_id, payload, error, retry_count, max_retries, created_at)
-       VALUES (?, ?, ?, ?, 0, ?, ?)`
-    )
-    .run(actionType, contactId, payload ?? null, error, maxRetries, nowIso());
+  const ts = nowIso();
+  const sql = dedupKey
+    ? `INSERT OR IGNORE INTO failed_actions
+         (action_type, contact_id, payload, error, retry_count, max_retries, created_at, next_retry_at, dedup_key)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`
+    : `INSERT INTO failed_actions
+         (action_type, contact_id, payload, error, retry_count, max_retries, created_at, next_retry_at)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?)`;
+  if (dedupKey) {
+    await db.prepare(sql).run(actionType, contactId, payload ?? null, error, maxRetries, ts, ts, dedupKey);
+  } else {
+    await db.prepare(sql).run(actionType, contactId, payload ?? null, error, maxRetries, ts, ts);
+  }
 }
 
 export async function dequeueFailedActions(limit: number = 50): Promise<{
@@ -2688,14 +2715,16 @@ export async function dequeueFailedActions(limit: number = 50): Promise<{
   retryCount: number;
 }[]> {
   const db = await getDb();
+  const now = nowIso();
   const rows = await db
     .prepare(
       `SELECT id, action_type, contact_id, payload, error, retry_count
        FROM failed_actions
        WHERE resolved_at IS NULL AND retry_count < max_retries
-       ORDER BY created_at ASC LIMIT ?`
+         AND (next_retry_at IS NULL OR next_retry_at <= ?)
+       ORDER BY next_retry_at ASC, created_at ASC LIMIT ?`
     )
-    .all(limit) as {
+    .all(now, limit) as {
       id: number;
       action_type: string;
       contact_id: number;
@@ -2721,9 +2750,15 @@ export async function completeFailedAction(id: number, success: boolean): Promis
       .prepare("UPDATE failed_actions SET resolved_at = ?, last_retry_at = ? WHERE id = ?")
       .run(ts, ts, id);
   } else {
+    // Schedule the next attempt with exponential backoff based on the NEW retry_count.
+    const row = await db
+      .prepare("SELECT retry_count FROM failed_actions WHERE id = ?")
+      .get(id) as { retry_count: number } | undefined;
+    const nextCount = (row?.retry_count ?? 0) + 1;
+    const nextRetryAt = new Date(Date.now() + backoffMs(nextCount)).toISOString();
     await db
-      .prepare("UPDATE failed_actions SET retry_count = retry_count + 1, last_retry_at = ? WHERE id = ?")
-      .run(ts, id);
+      .prepare("UPDATE failed_actions SET retry_count = retry_count + 1, last_retry_at = ?, next_retry_at = ? WHERE id = ?")
+      .run(ts, nextRetryAt, id);
   }
 }
 

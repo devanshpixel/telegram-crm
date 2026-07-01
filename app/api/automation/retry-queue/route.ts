@@ -5,6 +5,7 @@ import { suggestReply } from "@/lib/ai/suggest-reply";
 import { extractMemory, moodLabel } from "@/lib/ai/memory";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 import { sendLockedResponse } from "@/src/lib/telegram/pollMessages";
+import { deliverUnlock } from "@/lib/payment/post-payment";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,14 +35,16 @@ async function handle(req: Request) {
       .prepare("UPDATE failed_actions SET resolved_at = ? WHERE resolved_at IS NULL AND retry_count >= max_retries")
       .run(new Date().toISOString());
 
+    const nowTs = new Date().toISOString();
     const rows = await db
       .prepare(
         `SELECT id, action_type, contact_id, payload, error, retry_count
          FROM failed_actions
          WHERE resolved_at IS NULL AND retry_count < max_retries
-         ORDER BY created_at ASC LIMIT 20`
+           AND (next_retry_at IS NULL OR next_retry_at <= ?)
+         ORDER BY next_retry_at ASC, created_at ASC LIMIT 20`
       )
-      .all() as {
+      .all(nowTs) as {
         id: number;
         action_type: string;
         contact_id: number;
@@ -62,6 +65,23 @@ async function handle(req: Request) {
           }
           case "send_locked_response": {
             await sendLockedResponse(action.contact_id);
+            break;
+          }
+          case "deliver_unlock": {
+            // Gap B recovery: resend the post-payment unlock. deliverUnlock is
+            // idempotent per payment id, so re-running never double-sends.
+            let contactId = action.contact_id;
+            let mediaId: string | null = null;
+            let deliveryId: string | null = null;
+            if (action.payload) {
+              try {
+                const p = JSON.parse(action.payload) as { contactId?: number; mediaId?: string | null; paymentId?: string };
+                if (typeof p.contactId === "number") contactId = p.contactId;
+                mediaId = p.mediaId ?? null;
+                deliveryId = p.paymentId ?? null;
+              } catch { /* payload not JSON — fall back to contact-only delivery */ }
+            }
+            await deliverUnlock(contactId, mediaId, deliveryId);
             break;
           }
           case "reengage": {
@@ -99,9 +119,13 @@ async function handle(req: Request) {
 
         results.push({ id: action.id, actionType: action.action_type, contactId: action.contact_id, success: true });
       } catch (e) {
+        // Exponential backoff so a persistent failure isn't hammered each tick.
+        const nextCount = action.retry_count + 1;
+        const backoff = Math.min(3_600_000, 60_000 * Math.pow(2, nextCount));
+        const nextRetryAt = new Date(Date.now() + backoff).toISOString();
         await db
-          .prepare("UPDATE failed_actions SET retry_count = retry_count + 1, last_retry_at = ? WHERE id = ?")
-          .run(new Date().toISOString(), action.id);
+          .prepare("UPDATE failed_actions SET retry_count = retry_count + 1, last_retry_at = ?, next_retry_at = ? WHERE id = ?")
+          .run(new Date().toISOString(), nextRetryAt, action.id);
 
         results.push({
           id: action.id,

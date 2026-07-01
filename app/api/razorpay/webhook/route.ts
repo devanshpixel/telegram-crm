@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { WEBHOOK_SECRET } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
-import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid } from "@/lib/db/service";
-import { handlePostPayment } from "@/lib/payment/post-payment";
+import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid, enqueueFailedAction } from "@/lib/db/service";
+import { deliverUnlock } from "@/lib/payment/post-payment";
 
 export async function POST(request: Request) {
   try {
@@ -82,11 +82,26 @@ export async function POST(request: Request) {
             await recalculateSpendSegment(contactId);
             await recordPaid(contactId);
 
-            // Send Telegram confirmation (best-effort, never fails the webhook)
+            // Gap B: the purchase is now durably recorded. Deliver the unlock, and
+            // if delivery fails (FloodWait, disconnect, timeout, API error) enqueue a
+            // retry keyed on the payment id so the recovery cron resends idempotently.
+            // Never fail the webhook — Razorpay must get its 2xx.
             try {
-              await handlePostPayment(contactId, mediaId);
+              await deliverUnlock(contactId, mediaId, paymentId);
             } catch (e) {
-              console.error(`[Razorpay Webhook] Failed to send Telegram confirmation to ${contactId}:`, e);
+              console.error(`[Razorpay Webhook] Unlock delivery failed for ${contactId}, enqueuing retry:`, e);
+              try {
+                await enqueueFailedAction(
+                  "deliver_unlock",
+                  contactId,
+                  e instanceof Error ? e.message : String(e),
+                  JSON.stringify({ contactId, mediaId: mediaId ?? null, paymentId }),
+                  5,
+                  `deliver_unlock:${paymentId}`,
+                );
+              } catch (enqErr) {
+                console.error(`[Razorpay Webhook] Failed to enqueue unlock retry for ${contactId}:`, enqErr);
+              }
             }
           }
         } catch (error) {

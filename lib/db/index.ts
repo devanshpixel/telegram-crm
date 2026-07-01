@@ -147,6 +147,21 @@ function migrateBetterSqlite3(database: any): void {
     database.exec("ALTER TABLE contacts ADD COLUMN locked_response_count INTEGER NOT NULL DEFAULT 0");
   }
 
+  // Gap B: retry-queue backoff scheduling + idempotent enqueue dedup.
+  // failed_actions may pre-date these columns on an established DB.
+  const failedActionsTables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='failed_actions'")
+    .all() as { name: string }[];
+  if (failedActionsTables.length > 0) {
+    if (!columnExists(database, "failed_actions", "next_retry_at")) {
+      database.exec("ALTER TABLE failed_actions ADD COLUMN next_retry_at TEXT");
+    }
+    if (!columnExists(database, "failed_actions", "dedup_key")) {
+      database.exec("ALTER TABLE failed_actions ADD COLUMN dedup_key TEXT");
+    }
+    database.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_failed_actions_dedup ON failed_actions(dedup_key) WHERE dedup_key IS NOT NULL AND resolved_at IS NULL");
+  }
+
   const settingsTables = database
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'")
     .all() as { name: string }[];
@@ -250,6 +265,11 @@ export async function getDb(): Promise<AsyncDb> {
       } catch { /* already exists */ }
       // UNIQUE index on payment_id — NULLs don't conflict, so legacy rows are fine
       await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchases_payment_id ON purchases(payment_id) WHERE payment_id IS NOT NULL");
+
+      // Gap B: retry-queue backoff scheduling + idempotent enqueue dedup
+      try { await db.exec("ALTER TABLE failed_actions ADD COLUMN next_retry_at TEXT"); } catch { /* already exists */ }
+      try { await db.exec("ALTER TABLE failed_actions ADD COLUMN dedup_key TEXT"); } catch { /* already exists */ }
+      await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_failed_actions_dedup ON failed_actions(dedup_key) WHERE dedup_key IS NOT NULL AND resolved_at IS NULL");
 
       const contactColMigrations: [string, string][] = [
         ["spend_segment",              "TEXT NOT NULL DEFAULT 'prospect'"],

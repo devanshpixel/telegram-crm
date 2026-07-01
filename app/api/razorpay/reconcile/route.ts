@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { razorpay } from "@/lib/razorpay";
-import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid } from "@/lib/db/service";
-import { handlePostPayment } from "@/lib/payment/post-payment";
+import { createPurchase, recalculateLeadScore, recalculateSpendSegment, recordPaid, enqueueFailedAction } from "@/lib/db/service";
+import { deliverUnlock } from "@/lib/payment/post-payment";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -94,11 +94,23 @@ async function handle(req: Request) {
         // repeat buyers, whose 2nd purchase was previously suppressed because their
         // state was already PAID from the 1st.
         if (purchase.created) {
+          const mid = typeof mediaId === "string" ? mediaId : null;
           try {
-            const mid = typeof mediaId === "string" ? mediaId : null;
-            await handlePostPayment(contactId, mid);
+            await deliverUnlock(contactId, mid, paymentId);
           } catch (e) {
-            console.error(`[Reconcile] Failed to send confirmation to ${contactId}:`, e);
+            console.error(`[Reconcile] Unlock delivery failed for ${contactId}, enqueuing retry:`, e);
+            try {
+              await enqueueFailedAction(
+                "deliver_unlock",
+                contactId,
+                e instanceof Error ? e.message : String(e),
+                JSON.stringify({ contactId, mediaId: mid, paymentId }),
+                5,
+                `deliver_unlock:${paymentId}`,
+              );
+            } catch (enqErr) {
+              console.error(`[Reconcile] Failed to enqueue unlock retry for ${contactId}:`, enqErr);
+            }
           }
         }
 

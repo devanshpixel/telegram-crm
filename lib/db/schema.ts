@@ -186,11 +186,14 @@ CREATE TABLE IF NOT EXISTS failed_actions (
   max_retries INTEGER NOT NULL DEFAULT 3,
   created_at TEXT NOT NULL,
   last_retry_at TEXT,
+  next_retry_at TEXT,
+  dedup_key TEXT,
   resolved_at TEXT,
   FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_failed_actions_unresolved ON failed_actions(resolved_at) WHERE resolved_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_failed_actions_dedup ON failed_actions(dedup_key) WHERE dedup_key IS NOT NULL AND resolved_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS scheduled_replies (
   id INTEGER PRIMARY KEY,

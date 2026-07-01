@@ -326,6 +326,99 @@ async function main() {
   const shouldUpsellHigh = upsellCount0High === 0 && totalSpent1000 < 1000;
   assert(!shouldUpsellHigh, "high spender does not get first-purchase upsell");
 
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n=== Gap B: retry-queue backoff schedule ===\n");
+
+  // Mirrors backoffMs() in lib/db/service.ts: base 60s, doubling, capped at 1h.
+  function backoffMs(retryCount: number): number {
+    return Math.min(3_600_000, 60_000 * Math.pow(2, Math.max(0, retryCount)));
+  }
+  assertEqual(backoffMs(0), 60_000, "backoff attempt 0 = 60s");
+  assertEqual(backoffMs(1), 120_000, "backoff attempt 1 = 120s");
+  assertEqual(backoffMs(2), 240_000, "backoff attempt 2 = 240s");
+  assert(backoffMs(20) === 3_600_000, "backoff caps at 1h for large retry counts");
+  assert(backoffMs(0) < backoffMs(1) && backoffMs(1) < backoffMs(2), "backoff is strictly increasing until cap");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n=== Gap B: idempotent enqueue (dedup_key) ===\n");
+
+  db.prepare("DELETE FROM failed_actions").run();
+  const enqSql = db.prepare(
+    `INSERT OR IGNORE INTO failed_actions
+       (action_type, contact_id, payload, error, retry_count, max_retries, created_at, next_retry_at, dedup_key)
+     VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`
+  );
+  const dk = "deliver_unlock:pay_XYZ";
+  // Webhook path enqueues on delivery failure...
+  assertEqual(enqSql.run("deliver_unlock", contactId, "{}", "flood", 5, ts, ts, dk).changes, 1, "first deliver_unlock enqueue inserts");
+  // ...reconcile cron races and tries to enqueue the same payment — must be ignored
+  assertEqual(enqSql.run("deliver_unlock", contactId, "{}", "flood", 5, ts, ts, dk).changes, 0, "duplicate deliver_unlock (same dedup_key) ignored");
+  const faCount = (db.prepare("SELECT COUNT(*) AS c FROM failed_actions WHERE dedup_key = ?").get(dk) as { c: number }).c;
+  assertEqual(faCount, 1, "only one queued action for the payment");
+
+  // After resolution, the same payment could legitimately be re-queued (partial
+  // index only enforces uniqueness among UNRESOLVED rows).
+  db.prepare("UPDATE failed_actions SET resolved_at = ? WHERE dedup_key = ?").run(ts, dk);
+  assertEqual(enqSql.run("deliver_unlock", contactId, "{}", "flood", 5, ts, ts, dk).changes, 1, "re-enqueue allowed after prior row resolved");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n=== Gap B: dequeue respects next_retry_at backoff window ===\n");
+
+  db.prepare("DELETE FROM failed_actions").run();
+  const future = new Date(Date.now() + 3_600_000).toISOString();
+  const past = new Date(Date.now() - 1000).toISOString();
+  db.prepare(
+    `INSERT INTO failed_actions (action_type, contact_id, payload, error, retry_count, max_retries, created_at, next_retry_at)
+     VALUES ('send_message', ?, 'due', '', 1, 5, ?, ?)`
+  ).run(contactId, ts, past);
+  db.prepare(
+    `INSERT INTO failed_actions (action_type, contact_id, payload, error, retry_count, max_retries, created_at, next_retry_at)
+     VALUES ('send_message', ?, 'backing_off', '', 1, 5, ?, ?)`
+  ).run(contactId, ts, future);
+  const nowTs = new Date().toISOString();
+  const due = db.prepare(
+    `SELECT payload FROM failed_actions
+     WHERE resolved_at IS NULL AND retry_count < max_retries
+       AND (next_retry_at IS NULL OR next_retry_at <= ?)
+     ORDER BY next_retry_at ASC`
+  ).all(nowTs) as { payload: string }[];
+  assertEqual(due.length, 1, "only the due action is dequeued (backing-off one held)");
+  assertEqual(due[0].payload, "due", "the dequeued action is the one past its backoff window");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n=== Gap B: dead-letter after max_retries ===\n");
+
+  db.prepare("DELETE FROM failed_actions").run();
+  db.prepare(
+    `INSERT INTO failed_actions (action_type, contact_id, payload, error, retry_count, max_retries, created_at, next_retry_at)
+     VALUES ('deliver_unlock', ?, '{}', 'permafail', 5, 5, ?, ?)`
+  ).run(contactId, ts, past);
+  const activeBefore = db.prepare(
+    "SELECT COUNT(*) AS c FROM failed_actions WHERE resolved_at IS NULL AND retry_count < max_retries"
+  ).get() as { c: number };
+  assertEqual(activeBefore.c, 0, "exhausted action is not eligible for retry (dead-lettered)");
+  // Recovery cron marks it resolved so it stops accumulating
+  db.prepare("UPDATE failed_actions SET resolved_at = ? WHERE resolved_at IS NULL AND retry_count >= max_retries").run(ts);
+  const stillPending = db.prepare("SELECT COUNT(*) AS c FROM failed_actions WHERE resolved_at IS NULL").get() as { c: number };
+  assertEqual(stillPending.c, 0, "dead-lettered action marked resolved");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n=== Gap B: idempotent unlock delivery (settings gate) ===\n");
+
+  // deliverUnlock marks `unlock_delivered:<id>` only AFTER the confirmation sends.
+  // A retry sees the marker and skips the resend — no double confirmation.
+  db.prepare("DELETE FROM settings WHERE key LIKE 'unlock_delivered:%'").run();
+  const confirmKey = "unlock_delivered:pay_A";
+  function deliveredAlready(key: string): boolean {
+    return !!db.prepare("SELECT key FROM settings WHERE key = ?").get(key);
+  }
+  assert(!deliveredAlready(confirmKey), "first attempt: confirmation not yet marked → will send");
+  db.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, '1', ?)").run(confirmKey, ts);
+  assert(deliveredAlready(confirmKey), "after send: confirmation marked delivered");
+  // Retry (webhook redelivery / recovery cron) must find the marker and skip
+  const wouldResend = !deliveredAlready(confirmKey);
+  assert(!wouldResend, "retry skips resend — customer never gets a duplicate unlock");
+
   // Cleanup
   db.close();
   if (fs.existsSync(TEST_DB_PATH)) fs.unlinkSync(TEST_DB_PATH);
