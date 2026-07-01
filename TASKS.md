@@ -115,6 +115,13 @@
 ### Medium (re-engage idempotency) ✅
 - Re-engagement cron uses settings table dedup keys (same pattern as stale-leads, vip/whale followup)
 
+## Reliability + Test Hardening ✅
+
+- Dashboard logout: `POST /api/auth/logout` clears `crm_session` (session-gated, POST-only → CSRF-safe) + "Log out" button in Settings modal
+- Brute-force throttle in middleware: 10 failed `?key=`/`x-api-key` attempts per IP per 60s → HTTP 429 (authenticated traffic bypasses; memory-bounded)
+- Playwright e2e suite (`e2e/auth.spec.ts`, 8 tests): auth boundary — 401s, login cookie, logout, cron gate, 429 throttle. `npm run test:e2e`
+- KNOWN_LIMITATIONS refreshed: AI-fetch timeout (#6), payment UNIQUE index (#7), webhook permanent-failure 200 (#4) confirmed resolved; logout (#9) resolved; rate limiting (#2) partial
+
 ## Post-Launch
 
 - [ ] Monitor error logs for 24h
