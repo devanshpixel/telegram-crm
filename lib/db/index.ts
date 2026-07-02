@@ -319,7 +319,16 @@ export async function getDb(): Promise<AsyncDb> {
         UPDATE contacts SET favorite_content_type = '' WHERE favorite_content_type IS NULL;
       `);
     } catch (e: unknown) {
-      console.error("[DB] Turso init failed:", e instanceof Error ? e.message : String(e));
+      const asAny = e as Record<string, unknown>;
+      console.error("[DB] Turso init failed:", JSON.stringify({
+        name:       e instanceof Error ? e.name : typeof e,
+        message:    e instanceof Error ? e.message : String(e),
+        code:       typeof asAny?.code === "string" ? asAny.code : undefined,
+        rawCode:    typeof asAny?.rawCode === "number" ? asAny.rawCode : undefined,
+        stack:      e instanceof Error ? e.stack : undefined,
+        hasUrl:     Boolean(tursoUrl),
+        hasToken:   Boolean(tursoToken),
+      }));
     }
     global.__crmDb = db;
     return db;
