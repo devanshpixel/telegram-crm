@@ -139,6 +139,10 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+-- Composite index: every hot query orders messages by created_at within a
+-- conversation. Without this, SQLite sorts ALL matching rows after the
+-- conversation_id filter — causing poll timeouts on large message histories.
+CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_tags_contact ON tags(contact_id);
 CREATE INDEX IF NOT EXISTS idx_notes_contact ON notes(contact_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_contact ON purchases(contact_id);

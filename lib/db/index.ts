@@ -265,6 +265,10 @@ export async function getDb(): Promise<AsyncDb> {
       } catch { /* already exists */ }
       // UNIQUE index on payment_id — NULLs don't conflict, so legacy rows are fine
       await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchases_payment_id ON purchases(payment_id) WHERE payment_id IS NOT NULL");
+      // Composite index on messages — every hot query orders by created_at within a
+      // conversation; without this SQLite does a full sort after the conv filter,
+      // causing poll timeouts on large message histories.
+      await db.exec("CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at)");
 
       // Ensure failed_actions exists — added after initial schema deployment so older
       // production DBs that skipped SCHEMA_SQL re-run never received this table.
