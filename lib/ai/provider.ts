@@ -25,25 +25,10 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 // The free model that requires no OpenRouter credits — the guaranteed last resort.
 export const OPENROUTER_MODEL_FREE = "google/gemma-4-31b-it:free";
 
-// Named provider defaults per tier, matching the routing spec. These are only
-// consulted when the router is enabled (AI_ROUTER_ENABLED=1) — see modelChain().
-// Chain order: preferred → fallback (free model is always appended last).
-//   fast/cheap: gemini-2.5-flash → free
-//   smart:      claude-sonnet-4 → gemini-2.5-flash → free
-const TIER_DEFAULTS: Record<ModelTier, string[]> = {
-  fast:  ["google/gemini-2.5-flash"],
-  cheap: ["google/gemini-2.5-flash"],
-  smart: ["anthropic/claude-sonnet-4", "google/gemini-2.5-flash"],
-};
-
-function routerEnabled(): boolean {
-  const v = process.env.AI_ROUTER_ENABLED;
-  return v === "1" || v === "true";
-}
-
-// Build the ordered fallback chain for a tier. Explicit per-tier env overrides
-// always win; named defaults are added when the router is enabled; the free
-// model is always appended so the chain can never be empty.
+// Build the ordered fallback chain for a tier. Always tries a fast paid model
+// (gemini-2.5-flash) first and falls back to the free model on 402/429, so the
+// common case completes in 1-3s instead of waiting 8s for the free model.
+// Explicit per-tier env overrides are prepended when set.
 function modelChain(tier: ModelTier): string[] {
   const override = {
     fast: process.env.AI_MODEL_FAST,
@@ -53,10 +38,10 @@ function modelChain(tier: ModelTier): string[] {
 
   const chain: (string | undefined)[] = [];
   if (override) chain.push(override);
-  if (routerEnabled()) chain.push(...TIER_DEFAULTS[tier]);
+  // Always try gemini-2.5-flash first — instant 402 if no credits (skips to free)
+  chain.push("google/gemini-2.5-flash");
   chain.push(OPENROUTER_MODEL_FREE);
 
-  // De-dupe while preserving order (an override equal to a default, etc.).
   return Array.from(new Set(chain.filter((m): m is string => !!m)));
 }
 

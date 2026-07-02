@@ -181,7 +181,7 @@ export function buildTranscript(
   messages: { text: string; direction: "incoming" | "outgoing" }[],
 ): string {
   return messages
-    .slice(-12)
+    .slice(-8)
     .map((m) => (m.direction === "incoming" ? "Fan" : "Nayra") + ": " + m.text)
     .join("\n");
 }
@@ -465,9 +465,9 @@ export async function suggestReply(
     system: systemPrompt,
     user: userPrompt,
     tier,
-    maxTokens: 100,
+    maxTokens: 60,
     temperature: 1.1,
-    timeoutMs: 8000,
+    timeoutMs: 5000,
   });
 
   // Provider exhausted every model (or no key) → canned in-persona filler.
