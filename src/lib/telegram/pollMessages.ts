@@ -808,6 +808,15 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           console.warn("[Poll] Timeout reached during reply dispatch, remaining jobs skipped");
           break;
         }
+        // Set presence to offline before AI generation so contacts don't see
+        // "Nayra online" while she's supposedly "thinking". Telegram auto-restores
+        // the online flag when the next message or typing action is sent.
+        try {
+          const client = await getTelegramClient();
+          await client.invoke(new Api.account.UpdateStatus({ offline: true }));
+        } catch (e) {
+          console.warn("[Poll] Failed to set offline status:", e);
+        }
         const batch = replyJobs.slice(i, i + REPLY_CONCURRENCY);
         await Promise.allSettled(
           batch.map(job => processReplyJob(job, summary, automatedReplies, aiMode)),
@@ -835,6 +844,23 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       console.error("[Poll] Failed to release polling lock:", e);
     }
   }
+
+  // Fire-and-forget self-trigger: schedule the next poll immediately instead of
+  // waiting for the GitHub Actions 60s cron. This reduces the gap between polls
+  // to ~poll_duration + HTTP round-trip (~100ms). On Vercel Hobby (1 concurrent
+  // execution) the request is queued until the current invocation finishes.
+  // The GitHub Actions 60s cron acts as a safety net if the chain breaks.
+  try {
+    const appUrl = getAppUrl();
+    const secret = process.env.CRON_SECRET;
+    if (appUrl && secret) {
+      fetch(`${appUrl}/api/telegram/poll`, {
+        method: "POST",
+        headers: { "x-cron-secret": secret, "content-type": "application/json" },
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => {});
+    }
+  } catch {}
 
   return summary;
 }

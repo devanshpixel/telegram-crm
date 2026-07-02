@@ -2033,6 +2033,7 @@ export async function getIntentScore(messages: { text: string }[]): Promise<numb
     "subscription", "membership", "unlock", "join", "link", "how much",
     "kitna", "kitne", "send link", "meeting", "voice", "custom", "photos",
     "photo", "pic", "pics", "video", "private", "nude", "nudes", "sext", "sexting",
+    "selfie", "show yourself", "dikhana",
   ];
   const indirect = [
     "chahiye", "do na", "bhej de", "dikha", "want", "need", "show me",

@@ -349,6 +349,12 @@ export async function suggestReply(
     const objected = hasObjection(messages);
     const lastText = messages.filter(m => m.direction === "incoming").slice(-1).map(m => m.text.toLowerCase()).join(" ");
     const linkRequested = /send link|link do|payment kar|pay karna|ready.*buy|ready.*pay|join kar|send.*payment/i.test(lastText);
+    // Detect explicit content requests (photo, pic, selfie, etc.) — skip hint phase
+    const contentWords = ["photo", "pic", "pics", "photos", "selfie", "video", "dikha", "dikhana", "show yourself", "nude", "nudes", "send me"];
+    const hasContentRequest = messages
+      .filter(m => m.direction === "incoming")
+      .slice(-2)
+      .some(m => contentWords.some(w => m.text.toLowerCase().includes(w)));
 
     const effectiveCount = emotionalTemp >= 70 ? incomingCount + 2 : emotionalTemp <= 30 ? incomingCount - 1 : incomingCount;
     const adjustedCount = Math.max(0, effectiveCount);
@@ -374,7 +380,10 @@ export async function suggestReply(
         systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_2_RAPPORT);
       }
     } else if (resolvedMode === "sales") {
-      if (adjustedCount <= 2 && intentScore < 50) {
+      if (hasContentRequest) {
+        // Explicit content request — skip hint phase, go straight to offer
+        systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_5_OFFER);
+      } else if (adjustedCount <= 2 && intentScore < 50) {
         systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_4_INTEREST);
       } else {
         systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_5_OFFER);
