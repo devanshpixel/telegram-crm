@@ -1,0 +1,14 @@
+name: Failed Unlock Cron
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+jobs:
+  unlock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger failed unlock
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "https://telegram-crm.vercel.app/api/automation/failed-unlock"

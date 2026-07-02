@@ -1,0 +1,14 @@
+name: Poll Cron
+on:
+  schedule:
+    - cron: '* * * * *'
+  workflow_dispatch:
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Telegram poll
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "https://telegram-crm.vercel.app/api/telegram/poll"

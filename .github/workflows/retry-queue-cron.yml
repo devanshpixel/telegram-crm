@@ -1,0 +1,14 @@
+name: Retry Queue Cron
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger retry queue
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "https://telegram-crm.vercel.app/api/automation/retry-queue"
