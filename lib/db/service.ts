@@ -460,9 +460,10 @@ export async function createMessage(
   text: string,
   direction: MessageDirection = "outgoing",
   telegramMessageId?: number | null,
+  conversationId?: number | null,
 ): Promise<Message | null> {
-  const conversationId = await getConversationIdByContactId(contactId);
-  if (!conversationId) return null;
+  const convId = conversationId ?? (await getConversationIdByContactId(contactId));
+  if (!convId) return null;
 
   const db = await getDb();
 
@@ -470,7 +471,7 @@ export async function createMessage(
   if (telegramMessageId != null) {
     const exists = await db
       .prepare("SELECT id FROM messages WHERE telegram_message_id = ? AND conversation_id = ?")
-      .get(telegramMessageId, conversationId);
+      .get(telegramMessageId, convId);
     if (exists) return null;
   }
   const ts = nowIso();
@@ -483,7 +484,7 @@ export async function createMessage(
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(
-        conversationId,
+        convId,
         text.trim(),
         direction,
         isRead,
@@ -498,7 +499,7 @@ export async function createMessage(
         unread_count = CASE WHEN ? = 'incoming' THEN unread_count + 1 ELSE unread_count END,
         updated_at = ?
       WHERE id = ?`,
-    ).run(text.trim(), ts, direction, ts, conversationId);
+    ).run(text.trim(), ts, direction, ts, convId);
 
     return (await db
       .prepare("SELECT * FROM messages WHERE id = ?")
