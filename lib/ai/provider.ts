@@ -27,10 +27,13 @@ export const OPENROUTER_MODEL_FREE = "google/gemma-4-31b-it:free";
 
 // Named provider defaults per tier, matching the routing spec. These are only
 // consulted when the router is enabled (AI_ROUTER_ENABLED=1) — see modelChain().
+// Chain order: preferred → fallback (free model is always appended last).
+//   fast/cheap: gemini-2.5-flash → free
+//   smart:      claude-sonnet-4 → gemini-2.5-flash → free
 const TIER_DEFAULTS: Record<ModelTier, string[]> = {
-  fast: ["google/gemini-flash-1.5"],
-  cheap: ["google/gemini-flash-1.5"],
-  smart: ["anthropic/claude-3.5-sonnet"],
+  fast:  ["google/gemini-2.5-flash"],
+  cheap: ["google/gemini-2.5-flash"],
+  smart: ["anthropic/claude-sonnet-4", "google/gemini-2.5-flash"],
 };
 
 function routerEnabled(): boolean {
@@ -124,9 +127,12 @@ export async function rawCompletion(args: RawCompletionArgs): Promise<string> {
   }
 
   const controller = new AbortController();
-  // 8 s per attempt keeps worst-case (2 attempts) at ≤16 s per model, well within
-  // the 50 s poll budget even when several models are tried.
-  const timeoutId = setTimeout(() => controller.abort(), args.timeoutMs ?? 8000);
+  // 5 s per attempt: fast enough to fall through to the next model quickly.
+  // Timeouts are noRetry — if a model didn't respond in 5 s, retrying it
+  // just wastes another 5 s; move straight to the next model in the chain.
+  const timeoutMs = args.timeoutMs ?? 5000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const t0 = Date.now();
   try {
     const res = await fetch(OPENROUTER_URL, {
       method: "POST",
@@ -150,7 +156,7 @@ export async function rawCompletion(args: RawCompletionArgs): Promise<string> {
       const errorText = await res.text();
       const err: RetryableError = new Error(`API error ${res.status}: ${errorText}`);
       err.status = res.status;
-      // No credits / rate-limited → retrying the same model won't help; move on.
+      // No credits / rate-limited / timeout → skip to next model immediately.
       if (res.status === 402 || res.status === 429) err.noRetry = true;
       throw err;
     }
@@ -159,8 +165,22 @@ export async function rawCompletion(args: RawCompletionArgs): Promise<string> {
     const text: string | undefined = body?.choices?.[0]?.message?.content;
     if (!text || text.trim().length === 0) throw new Error("Empty response");
     return text;
+  } catch (err) {
+    // AbortError = our own timeout fired → noRetry so generate() skips to next model.
+    if (err instanceof Error && err.name === "AbortError") {
+      const e: RetryableError = new Error(`Timeout after ${timeoutMs} ms`);
+      e.noRetry = true;
+      throw e;
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
+    // Latency logged here so it covers both success and failure paths.
+    console.log(JSON.stringify({
+      event: "ai_call",
+      model: args.model,
+      latencyMs: Date.now() - t0,
+    }));
   }
 }
 
@@ -185,8 +205,11 @@ export async function generate(args: GenerateArgs): Promise<{ text: string; mode
   if (!process.env.OPENROUTER_API_KEY) return null;
 
   const models = modelChain(args.tier);
+  let fallbackReason: string | undefined;
+
   for (const model of models) {
-    // One transient retry per model; noRetry errors (402/429) skip straight on.
+    // One transient retry per model. Timeouts and rate-limits are noRetry —
+    // they skip straight to the next model without burning another attempt.
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const text = await rawCompletion({
@@ -197,15 +220,30 @@ export async function generate(args: GenerateArgs): Promise<{ text: string; mode
           temperature: args.temperature,
           timeoutMs: args.timeoutMs,
         });
-        if (text && text.trim()) return { text, model };
-        break; // empty response → next model (retrying the same one won't help)
+        if (text && text.trim()) {
+          if (fallbackReason) {
+            console.log(JSON.stringify({ event: "ai_fallback_used", model, fallbackReason }));
+          }
+          return { text, model };
+        }
+        fallbackReason = "empty_response";
+        break;
       } catch (err) {
-        console.error(`[AI_PROVIDER] ${model} attempt ${attempt} failed:`, err);
-        if ((err as RetryableError)?.noRetry) break; // → next model
-        if (attempt === 1) break; // exhausted same-model retries → next model
-        // otherwise loop once more on the same model (transient network/timeout)
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(JSON.stringify({ event: "ai_model_failed", model, attempt, reason: msg }));
+        if ((err as RetryableError)?.noRetry) {
+          fallbackReason = msg;
+          break; // skip to next model immediately
+        }
+        if (attempt === 1) {
+          fallbackReason = msg;
+          break; // exhausted same-model retries
+        }
+        // loop once more on the same model (transient network error, not timeout)
       }
     }
   }
+
+  console.log(JSON.stringify({ event: "ai_all_models_failed", tier: args.tier, fallbackReason }));
   return null;
 }
