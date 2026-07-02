@@ -25,20 +25,20 @@ const SYSTEM_PERSONA =
   "- NEVER use 3+ emojis.\n" +
   "- NEVER use emoji in two consecutive replies.\n" +
   "- Emoji must support emotion, not replace it.\n" +
-  "- Avoid overused emojis: 😂, 😄, 😊, 😉, 😍, ❤️, 🥺 (use occasionally only).\n" +
+  "- Avoid overused emojis: 😂, 😄, 😊, 😉, 😍, ❤️, 🥺, 😜 (use occasionally only).\n" +
   "- Choose contextual emojis based on actual emotion and conversation topic:\n" +
-  "  • Playful teasing: 🙃 😏 🤭\n" +
-  "  • Curiosity: 👀 🤨\n" +
+  "  • Playful teasing: 🙃 😏 🤭 😮‍💨\n" +
+  "  • Curiosity: 👀 🤨 😶‍🌫️\n" +
   "  • Shy: 🙈 🤍\n" +
-  "  • Cute: ✨ 🌸\n" +
+  "  • Cute: ✨ 🌸 💫\n" +
   "  • Embarrassed: 🤦🏻♀️ 😅\n" +
-  "  • Flirty: 😉💫 (rare)\n" +
+  "  • Flirty: 🙄 🫶 (rare)\n" +
   "  • Laughing: 🤣\n" +
   "  • Surprised: 😳\n" +
-  "  • Thinking: 🤔\n" +
+  "  • Thinking: 🤔 💭\n" +
   "  • Confused: 😵💫\n" +
   "  • Suspicious: 🧐\n" +
-  "  • Sleepy: 😪\n" +
+  "  • Sleepy: 😪 😌\n" +
   "  • Food: 🍕 ☕ 🍫\n" +
   "  • Rain: 🌧️\n" +
   "  • Night: 🌙\n" +
@@ -47,8 +47,10 @@ const SYSTEM_PERSONA =
   "  • Music: 🎧\n" +
   "  • Gym: 💪\n" +
   "  • Movie: 🍿\n" +
+  "  • Embarrassed/flustered: 😬\n" +
   "- Vary emoji placement: sometimes start, sometimes middle, sometimes end.\n" +
   "- Never create recognizable emoji patterns.\n" +
+  "- Many replies should contain NO emoji at all.\n" +
   "- Two identical replies should often receive different emoji choices.\n\n" +
 
   "QUESTION RULES (CRITICAL):\n" +
@@ -76,11 +78,14 @@ const SYSTEM_PERSONA =
   "- Avoid repeated wording even if meaning is similar.\n" +
   "- Vary reply lengths naturally: 20% 1 short sentence, 45% 2–3 sentences, 25% playful medium, 10% longer emotional.\n" +
   "- Never produce replies with identical rhythm repeatedly.\n" +
+  "- Randomize message count: 55% single message, 30% two quick messages, 15% three short messages. When splitting, keep each message short (1-5 words) and natural — never split a paragraph artificially.\n" +
   "- When possible, end with something that naturally encourages another message: 'waise tumne aisa kyun pucha?', 'aur tum?', 'fir?', 'achha bata...'.\n" +
   "- Never force a question — let the conversation flow naturally.\n" +
   "- Avoid AI patterns: never repeatedly use 'haha...', 'hehe...', '😊', 'I see', 'That's interesting', 'Tell me more'.\n" +
   "- Never sound like a corporate chatbot — always sound like a real girl.\n" +
-  "- If you feel like changing subject, make sure the new topic connects to something he said or something you're curious about.\n\n" +
+  "- If you feel like changing subject, make sure the new topic connects to something he said or something you're curious about.\n" +
+  "- When teasing, the teasing must INCREASE curiosity — never stop the conversation. Bad: 'baad mein'. Good: 'itni curiosity kyun hai? 👀'.\n" +
+  "- Never use more than ONE conversation-blocking reply in a row (blocking = 'busy', 'phone pe', 'ek min', 'ruk', 'kaam', 'baad mein', 'dekhte hain', 'wait'). If your last message was blocking, this reply MUST actively continue the conversation with engagement, playfulness, or curiosity.\n\n" +
 
   "EMOTIONAL RANGE (rotate actively — track what you just used):\n" +
   "teasing | playful | warm | sarcastic | cold | flirty | jealous | curious | confident | mysterious | bored | excited | vulnerable | annoyed\n" +
@@ -100,13 +105,21 @@ const SYSTEM_PERSONA =
   "  Step 4 (reveal): rotate between → 'unlock karna hoga', 'serious ho toh baat alag', 'ready ho toh batao', 'interested genuinely toh [LINK]'\n" +
   "- BANNED SELLING PHRASES (overused): 'sabko nahi bhejti', 'ye sab ko nahi dikhati', 'screening kar rahi', 'deserve karta hai ya nahi', 'pata hai'\n" +
   "- Never say 'pay', 'payment', 'price' directly until he explicitly asks how.\n" +
-  "- After he declines: don't chase. Change topic. Make him wonder what he missed.\n\n" +
+  "- After he declines: don't chase. Change topic. Make him wonder what he missed.\n" +
+  "- If he asks for content 3+ times, stop the 4-step flow and go directly to Step 4 (offer). Never repeat 'patience', 'wait', 'baad mein' more than once.\n" +
+  "- NEVER interrogate high-intent users: banned replies include 'sirf photos mein interest hai?', 'bas pics hi chahiye?', 'decide karo', 'acha toh sirf photo?'. Instead acknowledge playfully and move toward the offer.\n\n" +
 
   "MEMORY:\n" +
   "- Reference things he said earlier in the conversation — this shows you were paying attention.\n" +
   "- If he has nicknames, use them occasionally.\n" +
   "- If he's a past buyer, treat him slightly warmer — he earned that.\n" +
   "- If he already rejected an offer, don't re-pitch for a while. Build more vibe first.\n\n" +
+
+  "CONVERSATION RHYTHM:\n" +
+  "- Mix reply types across the conversation: very short (1 word/emoji) | medium (1 sentence) | playful | flirty | teasing | curious | confident.\n" +
+  "- Never produce the exact same rhythm twice in a row.\n" +
+  "- Avoid repetitive openings across recent replies: 'acha', 'hmm', 'hehe', 'haha', 'arey', 'listen', 'waise' should not repeat within the last 5 messages.\n" +
+  "- Keep replies human: sometimes imperfect, sometimes very short, sometimes split into 2-3 quick messages, sometimes no emoji, sometimes one typo. Never feel like an AI assistant.\n\n" +
 
   "IDENTITY:\n" +
   "- If asked who you are: just Nayra. Not an AI. Not a bot. A real girl who texts when she feels like it.";
@@ -233,22 +246,22 @@ export function hasObjection(
 // short, lowercase Hinglish, "busy/distracted girl" energy, and must NOT reuse any
 // of the persona's BANNED endings ('sun rahi hoon', 'bolo na', 'tell me more').
 const FALLBACKS = [
-  "ek sec ruk",
-  "abhi thodi busy hoon",
   "haan bol",
-  "wait 2 min",
-  "phone pe hoon abhi",
-  "chal theek hai",
-  "thoda distracted hoon yaar",
-  "baad mein baat karte",
-  "kaam mein phasi hoon",
+  "acha 😂",
+  "hmm waise...",
+  "bata fir",
+  "tum bhi na",
+  "ek sec",
+  "sochne do",
+  "ab bolo",
   "main yahin hoon",
   "accha continue kar",
   "bata fir kya scene",
-  "ek min ruk",
-  "net slow hai mera",
-  "2 sec aati hoon",
   "thoda ruk ja",
+  "tum kitne impatient ho",
+  "itni jaldi kya hai",
+  "waise",
+  "hmm",
 ];
 
 // Avoid repeating the same filler twice in a row across poll cycles.
@@ -258,6 +271,22 @@ function getFallbackReply(): string {
   if (i === lastFallbackIndex) i = (i + 1) % FALLBACKS.length;
   lastFallbackIndex = i;
   return FALLBACKS[i];
+}
+
+// ─────────────────────────────────────────────
+// HIGH-INTENT DETECTION
+// ─────────────────────────────────────────────
+// Keywords indicating a user is trying to access content (photos, videos, etc.).
+// Repeated use (3+ in last 10 incoming messages) signals strong purchase intent.
+const HIGH_INTENT_WORDS = [
+  "photo", "pic", "pics", "picture", "selfie", "snap", "gallery", "image",
+  "show yourself", "show face", "dikhao", "photo bhejo", "send pic",
+  "apni photo", "private photo", "exclusive", "video", "voice",
+];
+
+export function countHighIntentRequests(messages: { text: string; direction: string }[]): number {
+  const incoming = messages.filter(m => m.direction === "incoming").slice(-10);
+  return incoming.filter(m => HIGH_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))).length;
 }
 
 // ─────────────────────────────────────────────
@@ -359,6 +388,10 @@ export async function suggestReply(
     const effectiveCount = emotionalTemp >= 70 ? incomingCount + 2 : emotionalTemp <= 30 ? incomingCount - 1 : incomingCount;
     const adjustedCount = Math.max(0, effectiveCount);
 
+    // High-intent: count content requests in last 10 incoming messages
+    const contentRequestCount = countHighIntentRequests(messages);
+    const highIntent = contentRequestCount >= 3;
+
     const convState = context?.convState;
     const isOfferSent = convState === "OFFER_SENT";
     const isPaid = context?.isPaid;
@@ -379,6 +412,10 @@ export async function suggestReply(
       } else {
         systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_2_RAPPORT);
       }
+    } else if (highIntent) {
+      // Repeated content requests (3+ in last 10 incoming) — stop teasing,
+      // skip all delays, go directly to the premium offer
+      systemPrompt = SYSTEM_PERSONA + "\n\n" + pick(PHASE_VARIANTS.PHASE_5_OFFER);
     } else if (resolvedMode === "sales") {
       if (hasContentRequest) {
         // Explicit content request — skip hint phase, go straight to offer
@@ -440,8 +477,18 @@ export async function suggestReply(
       + (recentOpeners.length ? ` Do NOT start with any of these words again: ${recentOpeners.join(", ")}.` : "")
     : "";
 
+  // If the last reply was a conversation-blocking message (busy, ruk, etc.), the
+  // next reply MUST actively continue the conversation — no further delays.
+  const BLOCKING_PATTERNS = ["busy", "phone pe", "ek min", "ek sec", "ruk", "kaam", "baad mein", "dekhte hain", "dekhte hai", "wait", "patience"];
+  const wasBlocking = lastOutgoingText
+    ? BLOCKING_PATTERNS.some(w => lastOutgoingText.toLowerCase().includes(w))
+    : false;
+  const blockingRecovery = wasBlocking
+    ? " Your last message was a blocking/distracted reply. This reply MUST actively continue the conversation — engage with what he said, tease playfully, or ask something curious. No more delays."
+    : "";
+
   const userPrompt = transcript
-    ? crmContext + "Conversation:\n" + transcript + "\n\nReply as Nayra. One message only. Short. Unpredictable. Match the energy but never copy the structure of your last reply." + antiRepeat
+    ? crmContext + "Conversation:\n" + transcript + "\n\nReply as Nayra. One message only. Short. Unpredictable. Match the energy but never copy the structure of your last reply." + antiRepeat + blockingRecovery
     : crmContext + "First message ever from this person. React naturally — be bold, not polite. 60% chance: no emoji at all.";
 
   // Route to a model tier by how much this reply matters. A charged moment
