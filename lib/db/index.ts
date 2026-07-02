@@ -266,6 +266,27 @@ export async function getDb(): Promise<AsyncDb> {
       // UNIQUE index on payment_id — NULLs don't conflict, so legacy rows are fine
       await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchases_payment_id ON purchases(payment_id) WHERE payment_id IS NOT NULL");
 
+      // Ensure failed_actions exists — added after initial schema deployment so older
+      // production DBs that skipped SCHEMA_SQL re-run never received this table.
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS failed_actions (
+          id INTEGER PRIMARY KEY,
+          action_type TEXT NOT NULL,
+          contact_id INTEGER NOT NULL,
+          payload TEXT,
+          error TEXT NOT NULL,
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          max_retries INTEGER NOT NULL DEFAULT 3,
+          created_at TEXT NOT NULL,
+          last_retry_at TEXT,
+          next_retry_at TEXT,
+          dedup_key TEXT,
+          resolved_at TEXT,
+          FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_failed_actions_unresolved ON failed_actions(resolved_at) WHERE resolved_at IS NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_failed_actions_dedup ON failed_actions(dedup_key) WHERE dedup_key IS NOT NULL AND resolved_at IS NULL;
+      `);
       // Gap B: retry-queue backoff scheduling + idempotent enqueue dedup
       try { await db.exec("ALTER TABLE failed_actions ADD COLUMN next_retry_at TEXT"); } catch { /* already exists */ }
       try { await db.exec("ALTER TABLE failed_actions ADD COLUMN dedup_key TEXT"); } catch { /* already exists */ }
