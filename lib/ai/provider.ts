@@ -73,7 +73,10 @@ export interface TierSignals {
   trivial: boolean;
 }
 
-// Above this, the transcript+memory no longer fits a small model comfortably.
+// Above this, the dynamic context (transcript + memory) no longer fits a small
+// model comfortably. Measure only the user prompt (dynamic) — the system prompt
+// is a fixed ~4 KB persona and would otherwise always exceed this threshold,
+// routing every reply to "smart" and wasting credits on trivial turns.
 const LONG_CONTEXT_CHARS = 1800;
 
 /**
@@ -121,7 +124,9 @@ export async function rawCompletion(args: RawCompletionArgs): Promise<string> {
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), args.timeoutMs ?? 15000);
+  // 8 s per attempt keeps worst-case (2 attempts) at ≤16 s per model, well within
+  // the 50 s poll budget even when several models are tried.
+  const timeoutId = setTimeout(() => controller.abort(), args.timeoutMs ?? 8000);
   try {
     const res = await fetch(OPENROUTER_URL, {
       method: "POST",

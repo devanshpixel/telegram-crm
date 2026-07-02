@@ -415,7 +415,10 @@ export async function suggestReply(
   const tier = selectTier({
     emotionalTemp,
     intentScore,
-    contextChars: systemPrompt.length + userPrompt.length,
+    // Measure only the dynamic part (transcript + memory context). The system
+    // prompt is a fixed ~4 KB persona and would always exceed LONG_CONTEXT_CHARS,
+    // routing every reply to "smart" and wasting credits on trivial turns.
+    contextChars: userPrompt.length,
     emotionallyCharged,
     trivial,
   });
@@ -426,6 +429,7 @@ export async function suggestReply(
     tier,
     maxTokens: 100,
     temperature: 1.1,
+    timeoutMs: 8000,
   });
 
   // Provider exhausted every model (or no key) → canned in-persona filler.
