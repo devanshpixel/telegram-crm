@@ -15,6 +15,15 @@ interface PaidLink {
   payments: Record<string, unknown> | null;
 }
 
+interface PaymentLinkDetails {
+  id: string;
+  status: string;
+  amount: number;
+  amount_paid: number;
+  notes: Record<string, string | number | undefined> | null;
+  payments?: { payment_id?: string } | null;
+}
+
 async function handle(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
@@ -54,10 +63,26 @@ async function handle(req: Request) {
       try {
         const notes = link.notes || {};
         const contactId = Number(notes.contactId);
-        const paymentId = link.payments?.payment_id as string | undefined;
 
-        if (!contactId || !paymentId) {
-          console.log(`[Reconcile] Skip link ${link.id}: missing contactId or paymentId`);
+        if (!contactId) {
+          console.log(`[Reconcile] Skip link ${link.id}: missing contactId`);
+          continue;
+        }
+
+        // Resolve payment ID. The paymentLink.all API often returns payments=null,
+        // so we fetch the full link details when the list response lacks a payment_id.
+        let paymentId = link.payments?.payment_id as string | undefined;
+        if (!paymentId) {
+          try {
+            const full: PaymentLinkDetails = await razorpay.paymentLink.fetch(link.id) as unknown as PaymentLinkDetails;
+            paymentId = full.payments?.payment_id || undefined;
+          } catch {
+            console.log(`[Reconcile] Cannot fetch payment details for link ${link.id}, skipping`);
+            continue;
+          }
+        }
+        if (!paymentId) {
+          console.log(`[Reconcile] Skip link ${link.id}: no payment_id on link`);
           continue;
         }
 
@@ -70,7 +95,7 @@ async function handle(req: Request) {
 
         // createPurchase uses INSERT OR IGNORE on payment_id — safe to call even if
         // the webhook already processed this. result.changes=0 means duplicate (no
-        // stats update runs), but we still check contact state below.
+        // stats update runs).
         const purchase = await createPurchase({
           contactId,
           amount: amountPaid / 100,
@@ -88,29 +113,26 @@ async function handle(req: Request) {
         await recalculateSpendSegment(contactId);
         await recordPaid(contactId);
 
-        // Send the unlock message only for a payment THIS cron newly recorded.
-        // purchase.created is true iff this call inserted the row — i.e. the webhook
-        // never processed it. Gating on created (not conv_state==='PAID') also fixes
-        // repeat buyers, whose 2nd purchase was previously suppressed because their
-        // state was already PAID from the 1st.
-        if (purchase.created) {
-          const mid = typeof mediaId === "string" ? mediaId : null;
+        // Deliver unlock unconditionally. deliverUnlock is idempotent (checks
+        // settings key before sending), so already-delivered unlocks are safe.
+        // Previously this was gated on purchase.created, which meant if the webhook
+        // recorded the purchase but the unlock failed, reconcile never re-sent it.
+        const mid = typeof mediaId === "string" ? mediaId : null;
+        try {
+          await deliverUnlock(contactId, mid, paymentId);
+        } catch (e) {
+          console.error(`[Reconcile] Unlock delivery failed for ${contactId}, enqueuing retry:`, e);
           try {
-            await deliverUnlock(contactId, mid, paymentId);
-          } catch (e) {
-            console.error(`[Reconcile] Unlock delivery failed for ${contactId}, enqueuing retry:`, e);
-            try {
-              await enqueueFailedAction(
-                "deliver_unlock",
-                contactId,
-                e instanceof Error ? e.message : String(e),
-                JSON.stringify({ contactId, mediaId: mid, paymentId }),
-                5,
-                `deliver_unlock:${paymentId}`,
-              );
-            } catch (enqErr) {
-              console.error(`[Reconcile] Failed to enqueue unlock retry for ${contactId}:`, enqErr);
-            }
+            await enqueueFailedAction(
+              "deliver_unlock",
+              contactId,
+              e instanceof Error ? e.message : String(e),
+              JSON.stringify({ contactId, mediaId: mid, paymentId }),
+              5,
+              `deliver_unlock:${paymentId}`,
+            );
+          } catch (enqErr) {
+            console.error(`[Reconcile] Failed to enqueue unlock retry for ${contactId}:`, enqErr);
           }
         }
 

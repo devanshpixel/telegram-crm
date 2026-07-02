@@ -23,12 +23,22 @@ async function handle(req: Request) {
   try {
     const db = await getDb();
 
+    // Find contacts who paid but whose unlock was never delivered (regardless of
+    // conv_state). The old query filtered on conv_state != 'PAID', but by the time
+    // this cron runs createPurchase({ markPaid: true }) already set conv_state to
+    // 'PAID' — so retry-exhausted contacts were never found. Now we check directly
+    // for purchases whose unlock_delivered setting is missing.
     const stuck = (await db
       .prepare(
-        `SELECT c.id, c.name, c.total_spent
+        `SELECT DISTINCT c.id, c.name, c.total_spent
          FROM contacts c
+         JOIN purchases p ON p.contact_id = c.id
          WHERE c.total_spent > 0
-           AND c.conv_state != 'PAID'
+           AND p.payment_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM settings s
+             WHERE s.key = 'unlock_delivered:' || p.payment_id
+           )
          LIMIT 50`
       )
       .all()) as { id: number; name: string; total_spent: number }[];
