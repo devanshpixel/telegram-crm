@@ -489,6 +489,16 @@ interface ReplyJob {
   maxId: number;
 }
 
+async function sendReadAcknowledgement(contact: ContactWithConv, maxId: number): Promise<void> {
+  try {
+    const client = await getTelegramClient();
+    const peer = buildPeer(contact.telegram_id, contact.telegram_access_hash);
+    await client.invoke(new Api.messages.ReadHistory({ peer, maxId }));
+  } catch (e) {
+    console.warn(`[Poll] ReadHistory failed for contact ${contact.id}:`, e);
+  }
+}
+
 async function processReplyJob(
   job: ReplyJob,
   summary: PollSummary,
@@ -496,6 +506,9 @@ async function processReplyJob(
   aiMode: ReplyMode,
 ): Promise<void> {
   const { contact, incomingMessages, maxId } = job;
+  // Mark messages as read on Telegram so the sender sees ✓✓ instead of ✓.
+  // Fire-and-forget: failure is non-fatal; the next poll will retry.
+  sendReadAcknowledgement(contact, maxId);
   let replyFailed = false;
   let replyEnqueued = false;
   const tJob = Date.now();
@@ -790,6 +803,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             replyJobs.push({ contact, incomingMessages, maxId });
           } else if (maxId > minId) {
             // Outgoing messages advanced maxId but no reply needed — safe to move cursor.
+            sendReadAcknowledgement(contact, maxId);
             await updateSyncCursor(contact.conversation_id, maxId);
           }
         } catch (e) {
