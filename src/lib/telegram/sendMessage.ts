@@ -18,7 +18,9 @@ async function typingDelay(client: TelegramClient, peer: Api.InputPeerUser, text
   } catch {}
   // ~40ms per char, clamped 1s–8s — realistic for a mobile texter
   const duration = Math.min(8000, Math.max(1000, Math.round(text.length * 40)));
+  const t0 = Date.now();
   await new Promise(r => setTimeout(r, duration));
+  console.log(JSON.stringify({ stage: "typing_delay", chars: text.length, targetMs: duration, actualMs: Date.now() - t0 }));
 }
 
 async function ensureConnected(): Promise<void> {
@@ -66,6 +68,8 @@ export async function sendTelegramMessage(
   const client = await getTelegramClient();
   const peer = buildPeer(contact);
 
+  const tSend = Date.now();
+
   // Typing indicator for the full message (shows realistic composing time)
   await typingDelay(client, peer, trimmedText);
   // Small random pause after typing stops — mirrors real human "sending" lag
@@ -75,6 +79,7 @@ export async function sendTelegramMessage(
 
   for (let attempt = 1; attempt <= FLOOD_RETRY_MAX; attempt++) {
     try {
+      const tTelegram = Date.now();
       const sent = await client.sendMessage(peer, { message: trimmedText });
 
       if (!(sent instanceof Api.Message) || !sent.id) {
@@ -85,6 +90,14 @@ export async function sendTelegramMessage(
       if (!saved) {
         throw new Error(`No conversation found for contact ${contactId}`);
       }
+
+      console.log(JSON.stringify({
+        stage: "telegram_send",
+        contactId,
+        chars: trimmedText.length,
+        telegramMs: Date.now() - tTelegram,
+        totalSendMs: Date.now() - tSend,
+      }));
 
       return saved;
     } catch (err: unknown) {

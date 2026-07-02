@@ -488,12 +488,14 @@ async function processReplyJob(
   const { contact, incomingMessages, maxId } = job;
   let replyFailed = false;
   let replyEnqueued = false;
+  const tJob = Date.now();
 
   if (automatedReplies) {
     try {
       // Run independent recalcs in parallel — each is a separate Turso round-trip.
       // recalculateBuyerIntelligence and recalculateCrmIntelligence read from the
       // same rows written by the first group, so they follow in a second batch.
+      const tRecalc = Date.now();
       await Promise.all([
         recalculateLeadScore(contact.id),
         recalculateSpendSegment(contact.id),
@@ -504,6 +506,8 @@ async function processReplyJob(
         recalculateBuyerIntelligence(contact.id),
         recalculateCrmIntelligence(contact.id),
       ]);
+      console.log(JSON.stringify({ stage: "db_recalcs", contactId: contact.id, ms: Date.now() - tRecalc }));
+
       const intentScore = await getIntentScore(incomingMessages);
 
       const skipReply = await shouldSkipDueToPacing(contact.id, emotionalTemp);
@@ -585,6 +589,14 @@ async function processReplyJob(
   if (replyFailed) {
     summary.errors.push(`Reply skipped for contact ${contact.id} (queued for retry)`);
   }
+
+  console.log(JSON.stringify({
+    stage: "reply_job_total",
+    contactId: contact.id,
+    totalMs: Date.now() - tJob,
+    replyFailed,
+    replyEnqueued,
+  }));
 }
 // ────────────────────────────────────────────────────────────────────────────
 
