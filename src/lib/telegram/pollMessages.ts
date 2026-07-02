@@ -463,21 +463,23 @@ async function checkOfferExpiry(contactId: number, offerSentAt: string | null): 
   return false;
 }
 
-async function getLockStatus(): Promise<{ isPolling: boolean, lastUpdated: string | null }> {
-  try {
-    const db = await getDb();
-    const row = await db.prepare("SELECT value, updated_at FROM settings WHERE key = 'is_polling'").get() as { value: string, updated_at: string } | undefined;
-    if (!row) return { isPolling: false, lastUpdated: null };
-    try {
-      return { isPolling: JSON.parse(row.value), lastUpdated: row.updated_at };
-    } catch {
-      console.warn("[Poll] Invalid JSON in is_polling setting, recovering with default false");
-      return { isPolling: false, lastUpdated: row.updated_at };
-    }
-  } catch (e) {
-    // If DB is locked or table missing, rethrow to be caught by the main poll loop
-    throw e;
-  }
+// Lock value is an ISO expiry timestamp (not a boolean). Comparing against now()
+// means Vercel killing the function mid-run auto-expires the lock at the stored
+// time — eliminating the previous 30–90 s dead-window where the next cron skipped
+// because updated_at was still fresh even though the function was already dead.
+const POLL_LOCK_DURATION_MS = 58_000; // slightly under Vercel's 60 s maxDuration
+
+async function getLockStatus(): Promise<{ isPolling: boolean; expiresAt: string | null }> {
+  const db = await getDb();
+  const row = await db
+    .prepare("SELECT value FROM settings WHERE key = 'is_polling'")
+    .get() as { value: string } | undefined;
+  if (!row?.value) return { isPolling: false, expiresAt: null };
+  // Legacy boolean values written by older deploys → treat as released.
+  if (row.value === "false" || row.value === "true") return { isPolling: false, expiresAt: null };
+  const expiresAt = row.value;
+  const isPolling = new Date(expiresAt) > new Date();
+  return { isPolling, expiresAt };
 }
 
 export async function pollIncomingMessages(): Promise<PollSummary> {
@@ -497,17 +499,14 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
   const { automatedReplies, aiMode } = offerSettings;
 
   try {
-    // Task: Prevent concurrent polls with stale lock protection - Now inside try/catch
+    // Expiry-based lock: value is an ISO timestamp of when the lock expires.
+    // If the function is killed by Vercel at 60 s the lock expires on its own
+    // (set for 58 s) so the next cron overrides immediately, not after 90 s.
     try {
       const lock = await getLockStatus();
-      if (lock.isPolling && lock.lastUpdated) {
-        const lockAgeMs = Date.now() - new Date(lock.lastUpdated).getTime();
-        if (lockAgeMs < 90 * 1000) { // 90s — 1.5× Vercel's 60s maxDuration so a timed-out poll releases before the next cron fires
-          console.warn("[Poll] Another poll is already in progress, skipping");
-          return summary;
-        } else {
-          console.warn("[Poll] Stale lock detected, overriding");
-        }
+      if (lock.isPolling) {
+        console.warn(`[Poll] Another poll is already in progress (expires ${lock.expiresAt}), skipping`);
+        return summary;
       }
     } catch (e) {
       summary.errors.push(`Lock check failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -515,7 +514,8 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     }
 
     try {
-      await updateSetting("is_polling", true);
+      const expiresAt = new Date(Date.now() + POLL_LOCK_DURATION_MS).toISOString();
+      await updateSetting("is_polling", expiresAt);
     } catch (e) {
       summary.errors.push(`Failed to set polling lock: ${e instanceof Error ? e.message : String(e)}`);
       return summary;
@@ -765,7 +765,9 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     );
   } finally {
     try {
-      await updateSetting("is_polling", false);
+      // Write a past expiry to release the lock. A string value that parses as
+      // a date < now is treated as "not polling" by getLockStatus.
+      await updateSetting("is_polling", new Date(0).toISOString());
     } catch (e) {
       console.error("[Poll] Failed to release polling lock:", e);
     }
