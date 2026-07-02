@@ -629,19 +629,6 @@ async function processReplyJob(
 // because updated_at was still fresh even though the function was already dead.
 const POLL_LOCK_DURATION_MS = 58_000; // slightly under Vercel's 60 s maxDuration
 
-async function getLockStatus(): Promise<{ isPolling: boolean; expiresAt: string | null }> {
-  const db = await getDb();
-  const row = await db
-    .prepare("SELECT value FROM settings WHERE key = 'is_polling'")
-    .get() as { value: string } | undefined;
-  if (!row?.value) return { isPolling: false, expiresAt: null };
-  // Legacy boolean values written by older deploys → treat as released.
-  if (row.value === "false" || row.value === "true") return { isPolling: false, expiresAt: null };
-  const expiresAt = row.value;
-  const isPolling = new Date(expiresAt) > new Date();
-  return { isPolling, expiresAt };
-}
-
 export async function pollIncomingMessages(): Promise<PollSummary> {
   const summary: PollSummary = {
     dialogsChecked: 0,
@@ -659,25 +646,31 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
   const { automatedReplies, aiMode } = offerSettings;
 
   try {
-    // Expiry-based lock: value is an ISO timestamp of when the lock expires.
-    // If the function is killed by Vercel at 60 s the lock expires on its own
-    // (set for 58 s) so the next cron overrides immediately, not after 90 s.
+    // Atomic compare-and-set lock: INSERT OR REPLACE only succeeds when the
+    // existing lock is NULL or expired (value < now()). This eliminates the
+    // TOCTOU race where two concurrent polls both pass getLockStatus() and
+    // overwrite each other's lock.
     try {
-      const lock = await getLockStatus();
-      if (lock.isPolling) {
-        console.warn(`[Poll] Another poll is already in progress (expires ${lock.expiresAt}), skipping`);
+      const db = await getDb();
+      const expiresAt = new Date(Date.now() + POLL_LOCK_DURATION_MS).toISOString();
+      const now = new Date().toISOString();
+      const result = await db
+        .prepare(
+          `INSERT OR REPLACE INTO settings (key, value, updated_at)
+           SELECT 'is_polling', ?, ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM settings
+             WHERE key = 'is_polling'
+               AND value >= ?
+           )`
+        )
+        .run(expiresAt, now, now);
+      if (result.changes === 0) {
+        console.warn(`[Poll] Another poll is already in progress, skipping`);
         return summary;
       }
     } catch (e) {
-      summary.errors.push(`Lock check failed: ${e instanceof Error ? e.message : String(e)}`);
-      return summary;
-    }
-
-    try {
-      const expiresAt = new Date(Date.now() + POLL_LOCK_DURATION_MS).toISOString();
-      await updateSetting("is_polling", expiresAt);
-    } catch (e) {
-      summary.errors.push(`Failed to set polling lock: ${e instanceof Error ? e.message : String(e)}`);
+      summary.errors.push(`Lock acquire failed: ${e instanceof Error ? e.message : String(e)}`);
       return summary;
     }
 
