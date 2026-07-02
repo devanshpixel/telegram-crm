@@ -6,6 +6,7 @@
       "Bash(vercel list *)",
       "Bash(vercel inspect *)",
       "Bash(vercel env ls *)",
+      "Bash(curl http://localhost:3000/*)",
       "WebSearch"
     ]
   }
