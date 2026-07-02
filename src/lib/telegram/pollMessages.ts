@@ -45,6 +45,16 @@ const MAX_DIALOGS_PER_POLL = 500;
 // and releases the lock before the platform kills the invocation.
 const POLL_TIMEOUT_MS = 50000;
 
+// Module-level cache for offer settings so the 4-SELECT query runs at most once per poll.
+// Cleared in the poll's finally block. Not exported — only pollMessages.ts callers use it.
+let _offerSettingsCache: Awaited<ReturnType<typeof getOfferSettings>> | null = null;
+
+async function getCachedOfferSettings() {
+  if (_offerSettingsCache) return _offerSettingsCache;
+  _offerSettingsCache = await getOfferSettings();
+  return _offerSettingsCache;
+}
+
 export interface PollSummary {
   dialogsChecked: number;
   newMessages: number;
@@ -316,7 +326,7 @@ async function sendAiReply(
   if (linkMatch) {
     let linkSent = false;
     try {
-      const settings = await getOfferSettings();
+      const settings = await getCachedOfferSettings();
       const amount = await selectOfferAmount(contactId, settings.offerPrice);
       const link = await createPaymentLink(contactId, amount);
       reply = reply.replace(/\[link\]/gi, link).trim();
@@ -371,7 +381,7 @@ export async function createPaymentLink(
 ): Promise<string> {
   if (!razorpay) throw new Error("Razorpay not configured");
   const appUrl = getAppUrl();
-  const settings = await getOfferSettings();
+  const settings = await getCachedOfferSettings();
   const amount = overrideAmount ?? settings.offerPrice;
   const paymentLink = await razorpay.paymentLink.create({
     amount: Math.round(amount * 100),
@@ -389,7 +399,7 @@ export async function createPaymentLink(
 }
 
 async function sendPremiumOffer(contactId: number): Promise<void> {
-  const settings = await getOfferSettings();
+  const settings = await getCachedOfferSettings();
   const amount = await selectOfferAmount(contactId, settings.offerPrice);
   const link = await createPaymentLink(contactId, amount);
   const text = `${settings.offerMessage}\n\n👉 ${link}`;
@@ -422,7 +432,7 @@ export async function sendLockedResponse(contactId: number): Promise<void> {
     return;
   }
 
-  const settings = await getOfferSettings();
+  const settings = await getCachedOfferSettings();
   const amount = await selectOfferAmount(contactId, settings.offerPrice);
   const link = await createPaymentLink(contactId, amount);
   const text = getLockedVariant(segment, count) + link;
@@ -632,7 +642,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
   const startTime = Date.now();
 
   // Read operator-controlled settings once before the poll loop
-  const offerSettings = await getOfferSettings();
+  const offerSettings = await getCachedOfferSettings();
   const { automatedReplies, aiMode } = offerSettings;
 
   try {
@@ -766,7 +776,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
             if (msgId > maxId) maxId = msgId;
 
-            const saved = await createMessage(contact.id, text, "incoming", msgId);
+            const saved = await createMessage(contact.id, text, "incoming", msgId, contact.conversation_id);
             if (saved) {
               summary.newMessages++;
               incomingMessages.push({ text });
@@ -815,6 +825,8 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       "Critical poll error: " + (e instanceof Error ? e.message : String(e)),
     );
   } finally {
+    // Clear the cached settings so the next poll fetches fresh values
+    _offerSettingsCache = null;
     try {
       // Write a past expiry to release the lock. A string value that parses as
       // a date < now is treated as "not polling" by getLockStatus.
