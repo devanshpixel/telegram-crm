@@ -636,6 +636,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           // Batched reply: one response per contact per poll regardless of
           // how many messages arrived (BUG-5 fix).
           let replyFailed = false;
+          let replyEnqueued = false; // true when failed reply has a retry in failed_actions
           if (incomingMessages.length > 0 && automatedReplies) {
             try {
               await recalculateLeadScore(contact.id);
@@ -725,23 +726,25 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
               replyFailed = true;
               const errMsg = e instanceof Error ? e.message : String(e);
               summary.errors.push(`Response error for contact ${contact.id}: ${errMsg}`);
-              // Failed-message recovery: enqueue a re-engagement so the retry-queue cron
-              // regenerates and resends a reply later. Without this producer the
-              // failed_actions table stayed empty and retry-queue was a no-op.
+              // Enqueue for retry-queue cron. If this also fails we must NOT advance the
+              // cursor — the next poll will re-process the messages and try again.
               try {
                 await enqueueFailedAction("reengage", contact.id, errMsg);
+                replyEnqueued = true;
               } catch (qe) {
                 console.error(`[POLL] Failed to enqueue retry for contact ${contact.id}:`, qe);
               }
             }
           }
 
-          // Always advance the cursor for new messages — prevents the same DMs from
-          // re-triggering offers/replies on the next poll. Reply failures are already
-          // enqueued to the retry queue (enqueueFailedAction above), so they don't need
-          // the cursor to hold back in order to be retried.
-          if (maxId > minId) {
+          // Advance cursor only when messages were handled: either reply succeeded, or
+          // the failed reply was safely enqueued for retry. If both reply AND enqueue
+          // failed, hold the cursor so the next poll re-processes (not permanently lost).
+          const cursorSafe = !replyFailed || replyEnqueued;
+          if (maxId > minId && cursorSafe) {
             await updateSyncCursor(contact.conversation_id, maxId);
+          } else if (maxId > minId && !cursorSafe) {
+            summary.errors.push(`[POLL] Cursor held for contact ${contact.id} — retry enqueue failed, will re-process next poll`);
           }
           if (replyFailed) {
             summary.errors.push(`Reply skipped for contact ${contact.id} (queued for retry)`);
