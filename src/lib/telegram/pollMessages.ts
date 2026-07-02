@@ -278,8 +278,9 @@ async function sendAiReply(
   intentScore: number = 0,
   convState: string = "FREE_CHAT",
 ): Promise<{ offerSent: boolean }> {
-  // Use extended history for memory extraction; recent slice for the transcript
-  const messages = await getMessagesByContactId(contactId, 500);
+  // 50 rows covers the last ~25 exchanges — enough for extractMemory facts and the
+  // 12-message transcript. The previous 500-row fetch transferred ~480 wasted rows.
+  const messages = await getMessagesByContactId(contactId, 50);
   const recent = messages.slice(-MESSAGE.RECENT_COUNT);
 
   const lastOutgoing = [...recent].reverse().find(m => m.direction === "outgoing");
@@ -347,16 +348,20 @@ async function scheduleOrSendReply(
   convState: string,
   emotionalTemp: number,
 ): Promise<void> {
+  // sendTelegramMessage already runs a typingDelay of 1–8 s (sendMessage.ts:12-21)
+  // which provides the human-like "thinking" pause the user sees. Scheduling to
+  // pending_reply would defer delivery by a full poll cycle (60 s+), causing the
+  // "replies never arrive" symptom. Instead: always send inline this poll, with a
+  // short pre-typing pause capped at 3 s so the poll budget isn't consumed.
   const delayMs = getScheduledDelay(convState, emotionalTemp);
-  if (delayMs < 3000) {
-    await new Promise((r) => setTimeout(r, delayMs));
-    const parts = splitMessage(text);
-    for (let i = 0; i < parts.length; i++) {
-      if (i > 0) await new Promise((r) => setTimeout(r, TIMING.MULTI_MESSAGE_GAP_MIN + Math.random() * (TIMING.MULTI_MESSAGE_GAP_MAX - TIMING.MULTI_MESSAGE_GAP_MIN)));
-      await sendTelegramMessage(contactId, parts[i]);
-    }
-  } else {
-    await schedulePendingReply(contactId, text, delayMs);
+  const inlineWait = Math.min(delayMs, 3000);
+  if (inlineWait > 0) {
+    await new Promise((r) => setTimeout(r, inlineWait));
+  }
+  const parts = splitMessage(text);
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, TIMING.MULTI_MESSAGE_GAP_MIN + Math.random() * (TIMING.MULTI_MESSAGE_GAP_MAX - TIMING.MULTI_MESSAGE_GAP_MIN)));
+    await sendTelegramMessage(contactId, parts[i]);
   }
 }
 
@@ -463,6 +468,126 @@ async function checkOfferExpiry(contactId: number, offerSentAt: string | null): 
   return false;
 }
 
+// ── Concurrent reply dispatch ────────────────────────────────────────────────
+// Max AI calls running at once. GramJS multiplexes on one MTProto sender so
+// 3 concurrent sends are safe; more risks FloodWait or response interleaving.
+const REPLY_CONCURRENCY = 3;
+
+interface ReplyJob {
+  contact: ContactWithConv;
+  incomingMessages: { text: string }[];
+  maxId: number;
+}
+
+async function processReplyJob(
+  job: ReplyJob,
+  summary: PollSummary,
+  automatedReplies: boolean,
+  aiMode: ReplyMode,
+): Promise<void> {
+  const { contact, incomingMessages, maxId } = job;
+  let replyFailed = false;
+  let replyEnqueued = false;
+
+  if (automatedReplies) {
+    try {
+      // Run independent recalcs in parallel — each is a separate Turso round-trip.
+      // recalculateBuyerIntelligence and recalculateCrmIntelligence read from the
+      // same rows written by the first group, so they follow in a second batch.
+      await Promise.all([
+        recalculateLeadScore(contact.id),
+        recalculateSpendSegment(contact.id),
+        updateRelationshipScore(contact.id),
+      ]);
+      const [emotionalTemp] = await Promise.all([
+        updateEmotionalTemp(contact.id),
+        recalculateBuyerIntelligence(contact.id),
+        recalculateCrmIntelligence(contact.id),
+      ]);
+      const intentScore = await getIntentScore(incomingMessages);
+
+      const skipReply = await shouldSkipDueToPacing(contact.id, emotionalTemp);
+
+      if (!skipReply && contact.conv_state === "PAID") {
+        const phase = await getPostPurchasePhase(contact.id);
+        if (phase === "welcome") {
+          const welcomeMsg = pickRandom(WELCOME_PAID);
+          await sendTelegramMessage(contact.id, welcomeMsg);
+          try { await markWelcomeSent(contact.id); } catch (e) { console.error(`[POLL] markWelcomeSent failed for ${contact.id}:`, e); }
+          summary.repliesSent++;
+        } else if (phase === "reoffer" && !(await isInOfferCooldown(contact.id))) {
+          await sendPremiumOffer(contact.id);
+          await setOfferCooldown(contact.id, OFFER.COOLDOWN_DAYS);
+          summary.offersSent++;
+          contact.conv_state = "OFFER_SENT";
+        } else {
+          await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
+          summary.repliesSent++;
+        }
+      } else if (!skipReply && contact.conv_state === "OFFER_SENT") {
+        if (await shouldSendLockedResponse(contact.id)) {
+          await sendLockedResponse(contact.id);
+          summary.remindersSent++;
+        } else {
+          const ldb = await getDb();
+          const row = await ldb
+            .prepare("SELECT locked_response_count FROM contacts WHERE id = ?")
+            .get(contact.id) as { locked_response_count: number } | undefined;
+          if (row && (row.locked_response_count ?? 0) >= OFFER.MAX_LOCKED_RESPONSES) {
+            await setConvState(contact.id, "FREE_CHAT");
+            await setOfferCooldown(contact.id, OFFER.COOLDOWN_DAYS);
+          } else {
+            const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
+            if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
+            else summary.repliesSent++;
+          }
+        }
+      } else if (!skipReply) {
+        const inCooldown = await isInOfferCooldown(contact.id);
+        if (intentScore >= INTENT_THRESHOLD.HIGH && !inCooldown) {
+          await sendPremiumOffer(contact.id);
+          summary.offersSent++;
+          contact.conv_state = "OFFER_SENT";
+        } else if (intentScore >= INTENT_THRESHOLD.VERY_LOW) {
+          const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore, contact.conv_state);
+          if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
+          else summary.repliesSent++;
+        } else {
+          const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
+          if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
+          else summary.repliesSent++;
+        }
+        if (contact.conv_state === "OFFER_SENT" && intentScore < INTENT_THRESHOLD.VERY_LOW) {
+          try { await incrementOfferDeclined(contact.id); } catch (e) { console.error(`[POLL] incrementOfferDeclined failed for ${contact.id}:`, e); }
+        }
+      } else {
+        replyFailed = true;
+      }
+    } catch (e) {
+      replyFailed = true;
+      const errMsg = e instanceof Error ? e.message : String(e);
+      summary.errors.push(`Response error for contact ${contact.id}: ${errMsg}`);
+      try {
+        await enqueueFailedAction("reengage", contact.id, errMsg);
+        replyEnqueued = true;
+      } catch (qe) {
+        console.error(`[POLL] Failed to enqueue retry for contact ${contact.id}:`, qe);
+      }
+    }
+  }
+
+  const cursorSafe = !replyFailed || replyEnqueued;
+  if (maxId > contact.last_synced_message_id && cursorSafe) {
+    await updateSyncCursor(contact.conversation_id, maxId);
+  } else if (maxId > contact.last_synced_message_id && !cursorSafe) {
+    summary.errors.push(`[POLL] Cursor held for contact ${contact.id} — retry enqueue failed, will re-process next poll`);
+  }
+  if (replyFailed) {
+    summary.errors.push(`Reply skipped for contact ${contact.id} (queued for retry)`);
+  }
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 // Lock value is an ISO expiry timestamp (not a boolean). Comparing against now()
 // means Vercel killing the function mid-run auto-expires the lock at the stored
 // time — eliminating the previous 30–90 s dead-window where the next cron skipped
@@ -533,6 +658,9 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       for (const c of knownContacts) {
         knownMap.set(c.telegram_id, c);
       }
+
+      // Collected during Phase 1 (dialog scan); dispatched concurrently in Phase 2.
+      const replyJobs: ReplyJob[] = [];
 
       for await (const dialog of client.iterDialogs({ folder: 0 })) {
         const entity = dialog.entity;
@@ -633,121 +761,14 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
             }
           }
 
-          // Batched reply: one response per contact per poll regardless of
-          // how many messages arrived (BUG-5 fix).
-          let replyFailed = false;
-          let replyEnqueued = false; // true when failed reply has a retry in failed_actions
-          if (incomingMessages.length > 0 && automatedReplies) {
-            try {
-              await recalculateLeadScore(contact.id);
-              await recalculateSpendSegment(contact.id);
-              await recalculateBuyerIntelligence(contact.id);
-              await recalculateCrmIntelligence(contact.id);
-              const emotionalTemp = await updateEmotionalTemp(contact.id);
-              const intentScore = await getIntentScore(incomingMessages);
-              await updateRelationshipScore(contact.id);
-
-              const skipReply = await shouldSkipDueToPacing(contact.id, emotionalTemp);
-
-              if (!skipReply && contact.conv_state === "PAID") {
-                const phase = await getPostPurchasePhase(contact.id);
-                if (phase === "welcome") {
-                  const welcomeMsg = pickRandom(WELCOME_PAID);
-                  await sendTelegramMessage(contact.id, welcomeMsg);
-                  try { await markWelcomeSent(contact.id); } catch (e) { console.error(`[POLL] markWelcomeSent failed for ${contact.id}:`, e); }
-                  summary.repliesSent++;
-                } else if (phase === "reoffer" && !(await isInOfferCooldown(contact.id))) {
-                  // Throttle reoffers: a past buyer is permanently in "reoffer" phase
-                  // (>7d since paid_at) and is reset to PAID every poll (see below), so
-                  // without a cooldown they'd get a fresh payment link on every message.
-                  await sendPremiumOffer(contact.id);
-                  await setOfferCooldown(contact.id, OFFER.COOLDOWN_DAYS);
-                  summary.offersSent++;
-                  contact.conv_state = "OFFER_SENT";
-                } else {
-                  await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
-                  summary.repliesSent++;
-                }
-              } else if (!skipReply && contact.conv_state === "OFFER_SENT") {
-                if (await shouldSendLockedResponse(contact.id)) {
-                  await sendLockedResponse(contact.id);
-                  summary.remindersSent++;
-                } else {
-                  const ldb = await getDb();
-                  const row = await ldb
-                    .prepare("SELECT locked_response_count FROM contacts WHERE id = ?")
-                    .get(contact.id) as { locked_response_count: number } | undefined;
-                  if (row && (row.locked_response_count ?? 0) >= OFFER.MAX_LOCKED_RESPONSES) {
-                    await setConvState(contact.id, "FREE_CHAT");
-                    await setOfferCooldown(contact.id, OFFER.COOLDOWN_DAYS);
-                  } else {
-                    // Interval not elapsed yet — keep user engaged with a casual reply
-                    // instead of silence. Prevents the OFFER_SENT state becoming a dead-end
-                    // where the fan messages but hears nothing until the lock timer fires.
-                    const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
-                    if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
-                    else summary.repliesSent++;
-                  }
-                }
-              } else if (!skipReply) {
-                const inCooldown = await isInOfferCooldown(contact.id);
-
-                if (intentScore >= INTENT_THRESHOLD.HIGH && !inCooldown) {
-                  await sendPremiumOffer(contact.id);
-                  summary.offersSent++;
-                  contact.conv_state = "OFFER_SENT";
-                } else if (intentScore >= INTENT_THRESHOLD.VERY_LOW) {
-                  // Any explicit content/sales keyword (score ≥ 20) → use aiMode so
-                  // detectMode can route to sales phase and include [LINK] when ready.
-                  const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore, contact.conv_state);
-                  if (offerSent) {
-                    summary.offersSent++;
-                    contact.conv_state = "OFFER_SENT";
-                  } else {
-                    summary.repliesSent++;
-                  }
-                } else {
-                  const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
-                  if (offerSent) {
-                    summary.offersSent++;
-                    contact.conv_state = "OFFER_SENT";
-                  } else {
-                    summary.repliesSent++;
-                  }
-                }
-
-                if (contact.conv_state === "OFFER_SENT" && intentScore < INTENT_THRESHOLD.VERY_LOW) {
-                  try { await incrementOfferDeclined(contact.id); } catch (e) { console.error(`[POLL] incrementOfferDeclined failed for ${contact.id}:`, e); }
-                }
-              } else {
-                replyFailed = true;
-              }
-            } catch (e) {
-              replyFailed = true;
-              const errMsg = e instanceof Error ? e.message : String(e);
-              summary.errors.push(`Response error for contact ${contact.id}: ${errMsg}`);
-              // Enqueue for retry-queue cron. If this also fails we must NOT advance the
-              // cursor — the next poll will re-process the messages and try again.
-              try {
-                await enqueueFailedAction("reengage", contact.id, errMsg);
-                replyEnqueued = true;
-              } catch (qe) {
-                console.error(`[POLL] Failed to enqueue retry for contact ${contact.id}:`, qe);
-              }
-            }
-          }
-
-          // Advance cursor only when messages were handled: either reply succeeded, or
-          // the failed reply was safely enqueued for retry. If both reply AND enqueue
-          // failed, hold the cursor so the next poll re-processes (not permanently lost).
-          const cursorSafe = !replyFailed || replyEnqueued;
-          if (maxId > minId && cursorSafe) {
+          // Phase 1: collect contacts that need a reply for concurrent dispatch.
+          // Contacts with only outgoing-sync activity get their cursor advanced now;
+          // contacts with new incoming messages are deferred to Phase 2 below.
+          if (incomingMessages.length > 0) {
+            replyJobs.push({ contact, incomingMessages, maxId });
+          } else if (maxId > minId) {
+            // Outgoing messages advanced maxId but no reply needed — safe to move cursor.
             await updateSyncCursor(contact.conversation_id, maxId);
-          } else if (maxId > minId && !cursorSafe) {
-            summary.errors.push(`[POLL] Cursor held for contact ${contact.id} — retry enqueue failed, will re-process next poll`);
-          }
-          if (replyFailed) {
-            summary.errors.push(`Reply skipped for contact ${contact.id} (queued for retry)`);
           }
         } catch (e) {
           console.error(`[POLL] Message iteration error for contact ${contact.id}:`, e);
@@ -756,7 +777,22 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           );
         }
       }
-      console.log(`[Poll] Completed — dialogs=${summary.dialogsChecked} new=${summary.newMessages} elapsed=${Date.now() - startTime}ms`);
+
+      // Phase 2: dispatch reply jobs with bounded concurrency (REPLY_CONCURRENCY=3).
+      // Each batch of 3 contacts runs their AI calls in parallel; batches are serial
+      // so total concurrent Turso+OpenRouter connections stay bounded.
+      for (let i = 0; i < replyJobs.length; i += REPLY_CONCURRENCY) {
+        if (Date.now() - startTime > POLL_TIMEOUT_MS) {
+          console.warn("[Poll] Timeout reached during reply dispatch, remaining jobs skipped");
+          break;
+        }
+        const batch = replyJobs.slice(i, i + REPLY_CONCURRENCY);
+        await Promise.allSettled(
+          batch.map(job => processReplyJob(job, summary, automatedReplies, aiMode)),
+        );
+      }
+
+      console.log(`[Poll] Completed — dialogs=${summary.dialogsChecked} new=${summary.newMessages} replies=${summary.repliesSent} elapsed=${Date.now() - startTime}ms`);
     } catch (e) {
       summary.errors.push(
         "Poll loop failed: " + (e instanceof Error ? e.message : String(e)),
