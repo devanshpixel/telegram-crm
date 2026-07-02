@@ -267,12 +267,23 @@ async function sendDueReplies(summary: PollSummary): Promise<void> {
       const contactId = parseInt(row.key.split(":")[1]);
       const data = JSON.parse(row.value);
       if (new Date(data.scheduledAt) <= now) {
-        const parts = splitMessage(data.text);
-        for (let i = 0; i < parts.length; i++) {
-          if (i > 0) await new Promise((r) => setTimeout(r, TIMING.MULTI_MESSAGE_GAP_MIN + Math.random() * (TIMING.MULTI_MESSAGE_GAP_MAX - TIMING.MULTI_MESSAGE_GAP_MIN)));
-          await sendTelegramMessage(contactId, parts[i]);
-        }
+        // Delete before send to prevent duplicate delivery if the send succeeds
+        // but a subsequent operation (e.g. DELETE itself) fails. If send fails,
+        // re-insert so the next poll retries.
         await db.prepare("DELETE FROM settings WHERE key = ?").run(row.key);
+        const parts = splitMessage(data.text);
+        try {
+          for (let i = 0; i < parts.length; i++) {
+            if (i > 0) await new Promise((r) => setTimeout(r, TIMING.MULTI_MESSAGE_GAP_MIN + Math.random() * (TIMING.MULTI_MESSAGE_GAP_MAX - TIMING.MULTI_MESSAGE_GAP_MIN)));
+            await sendTelegramMessage(contactId, parts[i]);
+          }
+        } catch (sendErr) {
+          // Re-insert so the next poll retries
+          await db.prepare(
+            "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)"
+          ).run(row.key, row.value, nowIso());
+          throw sendErr;
+        }
         summary.repliesSent++;
       }
     } catch (e) {
