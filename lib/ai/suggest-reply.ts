@@ -205,7 +205,7 @@ export function detectMode(
   const text = lastIncoming.map((m) => m.text.toLowerCase()).join(" ");
 
   const salesWords = ["price", "cost", "buy", "pay", "premium", "unlock", "join", "link", "how much", "kitna", "subscription", "membership", "send link", "payment", "exclusive", "meeting", "voice", "custom"];
-  const contentWords = ["photo", "pic", "photos", "pics", "video", "private", "nude", "nudes", "sext", "sexting", "dikha", "send me"];
+  const contentWords = ["photo", "pic", "photos", "pics", "selfie", "video", "private", "nude", "nudes", "sext", "sexting", "dikha", "dikhana", "show yourself", "send me"];
   const flirtWords = ["cute", "beautiful", "gorgeous", "sexy", "hot", "you're", "tu kitni", "pretty", "charm", "attractive"];
 
   if (salesWords.some((w) => text.includes(w))) return "sales";

@@ -44,23 +44,15 @@ export async function POST(request: Request) {
           return NextResponse.json({ received: true, skipped: "contact_not_found" });
         }
 
-        // Idempotency: Razorpay redelivers webhooks on any timeout/non-2xx. If this
-        // payment was already recorded, acknowledge without re-running side-effects —
-        // otherwise handlePostPayment re-sends the unlock confirmation. Mirrors the
-        // reconcile cron's guard so both payment paths dedup identically.
-        const escapedPaymentId = String(paymentId).replace(/[%_]/g, "\\$&");
-        const already = await db
-          .prepare("SELECT id FROM purchases WHERE note LIKE ? ESCAPE '\\'")
-          .get(`%razorpay_payment:${escapedPaymentId}%`);
-        if (already) {
-          return NextResponse.json({ received: true, duplicate: true });
-        }
-
         const note = mediaId
           ? `media_unlock:${mediaId}:razorpay_payment:${paymentId}`
           : `razorpay_payment:${paymentId}`;
 
-        // Atomic check-and-insert inside the transaction (see createPurchase paymentId param)
+        // Atomic check-and-insert via createPurchase's UNIQUE constraint on payment_id.
+        // On duplicate (created=false), we still MUST ensure the unlock was delivered
+        // — Razorpay may have retried after the purchase was committed but before
+        // deliverUnlock completed. Without this safety net, the old pre-check (which
+        // returned 200 immediately on duplicate) permanently lost the unlock.
         try {
           const purchase = await createPurchase({
             contactId,
@@ -72,36 +64,33 @@ export async function POST(request: Request) {
             paymentId,
           });
 
-          // Only run side-effects for a genuinely new purchase. createPurchase dedups
-          // atomically on payment_id, so a concurrent or duplicate delivery that slips
-          // past the pre-check above returns created=false here — preventing a double
-          // unlock message and a double upsell link under a true race.
-          if (purchase.created) {
-            // Lead score + segment update
-            await recalculateLeadScore(contactId);
-            await recalculateSpendSegment(contactId);
-            await recordPaid(contactId);
+          // Side-effects run for BOTH new AND duplicate payments. For new purchases
+          // the stats are updated; for duplicates createPurchase skips the UPDATE and
+          // the recalculations below are idempotent anyway (total_spent unchanged).
+          // This is critical: on a Razorpay retry where the original delivery failed
+          // after the purchase INSERT, we MUST attempt unlock again.
+          await recalculateLeadScore(contactId);
+          await recalculateSpendSegment(contactId);
+          await recordPaid(contactId);
 
-            // Gap B: the purchase is now durably recorded. Deliver the unlock, and
-            // if delivery fails (FloodWait, disconnect, timeout, API error) enqueue a
-            // retry keyed on the payment id so the recovery cron resends idempotently.
-            // Never fail the webhook — Razorpay must get its 2xx.
+          // Deliver the unlock (idempotent via deliverUnlock's settings key). If
+          // delivery fails, enqueue a retry keyed on payment id. Never fail the
+          // webhook — Razorpay must get its 2xx.
+          try {
+            await deliverUnlock(contactId, mediaId, paymentId);
+          } catch (e) {
+            console.error(`[Razorpay Webhook] Unlock delivery failed for ${contactId}, enqueuing retry:`, e);
             try {
-              await deliverUnlock(contactId, mediaId, paymentId);
-            } catch (e) {
-              console.error(`[Razorpay Webhook] Unlock delivery failed for ${contactId}, enqueuing retry:`, e);
-              try {
-                await enqueueFailedAction(
-                  "deliver_unlock",
-                  contactId,
-                  e instanceof Error ? e.message : String(e),
-                  JSON.stringify({ contactId, mediaId: mediaId ?? null, paymentId }),
-                  5,
-                  `deliver_unlock:${paymentId}`,
-                );
-              } catch (enqErr) {
-                console.error(`[Razorpay Webhook] Failed to enqueue unlock retry for ${contactId}:`, enqErr);
-              }
+              await enqueueFailedAction(
+                "deliver_unlock",
+                contactId,
+                e instanceof Error ? e.message : String(e),
+                JSON.stringify({ contactId, mediaId: mediaId ?? null, paymentId }),
+                5,
+                `deliver_unlock:${paymentId}`,
+              );
+            } catch (enqErr) {
+              console.error(`[Razorpay Webhook] Failed to enqueue unlock retry for ${contactId}:`, enqErr);
             }
           }
         } catch (error) {
