@@ -1,8 +1,8 @@
 import bigInt from "big-integer";
 import { Api, TelegramClient } from "telegram";
 import { FloodWaitError } from "telegram/errors/RPCErrorList";
-import { getDb } from "@/lib/db";
-import { createMessage } from "@/lib/db/service";
+import { getDb, nowIso } from "@/lib/db";
+import { createMessage, getConversationIdByContactId } from "@/lib/db/service";
 import type { ContactRow } from "@/lib/db/types";
 import type { Message } from "@/types";
 import { getTelegramClient } from "./client";
@@ -89,9 +89,26 @@ export async function sendTelegramMessage(
         throw new Error("Failed to send Telegram message");
       }
 
-      const saved = await createMessage(contactId, trimmedText, "outgoing", sent.id);
+      let saved = await createMessage(contactId, trimmedText, "outgoing", sent.id);
       if (!saved) {
-        throw new Error(`No conversation found for contact ${contactId}`);
+        // If no conversation exists, create one and retry
+        const existingConv = await getConversationIdByContactId(contactId);
+        if (!existingConv) {
+          const db = await getDb();
+          const ts = nowIso();
+          const convResult = await db
+            .prepare("INSERT INTO conversations (contact_id, last_message, last_message_time, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+            .run(contactId, trimmedText, ts, ts, ts);
+          saved = await createMessage(contactId, trimmedText, "outgoing", sent.id, Number(convResult.lastInsertRowid));
+        }
+        if (!saved) {
+          // Still null — likely the idempotency check (telegram_message_id already
+          // exists). The Telegram message was already sent to the user; don't
+          // throw or the caller will re-insert pending_reply and duplicate it.
+          console.warn(`[sendMessage] createMessage returned null for contact ${contactId} (msg ${sent.id}) — already recorded`);
+          // Return a minimal stub so the caller proceeds without duplication
+          return { id: String(sent.id), text: trimmedText, direction: "outgoing", timestamp: new Date().toISOString(), read: true };
+        }
       }
 
       console.log(JSON.stringify({
