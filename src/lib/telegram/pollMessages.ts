@@ -544,6 +544,14 @@ async function processReplyJob(
   let replyEnqueued = false;
   const tJob = Date.now();
 
+  // Structured production log tracking — set as branches execute, emitted once at end.
+  let _logIntentScore = 0;
+  let _logMode: string = aiMode;
+  let _logOfferTriggered = false;
+  let _logOfferSent = false;
+  let _logPaymentDetected = false;
+  let _logUnlockSent = false;
+
   if (automatedReplies) {
     try {
       // Run independent recalcs in parallel — each is a separate Turso round-trip.
@@ -563,10 +571,12 @@ async function processReplyJob(
       console.log(JSON.stringify({ stage: "db_recalcs", contactId: contact.id, ms: Date.now() - tRecalc }));
 
       const intentScore = await getIntentScore(incomingMessages);
+      _logIntentScore = intentScore;
 
       const skipReply = await shouldSkipDueToPacing(contact.id, emotionalTemp);
 
       if (!skipReply && contact.conv_state === "PAID") {
+        _logPaymentDetected = true;
         const phase = await getPostPurchasePhase(contact.id);
         if (phase === "welcome") {
           const welcomeMsg = pickRandom(WELCOME_PAID);
@@ -576,15 +586,18 @@ async function processReplyJob(
         } else if (phase === "reoffer" && !(await isInOfferCooldown(contact.id))) {
           await sendPremiumOffer(contact.id);
           await setOfferCooldown(contact.id, OFFER.COOLDOWN_DAYS);
+          _logOfferTriggered = true; _logOfferSent = true;
           summary.offersSent++;
           contact.conv_state = "OFFER_SENT";
         } else {
           await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
+          _logMode = "casual";
           summary.repliesSent++;
         }
       } else if (!skipReply && contact.conv_state === "OFFER_SENT") {
         if (await shouldSendLockedResponse(contact.id)) {
           await sendLockedResponse(contact.id);
+          _logUnlockSent = true;
           summary.remindersSent++;
         } else {
           const ldb = await getDb();
@@ -596,7 +609,8 @@ async function processReplyJob(
             await setOfferCooldown(contact.id, OFFER.COOLDOWN_DAYS);
           } else {
             const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
-            if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
+            _logMode = "casual";
+            if (offerSent) { _logOfferSent = true; summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
             else summary.repliesSent++;
           }
         }
@@ -610,11 +624,13 @@ async function processReplyJob(
         const directOfferSignal = currentPollMode === "sales" && !inCooldown;
         if ((intentScore >= INTENT_THRESHOLD.HIGH || directOfferSignal) && !inCooldown) {
           await sendPremiumOffer(contact.id);
+          _logOfferTriggered = true; _logOfferSent = true; _logMode = currentPollMode;
           summary.offersSent++;
           contact.conv_state = "OFFER_SENT";
         } else if (intentScore >= INTENT_THRESHOLD.VERY_LOW) {
           const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore, contact.conv_state);
-          if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
+          _logMode = aiMode;
+          if (offerSent) { _logOfferSent = true; summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
           else summary.repliesSent++;
         } else {
           // intentScore < VERY_LOW but still use aiMode (not hard-coded "casual") so
@@ -623,7 +639,8 @@ async function processReplyJob(
           // transcript still contains the prior high-intent keywords — bypassing
           // auto-mode here permanently prevented the offer transition for those polls.
           const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore, contact.conv_state);
-          if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
+          _logMode = aiMode;
+          if (offerSent) { _logOfferSent = true; summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
           else summary.repliesSent++;
         }
         if (contact.conv_state === "OFFER_SENT" && intentScore < INTENT_THRESHOLD.VERY_LOW) {
@@ -656,11 +673,16 @@ async function processReplyJob(
   }
 
   console.log(JSON.stringify({
-    stage: "reply_job_total",
-    contactId: contact.id,
-    totalMs: Date.now() - tJob,
-    replyFailed,
-    replyEnqueued,
+    event: "conversation",
+    contact_id: contact.id,
+    reply_latency_ms: Date.now() - tJob,
+    intent_score: _logIntentScore,
+    mode: _logMode,
+    offer_triggered: _logOfferTriggered,
+    offer_sent: _logOfferSent,
+    payment_detected: _logPaymentDetected,
+    unlock_sent: _logUnlockSent,
+    conversation_state: contact.conv_state,
   }));
 }
 // ────────────────────────────────────────────────────────────────────────────
