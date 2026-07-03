@@ -248,13 +248,22 @@ function splitMessage(text: string): string[] {
   if (text.length <= MESSAGE.SHORT_MESSAGE_LENGTH) return [text];
   // Priority 4: Split on sentence-ending punctuation
   const parts = text.match(/[^.!?…]+[.!?…]*/g);
-  if (!parts || parts.length <= 1) return [text];
-  const cleaned = parts.map((s) => s.trim()).filter(Boolean);
-  if (cleaned.length > 4) {
-    const mid = Math.ceil(cleaned.length / 2);
-    return [cleaned.slice(0, mid).join(" "), cleaned.slice(mid).join(" ")];
+  if (parts && parts.length > 1) {
+    const cleaned = parts.map((s) => s.trim()).filter(Boolean);
+    if (cleaned.length > 4) {
+      const mid = Math.ceil(cleaned.length / 2);
+      return [cleaned.slice(0, mid).join(" "), cleaned.slice(mid).join(" ")];
+    }
+    return cleaned;
   }
-  return cleaned;
+  // Priority 5: No punctuation (Hinglish) — split at word boundary near midpoint.
+  // Covers the common case where casual text has no .!?… at all.
+  const mid = Math.floor(text.length / 2);
+  const before = text.lastIndexOf(" ", mid);
+  const after = text.indexOf(" ", mid);
+  const splitAt = before > 0 ? before : after;
+  if (splitAt < 1 || splitAt >= text.length - 1) return [text];
+  return [text.slice(0, splitAt).trim(), text.slice(splitAt).trim()];
 }
 
 async function schedulePendingReply(contactId: number, text: string, delayMs: number): Promise<void> {
