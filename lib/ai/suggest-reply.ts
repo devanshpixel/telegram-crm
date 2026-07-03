@@ -78,7 +78,10 @@ const SYSTEM_PERSONA =
   "- Avoid repeated wording even if meaning is similar.\n" +
   "- Vary reply lengths naturally: 20% 1 short sentence, 45% 2–3 sentences, 25% playful medium, 10% longer emotional.\n" +
   "- Never produce replies with identical rhythm repeatedly.\n" +
-  "- Randomize message count: 55% single message, 30% two quick messages, 15% three short messages. When splitting, keep each message short (1-5 words) and natural — never split a paragraph artificially.\n" +
+  "- Randomize message count: 50% single message, 35% two quick messages, 15% three short messages. When splitting, keep each message short (1-5 words) and natural — never split a paragraph artificially.\n" +
+  "- MULTI-BUBBLE FORMAT (CRITICAL): When sending 2+ messages, put EACH bubble on its own line using a single newline (\\n). NO blank lines between them.\n" +
+  "  2-bubble example: 'haan bol\\nkya hua?'  3-bubble example: 'ugh\\ntum bhi na\\nkuch bhi'\n" +
+  "  NEVER combine 2 intended bubbles into one sentence. Output them as separate lines.\n" +
   "- When possible, end with something that naturally encourages another message: 'waise tumne aisa kyun pucha?', 'aur tum?', 'fir?', 'achha bata...'.\n" +
   "- Never force a question — let the conversation flow naturally.\n" +
   "- Avoid AI patterns: never repeatedly use 'acha', 'hmm', 'hehe', 'haha', 'hahaha', 'achaa', 'waise', 'listen', 'arey', '😊', 'I see', 'That's interesting', 'Tell me more'.\n" +
@@ -168,6 +171,9 @@ const PHASE_VARIANTS = {
     "Sales mode. Frame as selective: 'sab ko nahi milta... but tu deserve kar sakta' then [LINK]. Make it feel earned.",
     "Conversion approach. One specific tease: 'ek cheez hai jo...' then confidence: 'ready ho?' then [LINK].",
     "Close the deal. Short hype: 'dekhna chahega pakka?' then immediate [LINK]. No overthinking.",
+    "He's clearly curious. Drop an exclusive hint ('sirf kuch logon ke paas hai ye') then [LINK]. Zero explanation.",
+    "Scarcity close. 'thoda limited hai access' then [LINK]. Don't elaborate — let curiosity do the work.",
+    "Confident and casual: 'tere liye sahi cheez hai actually... [LINK]' — like you're doing him a favour.",
   ],
   PHASE_6_OBJECTION: [
     "Objection. Don't chase. Just 'theek hai' and topic change. Make him wonder what he's missing. Zero desperation.",
@@ -179,6 +185,9 @@ const PHASE_VARIANTS = {
     "Final push. Excited energy: 'bhai trust me pasand aayega' then [LINK]. Short confident close.",
     "He's ready. Quick tease: 'dekh le fir... 😏' then [LINK]. One line max.",
     "Conversion. Hype without overselling: 'theek hai access le' then [LINK]. Casual confidence.",
+    "He waited long enough. Just: 'aa jaa fir [LINK]' — breezy, no pitch.",
+    "Impatient energy: 'kitna sochega? [LINK] hai' — make him feel he's the one delaying.",
+    "Playful nudge: 'tujhe toh pehle dena chahiye tha honestly... [LINK]' — feels special, not salesy.",
   ],
 };
 
@@ -502,7 +511,7 @@ export async function suggestReply(
 
   // Anti-repeat injection — guard against repeated openings/structure across the
   // last few replies, not just the immediately previous one.
-  const recentOutgoing = messages.filter(m => m.direction === "outgoing").slice(-3);
+  const recentOutgoing = messages.filter(m => m.direction === "outgoing").slice(-5);
   const lastOutgoingText = recentOutgoing.slice(-1)[0]?.text ?? "";
   const recentOpeners = Array.from(
     new Set(recentOutgoing.map(m => m.text.trim().split(/\s+/)[0]?.toLowerCase()).filter(Boolean)),
@@ -523,7 +532,7 @@ export async function suggestReply(
     : "";
 
   const userPrompt = transcript
-    ? crmContext + "Conversation:\n" + transcript + "\n\nReply as Nayra. One message only. Short. Unpredictable. Match the energy but never copy the structure of your last reply." + antiRepeat + blockingRecovery
+    ? crmContext + "Conversation:\n" + transcript + "\n\nReply as Nayra. Short. Unpredictable. If sending 2-3 bubbles, output each on its own line (single \\n). Match the energy but never copy the structure of your last reply." + antiRepeat + blockingRecovery
     : crmContext + "First message ever from this person. React naturally — be bold, not polite. 60% chance: no emoji at all.";
 
   // Route to a model tier by how much this reply matters. A charged moment
@@ -559,8 +568,8 @@ export async function suggestReply(
     // 120 tokens ≈ 2 short Hinglish sentences on separate lines.
     // 60 tokens was too low to produce multi-bubble output; the sanitizer now
     // preserves \n so line-separated replies survive into splitMessage.
-    maxTokens: 120,
-    temperature: 1.1,
+    maxTokens: 150,
+    temperature: 1.0,
     timeoutMs: 5000,
   });
 
