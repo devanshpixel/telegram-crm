@@ -153,6 +153,14 @@ export async function rawCompletion(args: RawCompletionArgs): Promise<string> {
   } catch (err) {
     // AbortError = our own timeout fired → noRetry so generate() skips to next model.
     if (err instanceof Error && err.name === "AbortError") {
+      // Instrument: emit a dedicated log line so production logs can confirm
+      // whether 5 s timeouts are a real latency source before changing the limit.
+      console.warn(JSON.stringify({
+        event: "ai_timeout",
+        model: args.model,
+        timeoutMs,
+        elapsedMs: Date.now() - t0,
+      }));
       const e: RetryableError = new Error(`Timeout after ${timeoutMs} ms`);
       e.noRetry = true;
       throw e;

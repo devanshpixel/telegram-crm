@@ -875,8 +875,13 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       fetch(`${appUrl}/api/telegram/poll`, {
         method: "POST",
         headers: { "x-cron-secret": secret, "content-type": "application/json" },
-        signal: AbortSignal.timeout(2000),
-      }).catch(() => {});
+        // 8 s gives Vercel enough time to cold-start and accept the request.
+        // The previous 2 s limit caused silent chain breaks on cold starts (300 ms–3 s+),
+        // falling back to the GitHub Actions 60 s cron and causing visible reply delays.
+        signal: AbortSignal.timeout(8000),
+      }).catch((e) => {
+        console.warn("[Poll] Self-chain trigger failed:", e instanceof Error ? e.message : String(e));
+      });
     }
   } catch {}
 
