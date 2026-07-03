@@ -716,6 +716,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
       // Collected during Phase 1 (dialog scan); dispatched concurrently in Phase 2.
       const replyJobs: ReplyJob[] = [];
+      const tPhase1 = Date.now();
 
       for await (const dialog of client.iterDialogs({ folder: 0 })) {
         const entity = dialog.entity;
@@ -748,6 +749,17 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
 
         const telegramId = entity.id.toString();
         let contact = knownMap.get(telegramId);
+
+        // Fast-skip: dialog.message is the last message in the conversation,
+        // already fetched by iterDialogs at zero extra MTProto cost. If its ID
+        // hasn't advanced past our sync cursor, there are no new messages —
+        // calling iterMessages would be a wasted round-trip (~150ms each).
+        // Reduces Phase 1 scan from O(N_contacts × 150ms) to the iterDialogs
+        // batch time alone. New contacts (not in knownMap) are always processed.
+        const dialogLatestMsgId = (dialog.message as { id?: number } | null)?.id ?? 0;
+        if (contact && dialogLatestMsgId > 0 && dialogLatestMsgId <= (contact.last_synced_message_id || 0)) {
+          continue;
+        }
 
         if (!contact) {
           try {
@@ -833,6 +845,13 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
           );
         }
       }
+
+      console.log(JSON.stringify({
+        stage: "phase1_scan",
+        dialogsChecked: summary.dialogsChecked,
+        replyJobs: replyJobs.length,
+        phase1Ms: Date.now() - tPhase1,
+      }));
 
       // Phase 2: dispatch reply jobs with bounded concurrency (REPLY_CONCURRENCY=3).
       // Each batch of 3 contacts runs their AI calls in parallel; batches are serial
