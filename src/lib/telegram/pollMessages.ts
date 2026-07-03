@@ -149,7 +149,7 @@ async function setConvState(
 async function getOfferSettings() {
   const [offerPrice, offerMessage, aiMode, automatedReplies] = await Promise.all([
     getSetting("offerPrice", OFFER.DEFAULT_PRICE),
-    getSetting("offerMessage", "Hey! You've been enjoying the chat so here's something special 🔥\n\nUnlock premium access for exclusive content, behind-the-scenes, and unlimited chat."),
+    getSetting("offerMessage", "acha... itna hi dekhna hai? 😏\n\nfir shortcut ye hai 👇"),
     getSetting<ReplyMode>("aiMode", "auto"),
     getSetting<boolean>("automatedReplies", true),
   ]);
@@ -621,7 +621,16 @@ async function processReplyJob(
         // reaches HIGH(60) from a single message — so the direct offer gate was never
         // triggering even on explicit "photo bhejo" / "I'll pay" messages.
         const currentPollMode = detectMode(incomingMessages.map(m => ({ ...m, direction: "incoming" as const })), emotionalTemp);
-        const directOfferSignal = currentPollMode === "sales" && !inCooldown;
+        // Require explicit content/purchase words — price/cost/kitna alone (e.g. "kya price h?")
+        // must NOT fire an immediate payment link. Only content requests or clear buy intent do.
+        const CONTENT_INTENT_WORDS = ["photo","pic","pics","photos","selfie","video","dikha","dikhana",
+          "show yourself","send me","nude","nudes","sext","exclusive","premium","unlock",
+          "subscription","membership","send link","i'll pay","i will pay","payment kar",
+          "pay karna","ready to pay","buy now","join kar"];
+        const hasContentIntent = incomingMessages.some(m =>
+          CONTENT_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))
+        );
+        const directOfferSignal = currentPollMode === "sales" && !inCooldown && hasContentIntent;
         if ((intentScore >= INTENT_THRESHOLD.HIGH || directOfferSignal) && !inCooldown) {
           await sendPremiumOffer(contact.id);
           _logOfferTriggered = true; _logOfferSent = true; _logMode = currentPollMode;
