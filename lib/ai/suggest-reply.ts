@@ -310,7 +310,7 @@ export function countHighIntentRequests(messages: { text: string; direction: str
   const hasPriorIntent = incoming.some(m => HIGH_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w)));
   if (hasPriorIntent) {
     const activeFollowUps = incoming.filter(m => SHORT_INTENT_WORDS.some(w => m.text.trim().toLowerCase() === w));
-    if (activeFollowUps.length >= 2) return 3; // triggers high-intent path
+    if (activeFollowUps.length >= 1) return 3; // 1 explicit request + 1 follow-up is sufficient signal
   }
   return explicit;
 }
@@ -355,8 +355,10 @@ export function sanitizeReply(raw: string): string {
   // "2 - 3 min" survive untouched.
   s = s.replace(/([a-zA-Z])\s+-\s+([a-zA-Z])/g, "$1, $2");
 
-  // Collapse to a single line: a real reply is one bubble, not a paragraph.
-  s = s.replace(/\s*\n+\s*/g, " ");
+  // Collapse multiple blank lines to a single newline so multi-bubble AI output
+  // survives into splitMessage. A single \n is the multi-message separator;
+  // we only crush 2+ consecutive blank lines (paragraph breaks = AI tell).
+  s = s.replace(/\n{2,}/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]+/g, "\n");
 
   // Cap emoji at 2 (prompt says NEVER 3+). Keep the first two, drop the rest.
   let emojiSeen = 0;
@@ -547,7 +549,10 @@ export async function suggestReply(
     system: systemPrompt,
     user: userPrompt,
     tier,
-    maxTokens: 60,
+    // 120 tokens ≈ 2 short Hinglish sentences on separate lines.
+    // 60 tokens was too low to produce multi-bubble output; the sanitizer now
+    // preserves \n so line-separated replies survive into splitMessage.
+    maxTokens: 120,
     temperature: 1.1,
     timeoutMs: 5000,
   });

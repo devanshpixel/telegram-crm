@@ -236,8 +236,17 @@ function getScheduledDelay(convState: string, emotionalTemp: number): number {
 }
 
 function splitMessage(text: string): string[] {
-  if (Math.random() < MESSAGE.SPLIT_CHANCE || text.length <= MESSAGE.SHORT_MESSAGE_LENGTH) return [text];
-  // Split on sentence-ending punctuation
+  // Priority 1: AI already output explicit line breaks → respect them as bubble boundaries.
+  // This is the primary multi-message path — the sanitizer now preserves single \n.
+  if (text.includes("\n")) {
+    const lines = text.split("\n").map(s => s.trim()).filter(Boolean);
+    if (lines.length >= 2) return lines.slice(0, 4); // cap at 4 bubbles
+  }
+  // Priority 2: 30% chance skip (stay single bubble for variety)
+  if (Math.random() < MESSAGE.SPLIT_CHANCE) return [text];
+  // Priority 3: Short replies don't split — no content to divide
+  if (text.length <= MESSAGE.SHORT_MESSAGE_LENGTH) return [text];
+  // Priority 4: Split on sentence-ending punctuation
   const parts = text.match(/[^.!?…]+[.!?…]*/g);
   if (!parts || parts.length <= 1) return [text];
   const cleaned = parts.map((s) => s.trim()).filter(Boolean);
@@ -376,9 +385,11 @@ async function scheduleOrSendReply(
   // short pre-typing pause capped at 3 s so the poll budget isn't consumed.
   const delayMs = getScheduledDelay(convState, emotionalTemp);
   const inlineWait = Math.min(delayMs, 3000);
+  const tInlineWait = Date.now();
   if (inlineWait > 0) {
     await new Promise((r) => setTimeout(r, inlineWait));
   }
+  console.log(JSON.stringify({ stage: "inline_wait", contactId, scheduledDelayMs: delayMs, inlineWaitMs: Date.now() - tInlineWait }));
   const parts = splitMessage(text);
   for (let i = 0; i < parts.length; i++) {
     if (i > 0) await new Promise((r) => setTimeout(r, TIMING.MULTI_MESSAGE_GAP_MIN + Math.random() * (TIMING.MULTI_MESSAGE_GAP_MAX - TIMING.MULTI_MESSAGE_GAP_MIN)));
@@ -667,6 +678,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     // TOCTOU race where two concurrent polls both pass getLockStatus() and
     // overwrite each other's lock.
     try {
+      const tLock = Date.now();
       const db = await getDb();
       const expiresAt = new Date(Date.now() + POLL_LOCK_DURATION_MS).toISOString();
       const now = new Date().toISOString();
@@ -681,6 +693,7 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
            )`
         )
         .run(expiresAt, now, now);
+      console.log(JSON.stringify({ stage: "lock_acquire", ms: Date.now() - tLock, acquired: result.changes > 0 }));
       if (result.changes === 0) {
         console.warn(`[Poll] Another poll is already in progress, skipping`);
         return summary;
@@ -691,28 +704,36 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
     }
 
     try {
+      const tConnect = Date.now();
       await ensureConnected();
       const client = await getTelegramClient();
       await client.getMe(); // validate session is alive
+      console.log(JSON.stringify({ stage: "connect_and_auth", ms: Date.now() - tConnect }));
 
       // Set offline immediately after connecting so users never see "Online"
       // during the dialog scan + AI generation window (which can be 10–120 s).
       // Telegram will automatically restore Online when SetTyping fires in
       // sendMessage.ts just before the reply is delivered — the user sees a
       // brief "typing…" indicator and then the message, which is the correct UX.
+      const tOffline = Date.now();
       try {
         await client.invoke(new Api.account.UpdateStatus({ offline: true }));
+        console.log(JSON.stringify({ stage: "set_offline", ms: Date.now() - tOffline }));
       } catch (e) {
         console.warn("[Poll] Failed to set initial offline status:", e);
       }
 
+      const tDueReplies = Date.now();
       await sendDueReplies(summary);
+      console.log(JSON.stringify({ stage: "send_due_replies", ms: Date.now() - tDueReplies }));
 
+      const tContacts = Date.now();
       const knownContacts = await listContactConversations();
       const knownMap = new Map<string, ContactWithConv>();
       for (const c of knownContacts) {
         knownMap.set(c.telegram_id, c);
       }
+      console.log(JSON.stringify({ stage: "list_contacts", count: knownContacts.length, ms: Date.now() - tContacts }));
 
       // Collected during Phase 1 (dialog scan); dispatched concurrently in Phase 2.
       const replyJobs: ReplyJob[] = [];
