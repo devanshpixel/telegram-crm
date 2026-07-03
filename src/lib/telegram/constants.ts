@@ -57,7 +57,7 @@ export const MESSAGE = {
   RECENT_COUNT: 20,
   TOPIC_MAX_LENGTH: 60,
   SHORT_MESSAGE_LENGTH: 30,
-  SPLIT_CHANCE: 0.3,
+  SPLIT_CHANCE: 0.10,
 } as const;
 
 // Pacing
