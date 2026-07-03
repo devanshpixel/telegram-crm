@@ -25,7 +25,7 @@ import {
 
 import type { ConvState, ReplyMode } from "@/types";
 import { razorpay } from "@/lib/razorpay";
-import { suggestReply } from "@/lib/ai/suggest-reply";
+import { suggestReply, detectMode } from "@/lib/ai/suggest-reply";
 import { extractMemory, moodLabel } from "@/lib/ai/memory";
 import { getAppUrl } from "@/lib/app-url";
 import { getTelegramClient } from "./client";
@@ -593,7 +593,13 @@ async function processReplyJob(
         }
       } else if (!skipReply) {
         const inCooldown = await isInOfferCooldown(contact.id);
-        if (intentScore >= INTENT_THRESHOLD.HIGH && !inCooldown) {
+        // detectMode checks the CURRENT poll's messages for sales/content/pay keywords.
+        // intentScore only scores the current-poll messages in isolation and never
+        // reaches HIGH(60) from a single message — so the direct offer gate was never
+        // triggering even on explicit "photo bhejo" / "I'll pay" messages.
+        const currentPollMode = detectMode(incomingMessages.map(m => ({ ...m, direction: "incoming" as const })), emotionalTemp);
+        const directOfferSignal = currentPollMode === "sales" && !inCooldown;
+        if ((intentScore >= INTENT_THRESHOLD.HIGH || directOfferSignal) && !inCooldown) {
           await sendPremiumOffer(contact.id);
           summary.offersSent++;
           contact.conv_state = "OFFER_SENT";
