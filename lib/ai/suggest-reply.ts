@@ -330,6 +330,13 @@ export function sanitizeReply(raw: string): string {
   let s = (raw ?? "").trim();
   if (!s) return s;
 
+  // Strip everything from the first separator or explanation block onward.
+  // Models (Gemini, Llama) append "---\nExplanation:" or "**Note:**" after the reply.
+  // This must run FIRST so subsequent rules only process the actual reply text.
+  s = s.replace(/\n\s*[-─*=]{2,}[\s\S]*/g, "")   // --- / === / *** separators
+       .replace(/\n\s*\*?\*?(explanation|note|nayra'?s? (reply|thought)|translation|context)[:\s*][\s\S]*/gi, "")
+       .replace(/\n\s*\(.*?(explanation|translation|note)[\s\S]*/gi, "");
+
   // Role labels the model sometimes prepends.
   s = s.replace(/^Nayra\s*[:\-]\s*/i, "").replace(/^(assistant|fan)\s*[:\-]\s*/i, "");
 
