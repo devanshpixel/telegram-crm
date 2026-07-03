@@ -149,10 +149,19 @@ export async function rawCompletion(args: RawCompletionArgs): Promise<string> {
     const body = await res.json();
     const text: string | undefined = body?.choices?.[0]?.message?.content;
     if (!text || text.trim().length === 0) throw new Error("Empty response");
-    // Reject single-word fragments (e.g. "itni") — these are truncated/degenerate
-    // completions that pass the empty check but are not usable replies. Falling
-    // through to the next model produces a real reply faster than retrying the same one.
-    if (text.trim().split(/\s+/).length < 3) throw new Error("Degenerate response: too short");
+    // Reject fragments shorter than 4 words — truncated completions that pass
+    // the empty check but are not sendable replies. Falls through to the next
+    // model in the chain immediately without retrying the same model.
+    const words = text.trim().split(/\s+/);
+    if (words.length < 4) {
+      console.log(JSON.stringify({
+        event: "ai_rejected_short_completion",
+        model: args.model,
+        wordCount: words.length,
+        preview: text.trim().slice(0, 40),
+      }));
+      throw new Error(`Degenerate response: ${words.length} word(s)`);
+    }
     return text;
   } catch (err) {
     // AbortError = our own timeout fired → noRetry so generate() skips to next model.
