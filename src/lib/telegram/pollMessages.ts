@@ -591,7 +591,12 @@ async function processReplyJob(
           if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
           else summary.repliesSent++;
         } else {
-          const { offerSent } = await sendAiReply(contact.id, "casual", emotionalTemp, intentScore, contact.conv_state);
+          // intentScore < VERY_LOW but still use aiMode (not hard-coded "casual") so
+          // auto-detection can inspect the full conversation history. Short follow-up
+          // messages ("Abhi", "To kese milega?") score 0 in isolation but the full
+          // transcript still contains the prior high-intent keywords — bypassing
+          // auto-mode here permanently prevented the offer transition for those polls.
+          const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore, contact.conv_state);
           if (offerSent) { summary.offersSent++; contact.conv_state = "OFFER_SENT"; }
           else summary.repliesSent++;
         }
@@ -689,6 +694,17 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       await ensureConnected();
       const client = await getTelegramClient();
       await client.getMe(); // validate session is alive
+
+      // Set offline immediately after connecting so users never see "Online"
+      // during the dialog scan + AI generation window (which can be 10–120 s).
+      // Telegram will automatically restore Online when SetTyping fires in
+      // sendMessage.ts just before the reply is delivered — the user sees a
+      // brief "typing…" indicator and then the message, which is the correct UX.
+      try {
+        await client.invoke(new Api.account.UpdateStatus({ offline: true }));
+      } catch (e) {
+        console.warn("[Poll] Failed to set initial offline status:", e);
+      }
 
       await sendDueReplies(summary);
 
@@ -825,15 +841,6 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         if (Date.now() - startTime > POLL_TIMEOUT_MS) {
           console.warn("[Poll] Timeout reached during reply dispatch, remaining jobs skipped");
           break;
-        }
-        // Set presence to offline before AI generation so contacts don't see
-        // "Nayra online" while she's supposedly "thinking". Telegram auto-restores
-        // the online flag when the next message or typing action is sent.
-        try {
-          const client = await getTelegramClient();
-          await client.invoke(new Api.account.UpdateStatus({ offline: true }));
-        } catch (e) {
-          console.warn("[Poll] Failed to set offline status:", e);
         }
         const batch = replyJobs.slice(i, i + REPLY_CONCURRENCY);
         await Promise.allSettled(
