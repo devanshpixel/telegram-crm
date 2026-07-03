@@ -318,6 +318,11 @@ export async function getDb(): Promise<AsyncDb> {
         ["favorite_content_type",      "TEXT DEFAULT ''"],
         ["contact_health",             "INTEGER DEFAULT 50"],
         ["is_bot",                     "INTEGER DEFAULT 0"],
+        ["offer_sent",                 "INTEGER NOT NULL DEFAULT 0"],
+        ["conv_state",                 "TEXT NOT NULL DEFAULT 'FREE_CHAT'"],
+        ["offer_sent_at",              "TEXT"],
+        ["last_locked_response_at",    "TEXT"],
+        ["locked_response_count",      "INTEGER NOT NULL DEFAULT 0"],
       ];
       for (const [col, def] of contactColMigrations) {
         try {
