@@ -149,11 +149,15 @@ export async function rawCompletion(args: RawCompletionArgs): Promise<string> {
     const body = await res.json();
     const text: string | undefined = body?.choices?.[0]?.message?.content;
     if (!text || text.trim().length === 0) throw new Error("Empty response");
-    // Reject fragments shorter than 4 words — truncated completions that pass
-    // the empty check but are not sendable replies. Falls through to the next
+    // Reject single-line fragments shorter than 4 words — truncated completions
+    // that pass the empty check but are not sendable replies. Multi-line replies
+    // (multi-bubble output using \n) are exempt: each line may be 1-2 words and
+    // that is intentional ("haan\nsun", "ruk\nek sec"). Falls through to the next
     // model in the chain immediately without retrying the same model.
+    const lines = text.trim().split("\n").filter(l => l.trim().length > 0);
+    const isMultiBubble = lines.length >= 2;
     const words = text.trim().split(/\s+/);
-    if (words.length < 4) {
+    if (!isMultiBubble && words.length < 4) {
       console.log(JSON.stringify({
         event: "ai_rejected_short_completion",
         model: args.model,
