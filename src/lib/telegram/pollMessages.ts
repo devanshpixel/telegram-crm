@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import bigInt from "big-integer";
 import { Api } from "telegram";
 import { getDb, nowIso } from "@/lib/db";
@@ -436,10 +437,16 @@ async function sendPremiumOffer(contactId: number): Promise<void> {
   const amount = await selectOfferAmount(contactId, settings.offerPrice);
   const link = await createPaymentLink(contactId, amount);
   const text = `${settings.offerMessage}\n\n👉 ${link}`;
-  try {
-    await sendTelegramPhoto(contactId, PREVIEW_IMAGE_PATH);
-  } catch (e) {
-    console.error(`[sendPremiumOffer] Blurred preview failed for contact ${contactId}:`, e);
+  const previewExists = existsSync(PREVIEW_IMAGE_PATH);
+  console.log(JSON.stringify({ stage: "preview_check", contactId, path: PREVIEW_IMAGE_PATH, exists: previewExists }));
+  if (previewExists) {
+    try {
+      await sendTelegramPhoto(contactId, PREVIEW_IMAGE_PATH);
+    } catch (e) {
+      console.error(`[sendPremiumOffer] Blurred preview send failed for contact ${contactId}:`, e);
+    }
+  } else {
+    console.error(`[sendPremiumOffer] Preview image missing at ${PREVIEW_IMAGE_PATH} — photo skipped`);
   }
   await sendTelegramMessage(contactId, text);
   try {
