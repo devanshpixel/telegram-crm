@@ -354,31 +354,14 @@ async function sendAiReply(
 
   const linkMatch = reply.match(/\[link\]/i);
   if (linkMatch) {
-    let linkSent = false;
-    try {
-      const settings = await getCachedOfferSettings();
-      const amount = await selectOfferAmount(contactId, settings.offerPrice);
-      const link = await createPaymentLink(contactId, amount);
-      reply = reply.replace(/\[link\]/gi, link).trim();
-      if (existsSync(PREVIEW_IMAGE_PATH)) {
-        try { await sendTelegramPhoto(contactId, PREVIEW_IMAGE_PATH); } catch (e) { console.error(`[Offer] preview failed contactId=${contactId}:`, e); }
-      }
-      await sendTelegramMessage(contactId, reply);
-      linkSent = true;
-      await setConvState(contactId, "OFFER_SENT", nowIso());
-      return { offerSent: true };
-    } catch (e) {
-      if (linkSent) {
-        console.error(`[POLL] Post-send state update failed for [LINK] offer (contact ${contactId}):`, e);
-        return { offerSent: true };
-      }
-      console.error(
-        `[POLL] Payment link creation failed during [LINK] substitution (contact ${contactId}):`,
-        e,
-      );
-      reply = reply.replace(/\[link\]/gi, "").replace(/\s{2,}/g, " ").trim();
-      if (!reply) reply = "ek sec babe... sending you something 💫";
+    // AI decided to offer — backend executes it deterministically via sendPremiumOffer
+    // so preview + payment link ALWAYS go out regardless of AI phrasing.
+    const textPart = reply.replace(/\[link\]/gi, "").replace(/\s{2,}/g, " ").trim();
+    if (textPart) {
+      await scheduleOrSendReply(contactId, textPart, convState, emotionalTemp);
     }
+    await sendPremiumOffer(contactId);
+    return { offerSent: true };
   }
 
   await scheduleOrSendReply(contactId, reply, convState, emotionalTemp);
@@ -436,6 +419,7 @@ export async function createPaymentLink(
 const PREVIEW_IMAGE_PATH = process.cwd() + "/public/preview-blurred.jpg";
 
 async function sendPremiumOffer(contactId: number): Promise<void> {
+  console.log(`[Offer] Triggered contactId=${contactId}`);
   const settings = await getCachedOfferSettings();
   const amount = await selectOfferAmount(contactId, settings.offerPrice);
   const link = await createPaymentLink(contactId, amount);
