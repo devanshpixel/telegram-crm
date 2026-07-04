@@ -434,6 +434,7 @@ async function sendPremiumOffer(contactId: number): Promise<void> {
   const amount = await selectOfferAmount(contactId, settings.offerPrice);
   const link = await createPaymentLink(contactId, amount);
   const text = `${settings.offerMessage}\n\n👉 ${link}`;
+  // TODO: send one blurred preview image here before the offer text
   await sendTelegramMessage(contactId, text);
   try {
     await setConvState(contactId, "OFFER_SENT", nowIso());

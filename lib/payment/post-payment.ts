@@ -53,6 +53,7 @@ export async function deliverUnlock(
       ? `\n\nView it here: ${appUrl}/api/media/${mediaId}/file?contactId=${contactId}`
       : "";
     await sendTelegramMessage(contactId, pickRandom(PAYMENT_SUCCESS) + mediaLink);
+    // TODO: send original (unblurred) image via sendTelegramPhoto(contactId, mediaId) here
     await markStep(confirmKey);
   }
 
