@@ -148,3 +148,55 @@ export async function sendTelegramMessage(
 
   throw lastError ?? new Error("Failed to send message after retries");
 }
+
+export async function sendTelegramPhoto(
+  contactId: number,
+  photoPath: string,
+  caption?: string,
+): Promise<void> {
+  const contact = await getContactById(contactId);
+  if (!contact) throw new Error(`Contact not found: ${contactId}`);
+  if (!contact.telegram_id) throw new Error(`Contact ${contactId} is missing telegram_id`);
+  if (!contact.telegram_access_hash) throw new Error(`Contact ${contactId} is missing telegram_access_hash`);
+
+  await ensureConnected();
+  const client = await getTelegramClient();
+  const peer = buildPeer(contact);
+
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= FLOOD_RETRY_MAX; attempt++) {
+    try {
+      const tSend = Date.now();
+      await client.sendFile(peer, { file: photoPath, caption: caption ?? "" });
+      console.log(JSON.stringify({
+        stage: "telegram_photo_send",
+        contactId,
+        photoPath,
+        totalSendMs: Date.now() - tSend,
+      }));
+      return;
+    } catch (err: unknown) {
+      const e = err as Error & { seconds?: number };
+      const isFlood =
+        err instanceof FloodWaitError ||
+        e.name === "FloodWaitError" ||
+        (e.message && e.message.includes("FLOOD_WAIT"));
+
+      if (isFlood) {
+        lastError = e;
+        const rawSeconds = e.seconds ?? Math.pow(2, attempt);
+        if (rawSeconds > 45) {
+          throw Object.assign(new Error(`FloodWait ${rawSeconds}s — too long to sleep inline`), { isFloodWait: true, seconds: rawSeconds });
+        }
+        console.warn(`[SEND_RETRY] FloodWait: sleeping ${rawSeconds}s for photo to contact ${contactId} (attempt ${attempt}/${FLOOD_RETRY_MAX})`);
+        await new Promise((resolve) => setTimeout(resolve, rawSeconds * 1000));
+        await ensureConnected();
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError ?? new Error("Failed to send photo after retries");
+}
