@@ -494,6 +494,8 @@ async function shouldSendLockedResponse(contactId: number): Promise<boolean> {
 }
 
 async function selectOfferAmount(contactId: number, basePrice: number): Promise<number> {
+  // Launch price fixed: skip tier multiplier when price is at launch floor
+  if (basePrice <= 49) return basePrice;
   const segment = await recalculateSpendSegment(contactId);
   const multiplier = await getSpendSegmentMultipliers(segment);
   return Math.round(basePrice * multiplier);
