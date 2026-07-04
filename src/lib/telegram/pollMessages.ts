@@ -629,12 +629,23 @@ async function processReplyJob(
         const CONTENT_INTENT_WORDS = ["photo","pic","pics","photos","selfie","video","dikha","dikhana",
           "show yourself","send me","nude","nudes","sext","exclusive","premium","unlock",
           "subscription","membership","send link","i'll pay","i will pay","payment kar",
-          "pay karna","ready to pay","buy now","join kar"];
+          "pay karna","ready to pay","buy now","join kar",
+          "preview","demo","dikhao","bhejo","trial","sample"];
         const hasContentIntent = incomingMessages.some(m =>
           CONTENT_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))
         );
         const directOfferSignal = currentPollMode === "sales" && !inCooldown && hasContentIntent;
-        if ((intentScore >= INTENT_THRESHOLD.HIGH || directOfferSignal) && !inCooldown) {
+        // Fire offer on 2nd+ content request — first stays natural, repeated intent converts.
+        let repeatedContentSignal = false;
+        if (hasContentIntent && !inCooldown) {
+          const historyMsgs = await getMessagesByContactId(contact.id, 30);
+          const priorCount = historyMsgs.filter(m =>
+            m.direction === "incoming" &&
+            CONTENT_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))
+          ).length;
+          repeatedContentSignal = priorCount >= 2;
+        }
+        if ((intentScore >= INTENT_THRESHOLD.HIGH || directOfferSignal || repeatedContentSignal) && !inCooldown) {
           await sendPremiumOffer(contact.id);
           _logOfferTriggered = true; _logOfferSent = true; _logMode = currentPollMode;
           summary.offersSent++;
