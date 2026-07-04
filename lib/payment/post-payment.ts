@@ -1,9 +1,10 @@
 import { getDb } from "@/lib/db";
 import { recordUpsell } from "@/lib/db/service";
-import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
+import { sendTelegramMessage, sendTelegramPhoto } from "@/src/lib/telegram/sendMessage";
 import { pickRandom, PAYMENT_SUCCESS, FIRST_UPSELL } from "@/src/lib/telegram/messageVariants";
 
 const UPSELL_BASE_PRICE = 499;
+const ORIGINAL_IMAGE_PATH = process.cwd() + "/public/original.jpg";
 const UPSELL_DISCOUNT = 0.6;
 const UPSELL_SPEND_THRESHOLD = 1000;
 
@@ -52,8 +53,12 @@ export async function deliverUnlock(
     const mediaLink = mediaId
       ? `\n\nView it here: ${appUrl}/api/media/${mediaId}/file?contactId=${contactId}`
       : "";
+    try {
+      await sendTelegramPhoto(contactId, ORIGINAL_IMAGE_PATH);
+    } catch (e) {
+      console.error(`[deliverUnlock] Original image send failed for contact ${contactId}:`, e);
+    }
     await sendTelegramMessage(contactId, pickRandom(PAYMENT_SUCCESS) + mediaLink);
-    // TODO: send original (unblurred) image via sendTelegramPhoto(contactId, mediaId) here
     await markStep(confirmKey);
   }
 

@@ -29,7 +29,7 @@ import { suggestReply, detectMode } from "@/lib/ai/suggest-reply";
 import { extractMemory, moodLabel } from "@/lib/ai/memory";
 import { getAppUrl } from "@/lib/app-url";
 import { getTelegramClient } from "./client";
-import { sendTelegramMessage } from "./sendMessage";
+import { sendTelegramMessage, sendTelegramPhoto } from "./sendMessage";
 import { getLockedVariant, pickRandom, WELCOME_PAID } from "./messageVariants";
 import {
   TIMING,
@@ -429,12 +429,18 @@ export async function createPaymentLink(
   return (paymentLink as { short_url: string }).short_url;
 }
 
+const PREVIEW_IMAGE_PATH = process.cwd() + "/public/preview-blurred.jpg";
+
 async function sendPremiumOffer(contactId: number): Promise<void> {
   const settings = await getCachedOfferSettings();
   const amount = await selectOfferAmount(contactId, settings.offerPrice);
   const link = await createPaymentLink(contactId, amount);
   const text = `${settings.offerMessage}\n\n👉 ${link}`;
-  // TODO: send one blurred preview image here before the offer text
+  try {
+    await sendTelegramPhoto(contactId, PREVIEW_IMAGE_PATH);
+  } catch (e) {
+    console.error(`[sendPremiumOffer] Blurred preview failed for contact ${contactId}:`, e);
+  }
   await sendTelegramMessage(contactId, text);
   try {
     await setConvState(contactId, "OFFER_SENT", nowIso());
