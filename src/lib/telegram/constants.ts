@@ -35,7 +35,7 @@ export const EMOTIONAL_TEMP = {
 
 // Offer settings
 export const OFFER = {
-  DEFAULT_PRICE: 499,
+  DEFAULT_PRICE: 49,
   COOLDOWN_DAYS: 7,
   EXPIRY_DAYS: 7,
   MAX_LOCKED_RESPONSES: 6,

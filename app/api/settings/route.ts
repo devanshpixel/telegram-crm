@@ -9,7 +9,7 @@ interface Settings {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  offerPrice: 499,
+  offerPrice: 49,
   offerMessage:
     "Hey! You've been enjoying the chat so here's something special 🔥\n\nUnlock premium access for exclusive content, behind-the-scenes, and unlimited chat.",
   aiMode: "auto",
