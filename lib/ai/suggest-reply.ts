@@ -363,9 +363,10 @@ export function sanitizeReply(raw: string): string {
   // List / bullet formatting at line starts — never in a real text.
   s = s.replace(/^[ \t]*(?:[-*•]|\d+[.)])[ \t]+/gm, "");
 
-  // Em/en dashes (and the ASCII "--" models use for them) → casual punctuation.
-  // " word — word " reads as a comma pause; a glued em dash becomes a space.
-  s = s.replace(/\s*[—–―]\s*/g, ", ").replace(/\s+--\s+/g, ", ");
+  // Em/en dashes and all Unicode dash variants → ellipsis (natural texting pause).
+  // Covers U+2012 figure dash, U+2013 en dash, U+2014 em dash, U+2015 horizontal bar,
+  // U+2E3A two-em dash, U+2E3B three-em dash, and the ASCII "--" substitutes.
+  s = s.replace(/\s*[‒–—―⸺⸻—–―]\s*/g, "...").replace(/\s+--\s+/g, "...");
   // A single spaced hyphen used as an em-dash substitute ("acha - chalo") is an
   // AI tell too. Only convert when flanked by letters so number ranges like
   // "2 - 3 min" survive untouched.
