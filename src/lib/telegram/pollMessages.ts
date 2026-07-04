@@ -360,6 +360,9 @@ async function sendAiReply(
       const amount = await selectOfferAmount(contactId, settings.offerPrice);
       const link = await createPaymentLink(contactId, amount);
       reply = reply.replace(/\[link\]/gi, link).trim();
+      if (existsSync(PREVIEW_IMAGE_PATH)) {
+        try { await sendTelegramPhoto(contactId, PREVIEW_IMAGE_PATH); } catch (e) { console.error(`[Offer] preview failed contactId=${contactId}:`, e); }
+      }
       await sendTelegramMessage(contactId, reply);
       linkSent = true;
       await setConvState(contactId, "OFFER_SENT", nowIso());
