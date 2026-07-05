@@ -96,6 +96,12 @@ export function Dashboard({
   }, [activeChatId, loadProfile, loadMessages]);
 
   useEffect(() => {
+    if (!activeChatId) return;
+    const id = setInterval(() => { void loadMessages(activeChatId); }, 5000);
+    return () => clearInterval(id);
+  }, [activeChatId, loadMessages]);
+
+  useEffect(() => {
     telegramStatus()
       .then((result) => setAuthenticated(result.authenticated))
       .catch(() => setAuthenticated(false));
