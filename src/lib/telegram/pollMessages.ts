@@ -639,11 +639,17 @@ async function processReplyJob(
         let repeatedContentSignal = false;
         if (hasContentIntent && !inCooldown) {
           const historyMsgs = await getMessagesByContactId(contact.id, 30);
-          const priorCount = historyMsgs.filter(m =>
+          const totalContentCount = historyMsgs.filter(m =>
             m.direction === "incoming" &&
             CONTENT_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))
           ).length;
-          repeatedContentSignal = priorCount >= 2;
+          // Subtract current-poll messages so we only count PRIOR requests.
+          // Fires on the 2nd request: after the 1st "photo" gets a natural tease,
+          // the 2nd "photo" has priorContentCount=1 → offer triggers immediately.
+          const currentContentCount = incomingMessages.filter(m =>
+            CONTENT_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))
+          ).length;
+          repeatedContentSignal = (totalContentCount - currentContentCount) >= 1;
         }
         if ((intentScore >= INTENT_THRESHOLD.HIGH || directOfferSignal || repeatedContentSignal) && !inCooldown) {
           await sendPremiumOffer(contact.id);

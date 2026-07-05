@@ -51,7 +51,9 @@ export async function sendTelegramMessage(
   contactId: number,
   text: string,
 ): Promise<Message> {
-  const trimmedText = text.trim();
+  // Strip any HTML tags the AI might have leaked (e.g. </blockquote>) before
+  // they reach Telegram — plain-text MTProto rejects / renders them literally.
+  const trimmedText = text.replace(/<[^>]*>/g, '').trim();
   if (!trimmedText) {
     throw new Error("Message text cannot be empty");
   }
