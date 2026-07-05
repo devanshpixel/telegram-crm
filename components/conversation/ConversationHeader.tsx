@@ -18,6 +18,12 @@ const CONV_STATE_CONFIG: Record<ConvState, { label: string; variant: "default" |
   PAID: { label: "Paid", variant: "success" },
 };
 
+const LEAD_BADGE: Record<string, string> = {
+  hot: "🔴 Hot",
+  warm: "🟡 Warm",
+  cold: "⚪ Cold",
+};
+
 export function ConversationHeader({
   chat,
   onBack,
@@ -52,6 +58,9 @@ export function ConversationHeader({
             >
               {CONV_STATE_CONFIG[chat.convState].label}
             </Badge>
+            {chat.leadClassification && (
+              <span className="text-[11px] font-medium">{LEAD_BADGE[chat.leadClassification] ?? ""}</span>
+            )}
             <RevenueBadge amount={chat.revenue} size="md" />
           </div>
           <p className="truncate text-xs">
