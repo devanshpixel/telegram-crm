@@ -140,6 +140,10 @@ async function setConvState(
         "UPDATE contacts SET conv_state = ?, offer_sent_at = ?, offer_sent = 1, updated_at = ? WHERE id = ?",
       )
       .run(state, offerSentAt, ts, contactId);
+  } else if (state === "FREE_CHAT") {
+    await db
+      .prepare("UPDATE contacts SET conv_state = ?, offer_cooldown_until = NULL, updated_at = ? WHERE id = ?")
+      .run(state, ts, contactId);
   } else {
     await db
       .prepare("UPDATE contacts SET conv_state = ?, updated_at = ? WHERE id = ?")
