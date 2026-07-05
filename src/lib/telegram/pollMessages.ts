@@ -634,7 +634,13 @@ async function processReplyJob(
         const hasContentIntent = incomingMessages.some(m =>
           CONTENT_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))
         );
-        const directOfferSignal = currentPollMode === "sales" && !inCooldown && hasContentIntent;
+        // Explicit purchase words → fire offer immediately; no mode check needed
+        const PURCHASE_INTENT_WORDS = ["pay","payment","buy","kharidna","i'll buy","i will buy",
+          "offer do","offer kar","le lo","lelo","purchase","checkout"];
+        const hasPurchaseIntent = !inCooldown && incomingMessages.some(m =>
+          PURCHASE_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))
+        );
+        const directOfferSignal = hasPurchaseIntent || (currentPollMode === "sales" && !inCooldown && hasContentIntent);
         // Fire offer on 2nd+ content request — first stays natural, repeated intent converts.
         let repeatedContentSignal = false;
         if (hasContentIntent && !inCooldown) {
