@@ -558,6 +558,12 @@ async function processReplyJob(
   let _logOfferSent = false;
   let _logPaymentDetected = false;
   let _logUnlockSent = false;
+  let _logInCooldown = false;
+  let _logHasPurchaseIntent = false;
+  let _logHasContentIntent = false;
+  let _logDirectOfferSignal = false;
+  let _logRepeatedContentSignal = false;
+  let _logCurrentPollMode: string = aiMode;
 
   if (automatedReplies) {
     try {
@@ -623,11 +629,13 @@ async function processReplyJob(
         }
       } else if (!skipReply) {
         const inCooldown = await isInOfferCooldown(contact.id);
+        _logInCooldown = inCooldown;
         // detectMode checks the CURRENT poll's messages for sales/content/pay keywords.
         // intentScore only scores the current-poll messages in isolation and never
         // reaches HIGH(60) from a single message — so the direct offer gate was never
         // triggering even on explicit "photo bhejo" / "I'll pay" messages.
         const currentPollMode = detectMode(incomingMessages.map(m => ({ ...m, direction: "incoming" as const })), emotionalTemp);
+        _logCurrentPollMode = currentPollMode;
         // Require explicit content/purchase words — price/cost/kitna alone (e.g. "kya price h?")
         // must NOT fire an immediate payment link. Only content requests or clear buy intent do.
         const CONTENT_INTENT_WORDS = ["photo","pic","pics","photos","selfie","video","dikha","dikhana",
@@ -638,13 +646,16 @@ async function processReplyJob(
         const hasContentIntent = incomingMessages.some(m =>
           CONTENT_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))
         );
+        _logHasContentIntent = hasContentIntent;
         // Explicit purchase words → fire offer immediately; no mode check needed
         const PURCHASE_INTENT_WORDS = ["pay","payment","buy","kharidna","i'll buy","i will buy",
           "offer do","offer kar","le lo","lelo","purchase","checkout"];
         const hasPurchaseIntent = !inCooldown && incomingMessages.some(m =>
           PURCHASE_INTENT_WORDS.some(w => m.text.toLowerCase().includes(w))
         );
+        _logHasPurchaseIntent = hasPurchaseIntent;
         const directOfferSignal = hasPurchaseIntent || (currentPollMode === "sales" && !inCooldown && hasContentIntent);
+        _logDirectOfferSignal = directOfferSignal;
         // Fire offer on 2nd+ content request — first stays natural, repeated intent converts.
         let repeatedContentSignal = false;
         if (hasContentIntent && !inCooldown) {
@@ -661,6 +672,7 @@ async function processReplyJob(
           ).length;
           repeatedContentSignal = (totalContentCount - currentContentCount) >= 1;
         }
+        _logRepeatedContentSignal = repeatedContentSignal;
         if ((intentScore >= INTENT_THRESHOLD.HIGH || directOfferSignal || repeatedContentSignal) && !inCooldown) {
           await sendPremiumOffer(contact.id);
           _logOfferTriggered = true; _logOfferSent = true; _logMode = currentPollMode;
@@ -722,6 +734,12 @@ async function processReplyJob(
     payment_detected: _logPaymentDetected,
     unlock_sent: _logUnlockSent,
     conversation_state: contact.conv_state,
+    in_cooldown: _logInCooldown,
+    has_purchase_intent: _logHasPurchaseIntent,
+    has_content_intent: _logHasContentIntent,
+    direct_offer_signal: _logDirectOfferSignal,
+    repeated_content_signal: _logRepeatedContentSignal,
+    current_poll_mode: _logCurrentPollMode,
   }));
 }
 // ────────────────────────────────────────────────────────────────────────────
