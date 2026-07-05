@@ -58,8 +58,8 @@ export function ConversationHeader({
             >
               {CONV_STATE_CONFIG[chat.convState].label}
             </Badge>
-            {chat.leadClassification && (
-              <span className="text-[11px] font-medium">{LEAD_BADGE[chat.leadClassification] ?? ""}</span>
+            {chat.leadStatus && LEAD_BADGE[chat.leadStatus] && (
+              <span className="text-[11px] font-medium">{LEAD_BADGE[chat.leadStatus]}</span>
             )}
             <RevenueBadge amount={chat.revenue} size="md" />
           </div>
