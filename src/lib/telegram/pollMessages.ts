@@ -340,7 +340,7 @@ async function sendAiReply(
   const declineCount = meta?.offer_declined_count ?? 0;
   const lastOfferResult = declineCount > 0 ? "declined" : undefined;
 
-  let reply = await suggestReply(recent, mode, emotionalTemp, intentScore, {
+  const reply = await suggestReply(recent, mode, emotionalTemp, intentScore, {
     previousTopic: lastTopic,
     convState,
     isPaid: (meta?.total_spent ?? 0) > 0,
