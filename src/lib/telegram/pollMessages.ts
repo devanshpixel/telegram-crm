@@ -865,17 +865,6 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
         const telegramId = entity.id.toString();
         let contact = knownMap.get(telegramId);
 
-        // Fast-skip: dialog.message is the last message in the conversation,
-        // already fetched by iterDialogs at zero extra MTProto cost. If its ID
-        // hasn't advanced past our sync cursor, there are no new messages —
-        // calling iterMessages would be a wasted round-trip (~150ms each).
-        // Reduces Phase 1 scan from O(N_contacts × 150ms) to the iterDialogs
-        // batch time alone. New contacts (not in knownMap) are always processed.
-        const dialogLatestMsgId = (dialog.message as { id?: number } | null)?.id ?? 0;
-        if (contact && dialogLatestMsgId > 0 && dialogLatestMsgId <= (contact.last_synced_message_id || 0)) {
-          continue;
-        }
-
         if (!contact) {
           try {
             contact = await createContactFromDialog(entity);
