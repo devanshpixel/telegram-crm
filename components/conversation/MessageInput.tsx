@@ -2,7 +2,7 @@
 
 import type { ReplyMode } from "@/types";
 import { Mic, Paperclip, Send, Smile, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { suggestReplyApi } from "@/lib/api";
 
 interface MessageInputProps {
@@ -25,6 +25,14 @@ export function MessageInput({ contactName, contactId, onSend }: MessageInputPro
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<ReplyMode>("auto");
+  const [suggestion, setSuggestion] = useState("");
+
+  useEffect(() => {
+    setSuggestion("");
+    suggestReplyApi(Number(contactId), mode)
+      .then(({ suggestion: s }) => setSuggestion(s))
+      .catch(() => {});
+  }, [contactId]);
 
   const handleGenerate = async () => {
     if (generating) return;
@@ -62,8 +70,27 @@ export function MessageInput({ contactName, contactId, onSend }: MessageInputPro
     }
   };
 
+  const handleSendSuggestion = async () => {
+    const text = suggestion;
+    setSuggestion("");
+    await onSend(text);
+  };
+
   return (
     <div className="safe-bottom shrink-0 border-t border-border bg-surface-raised px-3 py-3 sm:px-4">
+      {suggestion && (
+        <div className="mb-2 flex items-start gap-2 rounded-xl border border-border bg-surface-card px-3 py-2">
+          <p className="flex-1 text-sm text-text-secondary">{suggestion}</p>
+          <button
+            type="button"
+            onClick={() => void handleSendSuggestion()}
+            disabled={sending}
+            className="shrink-0 rounded-lg bg-telegram px-3 py-1 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            Send
+          </button>
+        </div>
+      )}
       {error && (
         <p className="mb-1.5 text-xs text-rose-400" role="alert">
           {error}

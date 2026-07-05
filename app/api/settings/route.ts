@@ -13,7 +13,7 @@ const DEFAULT_SETTINGS: Settings = {
   offerMessage:
     "Hey! You've been enjoying the chat so here's something special 🔥\n\nUnlock premium access for exclusive content, behind-the-scenes, and unlimited chat.",
   aiMode: "auto",
-  automatedReplies: true,
+  automatedReplies: false,
 };
 
 async function getAllSettings(): Promise<Settings> {
