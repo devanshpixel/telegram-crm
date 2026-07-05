@@ -537,6 +537,22 @@ async function sendReadAcknowledgement(contact: ContactWithConv, maxId: number):
   }
 }
 
+async function notifyAdmin(contact: ContactWithConv, incomingMessages: { text: string }[]): Promise<void> {
+  const adminId = process.env.ADMIN_TELEGRAM_ID;
+  if (!adminId) { console.warn("[POLL] ADMIN_TELEGRAM_ID not set"); return; }
+  try {
+    const db = await getDb();
+    const row = await db.prepare("SELECT name, username FROM contacts WHERE id = ?").get(contact.id) as { name: string; username: string } | undefined;
+    const lastMsg = [...incomingMessages].reverse().find(m => m.text)?.text ?? "";
+    const text = `🔥 HOT LEAD\n\nName: ${row?.name ?? "Unknown"}\nTelegram ID: ${contact.telegram_id}\nUsername: @${row?.username ?? "unknown"}\nLast message: ${lastMsg}`;
+    const client = await getTelegramClient();
+    const adminPeer = await client.getEntity(bigInt(adminId));
+    await client.sendMessage(adminPeer, { message: text });
+  } catch (e) {
+    console.error("[POLL] notifyAdmin failed:", e);
+  }
+}
+
 async function processReplyJob(
   job: ReplyJob,
   summary: PollSummary,
@@ -678,6 +694,7 @@ async function processReplyJob(
           _logOfferTriggered = true; _logOfferSent = true; _logMode = currentPollMode;
           summary.offersSent++;
           contact.conv_state = "OFFER_SENT";
+          notifyAdmin(contact, incomingMessages).catch(e => console.error("[POLL] notifyAdmin failed:", e));
         } else if (intentScore >= INTENT_THRESHOLD.VERY_LOW) {
           const { offerSent } = await sendAiReply(contact.id, aiMode, emotionalTemp, intentScore, contact.conv_state);
           _logMode = aiMode;
