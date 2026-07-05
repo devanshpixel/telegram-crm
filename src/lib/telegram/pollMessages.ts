@@ -156,7 +156,7 @@ async function getOfferSettings() {
     getSetting("offerPrice", OFFER.DEFAULT_PRICE),
     getSetting("offerMessage", "acha... itna hi dekhna hai? 😏\n\nfir shortcut ye hai 👇"),
     getSetting<ReplyMode>("aiMode", "auto"),
-    getSetting<boolean>("automatedReplies", true),
+    getSetting<boolean>("automatedReplies", false),
   ]);
   return { offerPrice, offerMessage, aiMode, automatedReplies };
 }
@@ -835,7 +835,9 @@ export async function pollIncomingMessages(): Promise<PollSummary> {
       }
 
       const tDueReplies = Date.now();
-      await sendDueReplies(summary);
+      if (automatedReplies) {
+        await sendDueReplies(summary);
+      }
       console.log(JSON.stringify({ stage: "send_due_replies", ms: Date.now() - tDueReplies }));
 
       const tContacts = Date.now();
