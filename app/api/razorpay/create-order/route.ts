@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       }
       resolvedAmount = media.price;
     } else {
-      resolvedAmount = await getSetting("offerPrice", 499);
+      resolvedAmount = await getSetting("offerPrice", 1);
     }
     if (typeof resolvedAmount !== "number" || resolvedAmount <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
