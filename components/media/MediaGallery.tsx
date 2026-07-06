@@ -66,7 +66,7 @@ export function MediaGallery({ contactId }: MediaGalleryProps) {
         </div>
         <div className="grid grid-cols-2 gap-2">
           {media.map((item) => (
-            <MediaCard key={item.id} media={item} contactId={contactId} />
+            <MediaCard key={`${contactId}-${item.id}`} media={item} contactId={contactId} />
           ))}
         </div>
       </section>
