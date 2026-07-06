@@ -32,7 +32,7 @@ export function MessageInput({ contactName, contactId, onSend }: MessageInputPro
     suggestReplyApi(Number(contactId), mode)
       .then(({ suggestion: s }) => setSuggestion(s))
       .catch(() => {});
-  }, [contactId]);
+  }, [contactId, mode]);
 
   const handleGenerate = async () => {
     if (generating) return;
