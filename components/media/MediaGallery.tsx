@@ -88,7 +88,7 @@ function MediaCard({ media, contactId }: { media: Media; contactId: number }) {
   async function handleUnlock() {
     setCheckingOut(true);
     try {
-      const { paymentLinkUrl } = await createMediaUnlockRazorpayOrder(contactId, Number(media.id), currentPrice);
+      const { paymentLinkUrl } = await createMediaUnlockRazorpayOrder(contactId, Number(media.id), 1);
       window.location.href = paymentLinkUrl;
     } catch {
       setCheckingOut(false);
