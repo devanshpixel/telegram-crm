@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getSetting } from "@/lib/db/service";
 import { sendLockedResponse } from "@/src/lib/telegram/pollMessages";
 import { OFFER } from "@/src/lib/telegram/constants";
 
@@ -16,6 +17,9 @@ async function handle(req: Request) {
     }
   }
   try {
+    if (!await getSetting<boolean>("automatedReplies", false)) {
+      return NextResponse.json({ skipped: "automatedReplies disabled", reminded: 0, results: [] });
+    }
     const db = await getDb();
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const unpaid = (await db

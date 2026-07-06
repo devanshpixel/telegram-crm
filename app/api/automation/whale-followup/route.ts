@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getSetting } from "@/lib/db/service";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 import { pickRandom, WHALE_FOLLOWUP } from "@/src/lib/telegram/messageVariants";
 
@@ -17,6 +18,9 @@ async function handle(req: Request) {
   }
 
   try {
+    if (!await getSetting<boolean>("automatedReplies", false)) {
+      return NextResponse.json({ skipped: "automatedReplies disabled", checked: 0, sent: 0, results: [] });
+    }
     const db = await getDb();
     const cutoff60d = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
 

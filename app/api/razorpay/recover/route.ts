@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { razorpay } from "@/lib/razorpay";
 import { getDb } from "@/lib/db";
+import { getSetting } from "@/lib/db/service";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
 import { pickRandom, PAYMENT_RECOVERY } from "@/src/lib/telegram/messageVariants";
 
@@ -30,6 +31,9 @@ async function handle(req: Request) {
   }
 
   try {
+    if (!await getSetting<boolean>("automatedReplies", false)) {
+      return NextResponse.json({ skipped: "automatedReplies disabled", checked: 0, reminded: 0, details: [] });
+    }
     const db = await getDb();
     const lookbackHours = 72;
     const from = Math.floor((Date.now() - lookbackHours * 3600_000) / 1000);
