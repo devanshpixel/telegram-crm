@@ -122,6 +122,14 @@
 - Playwright e2e suite (`e2e/auth.spec.ts`, 8 tests): auth boundary — 401s, login cookie, logout, cron gate, 429 throttle. `npm run test:e2e`
 - KNOWN_LIMITATIONS refreshed: AI-fetch timeout (#6), payment UNIQUE index (#7), webhook permanent-failure 200 (#4) confirmed resolved; logout (#9) resolved; rate limiting (#2) partial
 
+## Backlog — FROZEN
+
+### Auto-refresh / Real-time Messages — FROZEN ❄️
+- **Status:** FROZEN
+- **Reason:** Root cause not proven. Not required for Day-1 AI Sales Copilot. Manual Send is the primary workflow.
+- **Constraint:** Do NOT modify `pollMessages.ts`. Do NOT debug `automatedReplies`. Do NOT spend engineering time here until v1 is live.
+- **Revisit:** After v1 launch, if manual workflow proves insufficient.
+
 ## Post-Launch
 
 - [ ] Monitor error logs for 24h
