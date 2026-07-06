@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getMessagesByContactId, getFailedActionStats } from "@/lib/db/service";
+import { getMessagesByContactId, getFailedActionStats, getSetting } from "@/lib/db/service";
 import { suggestReply } from "@/lib/ai/suggest-reply";
 import { extractMemory, moodLabel } from "@/lib/ai/memory";
 import { sendTelegramMessage } from "@/src/lib/telegram/sendMessage";
@@ -55,15 +55,25 @@ async function handle(req: Request) {
 
     const results: { id: number; actionType: string; contactId: number; success: boolean; error?: string }[] = [];
 
+    const automatedReplies = await getSetting<boolean>("automatedReplies", false);
+
     for (const action of rows) {
       try {
         switch (action.action_type) {
           case "send_message": {
+            if (!automatedReplies) {
+              results.push({ id: action.id, actionType: action.action_type, contactId: action.contact_id, success: false, error: "skipped: automatedReplies disabled" });
+              continue;
+            }
             const text = action.payload || "hey, was just thinking about you";
             await sendTelegramMessage(action.contact_id, text);
             break;
           }
           case "send_locked_response": {
+            if (!automatedReplies) {
+              results.push({ id: action.id, actionType: action.action_type, contactId: action.contact_id, success: false, error: "skipped: automatedReplies disabled" });
+              continue;
+            }
             await sendLockedResponse(action.contact_id);
             break;
           }
@@ -85,6 +95,10 @@ async function handle(req: Request) {
             break;
           }
           case "reengage": {
+            if (!automatedReplies) {
+              results.push({ id: action.id, actionType: action.action_type, contactId: action.contact_id, success: false, error: "skipped: automatedReplies disabled" });
+              continue;
+            }
             const msgs = await getMessagesByContactId(action.contact_id, 500);
             if (msgs.length > 0) {
               const memory = extractMemory(msgs);
