@@ -20,7 +20,7 @@ async function typingDelay(client: TelegramClient, peer: Api.InputPeerUser, text
   // total reply latency over 5s for replies longer than ~60 chars. At 20ms/char a
   // 50-char reply shows ~1s of typing — still realistic for a fast mobile texter,
   // and the SetTyping action already signals "composing" to the user.
-  const duration = Math.min(3000, Math.max(600, Math.round(text.length * 20)));
+  const duration = Math.min(600, Math.max(200, Math.round(text.length * 8)));
   const t0 = Date.now();
   await new Promise(r => setTimeout(r, duration));
   console.log(JSON.stringify({ stage: "typing_delay", chars: text.length, targetMs: duration, actualMs: Date.now() - t0 }));
@@ -78,7 +78,7 @@ export async function sendTelegramMessage(
   // Typing indicator for the full message (shows realistic composing time)
   await typingDelay(client, peer, trimmedText);
   // Small random pause after typing stops — mirrors real human "sending" lag
-  await new Promise(r => setTimeout(r, 200 + Math.random() * 400));
+  await new Promise(r => setTimeout(r, 50 + Math.random() * 150));
 
   let lastError: Error | null = null;
 
