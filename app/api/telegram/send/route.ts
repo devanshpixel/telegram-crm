@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     if (!text) {
       return NextResponse.json({ error: "Message text is required" }, { status: 400 });
     }
-    const result = await sendTelegramMessage(contactId, text);
+    const result = await sendTelegramMessage(contactId, text, { skipTypingDelay: true });
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Send failed";

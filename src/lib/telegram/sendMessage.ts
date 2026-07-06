@@ -50,6 +50,7 @@ function buildPeer(contact: ContactRow): Api.InputPeerUser {
 export async function sendTelegramMessage(
   contactId: number,
   text: string,
+  options?: { skipTypingDelay?: boolean },
 ): Promise<Message> {
   // Strip any HTML tags the AI might have leaked (e.g. </blockquote>) before
   // they reach Telegram — plain-text MTProto rejects / renders them literally.
@@ -75,10 +76,12 @@ export async function sendTelegramMessage(
 
   const tSend = Date.now();
 
-  // Typing indicator for the full message (shows realistic composing time)
-  await typingDelay(client, peer, trimmedText);
-  // Small random pause after typing stops — mirrors real human "sending" lag
-  await new Promise(r => setTimeout(r, 50 + Math.random() * 150));
+  if (!options?.skipTypingDelay) {
+    // Typing indicator for the full message (shows realistic composing time)
+    await typingDelay(client, peer, trimmedText);
+    // Small random pause after typing stops — mirrors real human "sending" lag
+    await new Promise(r => setTimeout(r, 50 + Math.random() * 150));
+  }
 
   let lastError: Error | null = null;
 
