@@ -581,28 +581,31 @@ async function processReplyJob(
   let _logRepeatedContentSignal = false;
   let _logCurrentPollMode: string = aiMode;
 
+  let emotionalTemp: number | undefined;
+  try {
+    const tRecalc = Date.now();
+    await Promise.all([
+      recalculateLeadScore(contact.id),
+      recalculateSpendSegment(contact.id),
+      updateRelationshipScore(contact.id),
+    ]);
+    [emotionalTemp] = await Promise.all([
+      updateEmotionalTemp(contact.id),
+      recalculateBuyerIntelligence(contact.id),
+      recalculateCrmIntelligence(contact.id),
+    ]);
+    console.log(JSON.stringify({ stage: "db_recalcs", contactId: contact.id, ms: Date.now() - tRecalc }));
+  } catch (e) {
+    console.error(`CRM recalcs failed for contact ${contact.id}:`, e);
+  }
+
+  const intentScore = await getIntentScore(incomingMessages);
+  _logIntentScore = intentScore;
+
   if (automatedReplies) {
     try {
-      // Run independent recalcs in parallel — each is a separate Turso round-trip.
-      // recalculateBuyerIntelligence and recalculateCrmIntelligence read from the
-      // same rows written by the first group, so they follow in a second batch.
-      const tRecalc = Date.now();
-      await Promise.all([
-        recalculateLeadScore(contact.id),
-        recalculateSpendSegment(contact.id),
-        updateRelationshipScore(contact.id),
-      ]);
-      const [emotionalTemp] = await Promise.all([
-        updateEmotionalTemp(contact.id),
-        recalculateBuyerIntelligence(contact.id),
-        recalculateCrmIntelligence(contact.id),
-      ]);
-      console.log(JSON.stringify({ stage: "db_recalcs", contactId: contact.id, ms: Date.now() - tRecalc }));
 
-      const intentScore = await getIntentScore(incomingMessages);
-      _logIntentScore = intentScore;
-
-      const skipReply = await shouldSkipDueToPacing(contact.id, emotionalTemp);
+      const skipReply = await shouldSkipDueToPacing(contact.id, emotionalTemp ?? 0.5);
 
       if (!skipReply && contact.conv_state === "PAID") {
         _logPaymentDetected = true;
