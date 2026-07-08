@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 
 // Only Razorpay's webhook is truly public — it authenticates every request with
 // an HMAC signature, so it must be reachable without the CRM key.
-const PUBLIC_PATHS = ["/api/razorpay/webhook", "/api/checkout"];
+const PUBLIC_PATHS = ["/api/razorpay/webhook", "/api/checkout", "/api/telethon/reply"];
 
 // Scheduler endpoints — authenticated with CRON_SECRET (not the CRM key).
 // /api/health is here (not public): it runs live Telegram getMe + OpenRouter
