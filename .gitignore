@@ -60,3 +60,9 @@ opencode.json
 # Playwright
 test-results/
 playwright-report/
+
+# Telethon engine
+telegram-engine/__pycache__/
+telegram-engine/*.pyc
+telegram-engine/.venv/
+telegram-engine/*.session

@@ -38,5 +38,8 @@ def register_handlers(client):
 
         print(f"[AI] {reply[:80]}")
 
-        await client.send_message(sender, reply)
-        print(f"[TX] {telegram_id}")
+        try:
+            await client.send_message(sender.id, reply)
+        except Exception as e:
+            print(f"[TX ERROR] {e}")
+            raise
